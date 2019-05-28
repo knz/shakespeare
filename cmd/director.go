@@ -247,7 +247,7 @@ var shellPath = os.Getenv("SHELL")
 func (a *actor) makeShCmd(pcmd cmd) exec.Cmd {
 	cmd := exec.Cmd{
 		Path: shellPath,
-		Args: []string{shellPath, "-c", string(pcmd)},
+		Args: []string{shellPath, "-c", "set -euxo pipefail; " + string(pcmd)},
 	}
 	if a.extraEnv != "" {
 		cmd.Path = "/usr/bin/env"

@@ -19,7 +19,7 @@ import (
 // conduct runs the play.
 func conduct(ctx context.Context) bool {
 	// We'll log all the monitored and extracted data to a secondary logger.
-	monLogger := log.NewSecondaryLogger(ctx, nil, "monitor", true /*enableGc*/, false /*forceSyncWrite*/)
+	monLogger := log.NewSecondaryLogger(ctx, nil, "spotlight", true /*enableGc*/, false /*forceSyncWrite*/)
 	dataLogger := log.NewSecondaryLogger(ctx, nil, "collector", true /*enableGc*/, false /*forceSyncWrite*/)
 	defer func() { log.Flush() }()
 
@@ -276,14 +276,14 @@ func (a *actor) run(
 	collector chan<- dataEvent,
 	events <-chan string,
 ) error {
-	if a.role.monitorCmd != "" {
+	if a.role.spotlightCmd != "" {
 		monCtx, monCancel := context.WithCancel(ctx)
-		monCtx = logtags.AddTag(monCtx, "monitor", nil)
+		monCtx = logtags.AddTag(monCtx, "spotlight", nil)
 
 		log.Info(monCtx, "<intrat>")
 		wg.Add(1)
 		go func() {
-			a.monitor(monCtx, monLogger, collector)
+			a.spotlight(monCtx, monLogger, collector)
 			log.Info(monCtx, "<exit>")
 			wg.Done()
 		}()
@@ -331,10 +331,10 @@ func (a *actor) run(
 	return nil
 }
 
-func (a *actor) monitor(
+func (a *actor) spotlight(
 	ctx context.Context, monLogger *log.SecondaryLogger, collector chan<- dataEvent,
 ) error {
-	monCmd := a.role.monitorCmd
+	monCmd := a.role.spotlightCmd
 	cmd := a.makeShCmd(monCmd)
 	log.Infof(ctx, "executing: %s", strings.Join(cmd.Args, " "))
 	outstream, err := cmd.StderrPipe()
@@ -373,7 +373,7 @@ func (a *actor) monitor(
 		// outstream.Close()
 		cmd.Process.Kill()
 		err := cmd.Wait()
-		log.Infof(ctx, "monitor terminated: %+v", err)
+		log.Infof(ctx, "spotlight terminated: %+v", err)
 	}()
 
 	for {
@@ -385,7 +385,7 @@ func (a *actor) monitor(
 			if res.line == "" {
 				return nil
 			}
-			monLogger.Logf(ctx, "mon data: %q", res.line)
+			monLogger.Logf(ctx, "clamors: %q", res.line)
 			a.analyzeLine(ctx, collector, res.line)
 
 		case <-ctx.Done():

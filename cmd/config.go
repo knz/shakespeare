@@ -11,8 +11,8 @@ import (
 func printCfg() {
 	for _, r := range roles {
 		fmt.Printf("role %s is\n", r.name)
-		if r.preflightCmd != "" {
-			fmt.Printf("  preflight %s\n", r.preflightCmd)
+		if r.prepareCmd != "" {
+			fmt.Printf("  prepare %s\n", r.prepareCmd)
 		}
 		if r.cleanupCmd != "" {
 			fmt.Printf("  cleanup %s\n", r.cleanupCmd)
@@ -65,7 +65,7 @@ type cmd string
 // role is a model that can be played by zero or more actors.
 type role struct {
 	name         string
-	preflightCmd cmd
+	prepareCmd   cmd
 	cleanupCmd   cmd
 	spotlightCmd cmd
 	actionCmds   map[string]cmd

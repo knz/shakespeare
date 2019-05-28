@@ -39,7 +39,7 @@ func conduct(ctx context.Context) bool {
 		log.Info(actCtx, "<prepare>")
 		wg.Add(1)
 		go func(ctx context.Context, a *actor) {
-			if err := a.preflight(ctx); err != nil {
+			if err := a.prepare(ctx); err != nil {
 				errCh <- status{who: fmt.Sprintf("%s [%s]", a.role.name, a.name), err: err}
 			}
 			log.Info(ctx, "<ready>")
@@ -215,21 +215,21 @@ func prompt(ctx context.Context, actChans map[string]chan string) error {
 	return nil
 }
 
-func (a *actor) preflight(bctx context.Context) error {
+func (a *actor) prepare(bctx context.Context) error {
 	if cCmd := a.role.cleanupCmd; cCmd != "" {
-		// If there is a cleanup command, run it before the preflight, to
+		// If there is a cleanup command, run it before the prepare, to
 		// ensure a pristime environment.
 		a.cleanup(bctx)
 	}
 
-	pCmd := a.role.preflightCmd
+	pCmd := a.role.prepareCmd
 	if pCmd == "" {
 		return nil
 	}
 	ctx, cancel := context.WithDeadline(bctx, time.Now().Add(10*time.Second))
 	defer cancel()
 	cmd := a.makeShCmd(pCmd)
-	log.Infof(ctx, "preflight: %s", strings.Join(cmd.Args, " "))
+	log.Infof(ctx, "prepare: %s", strings.Join(cmd.Args, " "))
 	go func() {
 		select {
 		case <-ctx.Done():
@@ -239,7 +239,7 @@ func (a *actor) preflight(bctx context.Context) error {
 		}
 	}()
 	outdata, err := cmd.CombinedOutput()
-	log.Infof(ctx, "preflight done\n%s\n-- %s", string(outdata), cmd.ProcessState.String())
+	log.Infof(ctx, "prepare done\n%s\n-- %s", string(outdata), cmd.ProcessState.String())
 	return err
 }
 

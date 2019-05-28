@@ -43,10 +43,18 @@ func main() {
 	if *doPrint {
 		printCfg()
 	}
+
+	// Generate the steps.
+	compile()
+	if *doPrint {
+		printSteps()
+	}
+
 	if *parseOnly {
 		return
 	}
 
+	// Run the script.
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGHUP, syscall.SIGTERM)
 
@@ -62,14 +70,9 @@ func main() {
 		cancel()
 	}()
 
-	// Generate the steps.
-	compile()
-	printSteps()
-
-	// Run the scenario.
 	conduct(ctx)
 
-	// Generate the plot script.
+	// Generate the plots.
 	if err := plot(ctx); err != nil {
 		log.Errorf(ctx, "plot error: %+v", err)
 		os.Exit(1)

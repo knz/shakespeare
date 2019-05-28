@@ -51,11 +51,11 @@ func compile() {
 // printSteps prints the generated steps.
 func printSteps() {
 	fmt.Println("")
-	fmt.Println("begin")
+	fmt.Println("# play")
 	for _, s := range steps {
-		fmt.Printf("  %s\n", s.String())
+		fmt.Printf("#  %s\n", s.String())
 	}
-	fmt.Println("end")
+	fmt.Println("# end")
 }
 
 // step is one action during the play.

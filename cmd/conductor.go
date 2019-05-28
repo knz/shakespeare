@@ -370,7 +370,9 @@ func (a *actor) spotlight(
 	}()
 
 	defer func() {
-		// outstream.Close()
+		outstream.Close()
+		cmd.Process.Signal(os.Interrupt)
+		time.Sleep(1)
 		cmd.Process.Kill()
 		err := cmd.Wait()
 		log.Infof(ctx, "spotlight terminated: %+v", err)

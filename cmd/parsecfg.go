@@ -152,7 +152,7 @@ func hasSubexp(re *regexp.Regexp, n string) bool {
 }
 
 var actorsRe = regexp.MustCompile(`^actors$`)
-var actorDefRe = regexp.MustCompile(`^(?P<rolename>\w+)\s+(?P<characters>.*)$`)
+var actorDefRe = regexp.MustCompile(`^(?P<actorname>\S+)\s+plays\s+(?P<rolename>\w+)\s*(?P<extraenv>\(.*\)|)\s*$`)
 
 func parseActors(rd *bufio.Reader) error {
 	for {
@@ -170,21 +170,26 @@ func parseActors(rd *bufio.Reader) error {
 
 		if actorDefRe.MatchString(line) {
 			roleName := actorDefRe.ReplaceAllString(line, "${rolename}")
-			characters := actorDefRe.ReplaceAllString(line, "${characters}")
+			actorName := actorDefRe.ReplaceAllString(line, "${actorname}")
+			extraEnv := actorDefRe.ReplaceAllString(line, "${extraenv}")
 
 			r, ok := roles[roleName]
 			if !ok {
 				return fmt.Errorf("unknown role: %s", roleName)
 			}
-			for _, actorName := range strings.Split(characters, " ") {
-				actorName = strings.TrimSpace(actorName)
-				if _, ok := actors[actorName]; ok {
-					return fmt.Errorf("duplicate actor definition: %s", actorName)
-				}
 
-				act := actor{name: actorName, role: r}
-				actors[actorName] = &act
+			actorName = strings.TrimSpace(actorName)
+			if _, ok := actors[actorName]; ok {
+				return fmt.Errorf("duplicate actor definition: %s", actorName)
 			}
+
+			if extraEnv != "" {
+				extraEnv = strings.TrimPrefix(extraEnv, "(")
+				extraEnv = strings.TrimSuffix(extraEnv, ")")
+			}
+
+			act := actor{name: actorName, role: r, extraEnv: extraEnv}
+			actors[actorName] = &act
 		} else {
 			return fmt.Errorf("unknown syntax: %s", line)
 		}
@@ -254,7 +259,7 @@ func parseActs(rd *bufio.Reader) error {
 	}
 }
 
-var playRe = regexp.MustCompile(`^play$`)
+var playRe = regexp.MustCompile(`^script$`)
 var stanzaRe = regexp.MustCompile(`^stanza\s+(?P<stanza>.*)$`)
 var tempoRe = regexp.MustCompile(`^tempo\s+(?P<dur>.*)$`)
 

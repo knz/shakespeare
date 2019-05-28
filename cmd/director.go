@@ -214,8 +214,6 @@ func dispatch(ctx context.Context, actChans map[string]chan string) error {
 	return nil
 }
 
-var shellPath = os.Getenv("SHELL")
-
 func (a *actor) preflight(bctx context.Context) error {
 	if cCmd := a.role.cleanupCmd; cCmd != "" {
 		// If there is a cleanup command, run it before the preflight, to
@@ -229,11 +227,8 @@ func (a *actor) preflight(bctx context.Context) error {
 	}
 	ctx, cancel := context.WithDeadline(bctx, time.Now().Add(10*time.Second))
 	defer cancel()
-	log.Infof(ctx, "preflight: %s", pCmd)
-	cmd := exec.Cmd{
-		Path: shellPath,
-		Args: []string{shellPath, "-c", string(pCmd)},
-	}
+	cmd := a.makeShCmd(pCmd)
+	log.Infof(ctx, "preflight: %s", strings.Join(cmd.Args, " "))
 	go func() {
 		select {
 		case <-ctx.Done():
@@ -247,13 +242,24 @@ func (a *actor) preflight(bctx context.Context) error {
 	return err
 }
 
-func (a *actor) cleanup(ctx context.Context) {
-	cCmd := a.role.cleanupCmd
-	log.Infof(ctx, "cleanup: %s", cCmd)
+var shellPath = os.Getenv("SHELL")
+
+func (a *actor) makeShCmd(pcmd cmd) exec.Cmd {
 	cmd := exec.Cmd{
 		Path: shellPath,
-		Args: []string{shellPath, "-c", string(cCmd)},
+		Args: []string{shellPath, "-c", string(pcmd)},
 	}
+	if a.extraEnv != "" {
+		cmd.Path = "/usr/bin/env"
+		cmd.Args = append([]string{"/usr/bin/env", "-S", a.extraEnv}, cmd.Args...)
+	}
+	return cmd
+}
+
+func (a *actor) cleanup(ctx context.Context) {
+	cCmd := a.role.cleanupCmd
+	cmd := a.makeShCmd(cCmd)
+	log.Infof(ctx, "cleanup: %s", strings.Join(cmd.Args, " "))
 	outdata, err := cmd.CombinedOutput()
 	if _, ok := err.(*exec.ExitError); err != nil && !ok {
 		log.Errorf(ctx, "exec error: %+v", err)
@@ -310,11 +316,8 @@ func (a *actor) run(
 				log.Errorf(ctx, "unknown action: %q", ev)
 				continue
 			}
-			log.Infof(ctx, "executing %q: %s", ev, aCmd)
-			cmd := exec.Cmd{
-				Path: shellPath,
-				Args: []string{shellPath, "-c", string(aCmd)},
-			}
+			cmd := a.makeShCmd(aCmd)
+			log.Infof(ctx, "executing %q: %s", ev, strings.Join(cmd.Args, " "))
 			outdata, err := cmd.CombinedOutput()
 			if _, ok := err.(*exec.ExitError); err != nil && !ok {
 				log.Errorf(ctx, "exec error: %+v", err)
@@ -331,11 +334,8 @@ func (a *actor) monitor(
 	ctx context.Context, monLogger *log.SecondaryLogger, collector chan<- dataEvent,
 ) error {
 	monCmd := a.role.monitorCmd
-	log.Infof(ctx, "executing: %s", monCmd)
-	cmd := exec.Cmd{
-		Path: shellPath,
-		Args: []string{shellPath, "-c", string(monCmd)},
-	}
+	cmd := a.makeShCmd(monCmd)
+	log.Infof(ctx, "executing: %s", strings.Join(cmd.Args, " "))
 	outstream, err := cmd.StderrPipe()
 	if err != nil {
 		return fmt.Errorf("setting up: %+v", err)

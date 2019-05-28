@@ -34,7 +34,11 @@ func printCfg() {
 	}
 	fmt.Println("actors")
 	for _, a := range actors {
-		fmt.Printf("  %s %s\n", a.role.name, a.name)
+		fmt.Printf("  %s plays %s", a.name, a.role.name)
+		if a.extraEnv != "" {
+			fmt.Printf("(%s)", a.extraEnv)
+		}
+		fmt.Println()
 	}
 	fmt.Println("end")
 	fmt.Println()
@@ -110,8 +114,9 @@ var roles = make(map[string]*role)
 
 // actor is an agent that can participate in a play.
 type actor struct {
-	name string
-	role *role
+	name     string
+	role     *role
+	extraEnv string
 }
 
 // actors is the set of actors defined by the configuration.

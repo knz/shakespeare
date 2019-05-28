@@ -44,7 +44,7 @@ func main() {
 	printSteps()
 
 	// Run the scenario.
-	direct(ctx)
+	conduct(ctx)
 
 	// Generate the plot script.
 	if err := plot(ctx); err != nil {

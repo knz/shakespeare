@@ -16,8 +16,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
 )
 
-// direct runs the play.
-func direct(ctx context.Context) bool {
+// conduct runs the play.
+func conduct(ctx context.Context) bool {
 	// We'll log all the monitored and extracted data to a secondary logger.
 	monLogger := log.NewSecondaryLogger(ctx, nil, "monitor", true /*enableGc*/, false /*forceSyncWrite*/)
 	dataLogger := log.NewSecondaryLogger(ctx, nil, "collector", true /*enableGc*/, false /*forceSyncWrite*/)
@@ -95,20 +95,19 @@ func direct(ctx context.Context) bool {
 		}(actCtx, actors[actName])
 	}
 
-	// Start the dispatcher.
+	// Start the prompter.
 	wg.Add(1)
 	go func() {
-		dirCtx := logtags.AddTag(ctx, "dispatch", nil)
+		dirCtx := logtags.AddTag(ctx, "prompter", nil)
 		log.Info(dirCtx, "<intrat>")
-		if err := dispatch(dirCtx, actChans); err != nil {
-			errCh <- status{who: "dispatch", err: err}
+		if err := prompt(dirCtx, actChans); err != nil {
+			errCh <- status{who: "prompter", err: err}
 		}
 		log.Info(dirCtx, "<exit>")
-		colDone()
 		wg.Done()
 	}()
 
-	// Wait for the dispatcher and actors to complete.
+	// Wait for the prompter and actors to complete.
 	wg.Wait()
 
 	// Stop the collector and wait for it to complete.
@@ -138,8 +137,10 @@ type ambiancePeriod struct {
 
 var ambiances []ambiancePeriod
 
-func dispatch(ctx context.Context, actChans map[string]chan string) error {
+func prompt(ctx context.Context, actChans map[string]chan string) error {
 	startTime := time.Now().UTC()
+
+	// At end:
 	defer func() {
 		// Close the mood chapter, if one was open.
 		if curAmbiance != "clear" {

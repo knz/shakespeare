@@ -33,8 +33,8 @@ func parseCfg(rd *bufio.Reader) error {
 			if err := parseActors(rd); err != nil {
 				return err
 			}
-		} else if playRe.MatchString(line) {
-			if err := parsePlay(rd); err != nil {
+		} else if scriptRe.MatchString(line) {
+			if err := parseScript(rd); err != nil {
 				return err
 			}
 		} else {
@@ -257,11 +257,11 @@ func parseActs(rd *bufio.Reader) error {
 	}
 }
 
-var playRe = compileRe(`^script$`)
+var scriptRe = compileRe(`^script$`)
 var stanzaRe = compileRe(`^stanza\s+(?P<stanza>.*)$`)
 var tempoRe = compileRe(`^tempo\s+(?P<dur>.*)$`)
 
-func parsePlay(rd *bufio.Reader) error {
+func parseScript(rd *bufio.Reader) error {
 	for {
 		line, stop, skip, err := readLine(rd)
 		if err != nil || stop {

@@ -12,16 +12,10 @@ import (
 // parseCfg parses a configuration from the given buffered input.
 func parseCfg(rd *bufio.Reader) error {
 	for {
-		line, err := rd.ReadString('\n')
-		if err != nil && err != io.EOF {
+		line, stop, skip, err := readLine(rd)
+		if err != nil || stop {
 			return err
-		}
-		line = strings.TrimSpace(line)
-		if err == io.EOF && ignoreLine(line) {
-			return nil
-		}
-
-		if ignoreLine(line) {
+		} else if skip {
 			continue
 		}
 
@@ -48,13 +42,17 @@ func parseCfg(rd *bufio.Reader) error {
 	}
 }
 
-var roleRe = regexp.MustCompile(`^role\s+(?P<rolename>\w+)\s+is$`)
-var actionDefRe = regexp.MustCompile(`^:(?P<actionname>\w+)\s+(?P<cmd>.*)$`)
-var monitorDefRe = regexp.MustCompile(`^monitor\s+(?P<cmd>.*)$`)
-var cleanupDefRe = regexp.MustCompile(`^cleanup\s+(?P<cmd>.*)$`)
-var preflightDefRe = regexp.MustCompile(`^preflight\s+(?P<cmd>.*)$`)
-var parseDefRe = regexp.MustCompile(`^parse\s+(?P<type>\S+)\s+(?P<name>\S+)\s+(?P<re>.*)$`)
-var checkDefRe = regexp.MustCompile(`^check\s+(?P<expr>.*)$`)
+func compileRe(re string) *regexp.Regexp {
+	return regexp.MustCompile(fmt.Sprintf("(?s:%s)", re))
+}
+
+var roleRe = compileRe(`^role\s+(?P<rolename>\w+)\s+is$`)
+var actionDefRe = compileRe(`^:(?P<actionname>\w+)\s+(?P<cmd>.*)$`)
+var monitorDefRe = compileRe(`^monitor\s+(?P<cmd>.*)$`)
+var cleanupDefRe = compileRe(`^cleanup\s+(?P<cmd>.*)$`)
+var preflightDefRe = compileRe(`^preflight\s+(?P<cmd>.*)$`)
+var parseDefRe = compileRe(`^parse\s+(?P<type>\S+)\s+(?P<name>\S+)\s+(?P<re>.*)$`)
+var checkDefRe = compileRe(`^check\s+(?P<expr>.*)$`)
 
 func parseRole(rd *bufio.Reader, roleName string) error {
 	if _, ok := roles[roleName]; ok {
@@ -65,12 +63,10 @@ func parseRole(rd *bufio.Reader, roleName string) error {
 	thisRole := role{name: roleName, actionCmds: make(map[string]cmd)}
 	roles[roleName] = &thisRole
 	for {
-		line, err := rd.ReadString('\n')
-		if err != nil && err != io.EOF {
+		line, stop, skip, err := readLine(rd)
+		if err != nil || stop {
 			return err
-		}
-		line = strings.TrimSpace(line)
-		if ignoreLine(line) {
+		} else if skip {
 			continue
 		}
 		if line == "end" {
@@ -151,17 +147,15 @@ func hasSubexp(re *regexp.Regexp, n string) bool {
 	return false
 }
 
-var actorsRe = regexp.MustCompile(`^actors$`)
-var actorDefRe = regexp.MustCompile(`^(?P<actorname>\S+)\s+plays\s+(?P<rolename>\w+)\s*(?P<extraenv>\(.*\)|)\s*$`)
+var actorsRe = compileRe(`^actors$`)
+var actorDefRe = compileRe(`^(?P<actorname>\S+)\s+plays\s+(?P<rolename>\w+)\s*(?P<extraenv>\(.*\)|)\s*$`)
 
 func parseActors(rd *bufio.Reader) error {
 	for {
-		line, err := rd.ReadString('\n')
-		if err != nil && err != io.EOF {
+		line, stop, skip, err := readLine(rd)
+		if err != nil || stop {
 			return err
-		}
-		line = strings.TrimSpace(line)
-		if ignoreLine(line) {
+		} else if skip {
 			continue
 		}
 		if line == "end" {
@@ -196,20 +190,18 @@ func parseActors(rd *bufio.Reader) error {
 	}
 }
 
-var actionsRe = regexp.MustCompile(`^actions$`)
-var actionRe = regexp.MustCompile(`^(?P<char>\S)\s+(?P<chardef>.*)$`)
-var nopRe = regexp.MustCompile(`^nop$`)
-var doRe = regexp.MustCompile(`^(?P<actor>[^:]+):(?P<action>.*)$`)
-var ambianceRe = regexp.MustCompile(`^mood\s+(?P<mood>.*)$`)
+var actionsRe = compileRe(`^actions$`)
+var actionRe = compileRe(`^(?P<char>\S)\s+(?P<chardef>.*)$`)
+var nopRe = compileRe(`^nop$`)
+var doRe = compileRe(`^(?P<actor>[^:]+):(?P<action>.*)$`)
+var ambianceRe = compileRe(`^mood\s+(?P<mood>.*)$`)
 
 func parseActs(rd *bufio.Reader) error {
 	for {
-		line, err := rd.ReadString('\n')
-		if err != nil && err != io.EOF {
+		line, stop, skip, err := readLine(rd)
+		if err != nil || stop {
 			return err
-		}
-		line = strings.TrimSpace(line)
-		if ignoreLine(line) {
+		} else if skip {
 			continue
 		}
 		if line == "end" {
@@ -259,18 +251,16 @@ func parseActs(rd *bufio.Reader) error {
 	}
 }
 
-var playRe = regexp.MustCompile(`^script$`)
-var stanzaRe = regexp.MustCompile(`^stanza\s+(?P<stanza>.*)$`)
-var tempoRe = regexp.MustCompile(`^tempo\s+(?P<dur>.*)$`)
+var playRe = compileRe(`^script$`)
+var stanzaRe = compileRe(`^stanza\s+(?P<stanza>.*)$`)
+var tempoRe = compileRe(`^tempo\s+(?P<dur>.*)$`)
 
 func parsePlay(rd *bufio.Reader) error {
 	for {
-		line, err := rd.ReadString('\n')
-		if err != nil && err != io.EOF {
+		line, stop, skip, err := readLine(rd)
+		if err != nil || stop {
 			return err
-		}
-		line = strings.TrimSpace(line)
-		if ignoreLine(line) {
+		} else if skip {
 			continue
 		}
 		if line == "end" {
@@ -296,6 +286,37 @@ func parsePlay(rd *bufio.Reader) error {
 			return fmt.Errorf("unknown syntax: %s", line)
 		}
 	}
+}
+
+func readLine(rd *bufio.Reader) (line string, stop bool, skip bool, err error) {
+	for {
+		var oneline string
+		oneline, err = rd.ReadString('\n')
+		if err != nil && err != io.EOF {
+			return "", true, false, err
+		}
+		if strings.HasSuffix(oneline, "\\\n") {
+			line += oneline
+			continue
+		}
+		oneline = strings.TrimSuffix(oneline, "\n")
+		if err == io.EOF && line != "" {
+			return "", true, false, fmt.Errorf("EOF encountered while expecting line continuation")
+		}
+		line += oneline
+		break
+	}
+
+	line = strings.TrimSpace(line)
+	if err == io.EOF && ignoreLine(line) {
+		return "", true, false, nil
+	}
+
+	if ignoreLine(line) {
+		return "", false, true, nil
+	}
+
+	return line, false, false, nil
 }
 
 func ignoreLine(line string) bool {

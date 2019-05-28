@@ -51,7 +51,7 @@ func printCfg() {
 	}
 	fmt.Println("end")
 	fmt.Println()
-	fmt.Println("play")
+	fmt.Println("script")
 	fmt.Printf("  tempo %s\n", tempo)
 	for _, stanza := range stanzas {
 		fmt.Printf("  stanza %s\n", stanza)

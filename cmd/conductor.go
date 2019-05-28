@@ -255,13 +255,15 @@ func (a *actor) makeShCmd(pcmd cmd) exec.Cmd {
 	cmd := exec.Cmd{
 		Path: shellPath,
 		Dir:  a.workDir,
-		//		Env:  []string{"TMPDIR=" + a.workDir, "HOME=" + artifactsDir},
 		// set -euxo pipefail:
 		//    -e fail commands on error
 		//    -u fail command if a variable is not set
 		//    -o pipefail   fail entire pipeline if one command fails
 		// trap: terminate all the process group when the shell exits.
-		Args: []string{shellPath, "-c", `set -euo pipefail; shpid=$$; trap "kill -TERM -$shpid 2>/dev/null || true" EXIT; ` + string(pcmd)},
+		Args: []string{
+			shellPath,
+			"-c",
+			`set -euo pipefail; export TMPDIR=$PWD HOME=$PWD/..; shpid=$$; trap "kill -TERM -$shpid 2>/dev/null || true" EXIT; ` + string(pcmd)},
 	}
 	if a.extraEnv != "" {
 		cmd.Path = "/usr/bin/env"

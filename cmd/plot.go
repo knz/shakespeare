@@ -46,8 +46,8 @@ func plot(ctx context.Context) error {
 		minTime = 0
 	}
 
-	fmt.Fprintf(f, "set term postscript enhanced level3 color portrait\n")
-	fmt.Fprintf(f, "set output 'plot.ps'\n")
+	fmt.Fprintf(f, "set term pdf enhanced color size 7,10 font \",6\"\n")
+	fmt.Fprintf(f, "set output 'plot.pdf'\n")
 	fmt.Fprintf(f, "set multiplot layout %d,1\n", len(plots))
 	fmt.Fprintf(f, "set xrange [%f:%f]\n", minTime, maxTime)
 

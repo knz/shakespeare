@@ -16,12 +16,12 @@ func parseCfg(rd *bufio.Reader) error {
 		if err != nil && err != io.EOF {
 			return err
 		}
-		if err == io.EOF && line == "" {
+		line = strings.TrimSpace(line)
+		if err == io.EOF && ignoreLine(line) {
 			return nil
 		}
 
-		line = strings.TrimSpace(line)
-		if line == "" {
+		if ignoreLine(line) {
 			continue
 		}
 
@@ -70,7 +70,7 @@ func parseRole(rd *bufio.Reader, roleName string) error {
 			return err
 		}
 		line = strings.TrimSpace(line)
-		if line == "" {
+		if ignoreLine(line) {
 			continue
 		}
 		if line == "end" {
@@ -161,7 +161,7 @@ func parseActors(rd *bufio.Reader) error {
 			return err
 		}
 		line = strings.TrimSpace(line)
-		if line == "" {
+		if ignoreLine(line) {
 			continue
 		}
 		if line == "end" {
@@ -204,7 +204,7 @@ func parseActs(rd *bufio.Reader) error {
 			return err
 		}
 		line = strings.TrimSpace(line)
-		if line == "" {
+		if ignoreLine(line) {
 			continue
 		}
 		if line == "end" {
@@ -265,7 +265,7 @@ func parsePlay(rd *bufio.Reader) error {
 			return err
 		}
 		line = strings.TrimSpace(line)
-		if line == "" {
+		if ignoreLine(line) {
 			continue
 		}
 		if line == "end" {
@@ -291,4 +291,8 @@ func parsePlay(rd *bufio.Reader) error {
 			return fmt.Errorf("unknown syntax: %s", line)
 		}
 	}
+}
+
+func ignoreLine(line string) bool {
+	return line == "" || strings.HasPrefix(line, "#")
 }

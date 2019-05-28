@@ -3,7 +3,6 @@ package main
 import (
 	"bufio"
 	"context"
-	"flag"
 	"fmt"
 	"math"
 	"os"
@@ -24,8 +23,6 @@ type dataEvent struct {
 }
 
 var collectedData = make(map[string]bool)
-
-var dataDir = flag.String("outdir", ".", "output data directory")
 
 var minTime = math.Inf(1)
 var maxTime = math.Inf(-1)

@@ -38,6 +38,7 @@ func printCfg() {
 		if a.extraEnv != "" {
 			fmt.Printf("(%s)", a.extraEnv)
 		}
+		fmt.Printf(" # ... from work dir %s", a.workDir)
 		fmt.Println()
 	}
 	fmt.Println("end")
@@ -116,6 +117,7 @@ var roles = make(map[string]*role)
 type actor struct {
 	name     string
 	role     *role
+	workDir  string
 	extraEnv string
 }
 

@@ -17,8 +17,8 @@ func printCfg() {
 		if r.cleanupCmd != "" {
 			fmt.Printf("  cleanup %s\n", r.cleanupCmd)
 		}
-		if r.monitorCmd != "" {
-			fmt.Printf("  monitor %s\n", r.monitorCmd)
+		if r.spotlightCmd != "" {
+			fmt.Printf("  spotlight %s\n", r.spotlightCmd)
 		}
 		for _, rp := range r.resParsers {
 			fmt.Printf("  parse %s\n", rp.String())
@@ -67,7 +67,7 @@ type role struct {
 	name         string
 	preflightCmd cmd
 	cleanupCmd   cmd
-	monitorCmd   cmd
+	spotlightCmd cmd
 	actionCmds   map[string]cmd
 	resParsers   []*resultParser
 	checkExpr    string

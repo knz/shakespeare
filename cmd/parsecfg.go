@@ -48,7 +48,7 @@ func compileRe(re string) *regexp.Regexp {
 
 var roleRe = compileRe(`^role\s+(?P<rolename>\w+)\s+is$`)
 var actionDefRe = compileRe(`^:(?P<actionname>\w+)\s+(?P<cmd>.*)$`)
-var monitorDefRe = compileRe(`^monitor\s+(?P<cmd>.*)$`)
+var spotlightDefRe = compileRe(`^spotlight\s+(?P<cmd>.*)$`)
 var cleanupDefRe = compileRe(`^cleanup\s+(?P<cmd>.*)$`)
 var preflightDefRe = compileRe(`^preflight\s+(?P<cmd>.*)$`)
 var parseDefRe = compileRe(`^parse\s+(?P<type>\S+)\s+(?P<name>\S+)\s+(?P<re>.*)$`)
@@ -79,8 +79,8 @@ func parseRole(rd *bufio.Reader, roleName string) error {
 				return fmt.Errorf("role %q: duplicate action name %q", roleName, aName)
 			}
 			thisRole.actionCmds[aName] = cmd(aCmd)
-		} else if monitorDefRe.MatchString(line) {
-			thisRole.monitorCmd = cmd(monitorDefRe.ReplaceAllString(line, "${cmd}"))
+		} else if spotlightDefRe.MatchString(line) {
+			thisRole.spotlightCmd = cmd(spotlightDefRe.ReplaceAllString(line, "${cmd}"))
 		} else if cleanupDefRe.MatchString(line) {
 			thisRole.cleanupCmd = cmd(cleanupDefRe.ReplaceAllString(line, "${cmd}"))
 		} else if preflightDefRe.MatchString(line) {

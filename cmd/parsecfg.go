@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -182,7 +183,12 @@ func parseActors(rd *bufio.Reader) error {
 				extraEnv = strings.TrimSuffix(extraEnv, ")")
 			}
 
-			act := actor{name: actorName, role: r, extraEnv: extraEnv}
+			act := actor{
+				name:     actorName,
+				role:     r,
+				extraEnv: extraEnv,
+				workDir:  filepath.Join(artifactsDir, actorName),
+			}
 			actors[actorName] = &act
 		} else {
 			return fmt.Errorf("unknown syntax: %s", line)

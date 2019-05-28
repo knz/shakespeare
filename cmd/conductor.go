@@ -18,6 +18,14 @@ import (
 
 // conduct runs the play.
 func conduct(ctx context.Context) bool {
+	// Prepare all the working directories.
+	for _, a := range actors {
+		if err := os.MkdirAll(a.workDir, os.ModePerm); err != nil {
+			log.Errorf(ctx, "mkdir %s: %+v", a.workDir, err)
+			return true
+		}
+	}
+
 	// We'll log all the monitored and extracted data to a secondary logger.
 	monLogger := log.NewSecondaryLogger(ctx, nil, "spotlight", true /*enableGc*/, false /*forceSyncWrite*/)
 	dataLogger := log.NewSecondaryLogger(ctx, nil, "collector", true /*enableGc*/, false /*forceSyncWrite*/)
@@ -243,18 +251,17 @@ func (a *actor) prepare(bctx context.Context) error {
 	return err
 }
 
-var shellPath = os.Getenv("SHELL")
-
 func (a *actor) makeShCmd(pcmd cmd) exec.Cmd {
 	cmd := exec.Cmd{
 		Path: shellPath,
+		Dir:  a.workDir,
+		//		Env:  []string{"TMPDIR=" + a.workDir, "HOME=" + artifactsDir},
 		// set -euxo pipefail:
 		//    -e fail commands on error
 		//    -u fail command if a variable is not set
-		//    -x trace what's executed
 		//    -o pipefail   fail entire pipeline if one command fails
 		// trap: terminate all the process group when the shell exits.
-		Args: []string{shellPath, "-c", `set -euxo pipefail; shpid=$$; trap "kill -TERM -$shpid 2>/dev/null || true" EXIT; ` + string(pcmd)},
+		Args: []string{shellPath, "-c", `set -euo pipefail; shpid=$$; trap "kill -TERM -$shpid 2>/dev/null || true" EXIT; ` + string(pcmd)},
 	}
 	if a.extraEnv != "" {
 		cmd.Path = "/usr/bin/env"

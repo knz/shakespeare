@@ -41,6 +41,9 @@ activity over time.
 
 | Parameter      | Default | Description                                                                                          |
 |----------------|---------|------------------------------------------------------------------------------------------------------|
-| `-outdir`      | `.`     | Directory where to generated output data files and plot script.                                      |
+| `-output-dir`  | `.`     | Directory where to generate artifacts, output data files and the plot script.                        |
+| `-print-cfg`   | false   | Print configuration after parsing and compilation.                                                   |
+| `-n`           | false   | Stop after parsing the configuration and compiling the steps (do not actually execute the script).   |
+| `-q`           | false   | Run quietly (equivalent to `-logtostderr=NONE`)                                                      |
 | `-log-dir`     | (empty) | If non-empty, copy the logs to that directory.                                                       |
 | `-logtostderr` | INFO    | Copy every log message at or above this threshold to stderr (use NONE to disable reports to stderr). |

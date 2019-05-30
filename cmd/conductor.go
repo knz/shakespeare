@@ -424,21 +424,11 @@ func (a *actor) analyzeLine(ctx context.Context, collector chan<- dataEvent, lin
 		ev := dataEvent{ts: time.Now().UTC(), typ: rp.typ, actorName: a.name, eventName: rp.name}
 
 		var err error
-		switch rp.tsTyp {
-		case timeStyleLog:
-			logTime := rp.re.ReplaceAllString(line, "${logtime}")
-			ev.ts, err = time.Parse(logTimeLayout, logTime)
-			if err != nil {
-				log.Warningf(ctx, "invalid log timestamp %q in %q: %+v", logTime, line, err)
-				continue
-			}
-		case timeStyleAbs:
-			absTime := rp.re.ReplaceAllString(line, "${abstime}")
-			ev.ts, err = time.Parse(time.RFC3339Nano, absTime)
-			if err != nil {
-				log.Warningf(ctx, "invalid log timestamp %q in %q: %+v", absTime, line, err)
-				continue
-			}
+		logTime := rp.re.ReplaceAllString(line, "${"+rp.reGroup+"}")
+		ev.ts, err = time.Parse(rp.timeLayout, logTime)
+		if err != nil {
+			log.Warningf(ctx, "invalid log timestamp %q in %q: %+v", logTime, line, err)
+			continue
 		}
 
 		switch rp.typ {

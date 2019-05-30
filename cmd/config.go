@@ -21,7 +21,7 @@ func printCfg() {
 			fmt.Printf("  spotlight %s\n", r.spotlightCmd)
 		}
 		for _, rp := range r.resParsers {
-			fmt.Printf("  parse %s\n", rp.String())
+			fmt.Printf("  signal %s\n", rp.String())
 		}
 		if r.checkExpr != "" {
 			fmt.Printf("  check %s\n", r.checkExpr)
@@ -75,11 +75,12 @@ type role struct {
 }
 
 type resultParser struct {
-	typ     parserType
-	tsTyp   timeStyle
-	name    string
-	re      *regexp.Regexp
-	hasData bool
+	typ        parserType
+	name       string
+	re         *regexp.Regexp
+	timeLayout string
+	reGroup    string
+	hasData    bool
 }
 
 type parserType int
@@ -90,21 +91,14 @@ const (
 	parseDelta
 )
 
-type timeStyle int
-
-const (
-	timeStyleAbs timeStyle = iota
-	timeStyleLog
-)
-
 func (p *resultParser) String() string {
 	switch p.typ {
 	case parseEvent:
-		return fmt.Sprintf("event %s %s", p.name, p.re.String())
+		return fmt.Sprintf("%s event at %s", p.name, p.re.String())
 	case parseScalar:
-		return fmt.Sprintf("scalar %s %s", p.name, p.re.String())
+		return fmt.Sprintf("%s scalar at %s", p.name, p.re.String())
 	case parseDelta:
-		return fmt.Sprintf("delta %s %s", p.name, p.re.String())
+		return fmt.Sprintf("%s delta at %s", p.name, p.re.String())
 	}
 	return "<???parser>"
 }

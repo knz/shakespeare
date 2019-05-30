@@ -52,7 +52,7 @@ var actionDefRe = compileRe(`^:(?P<actionname>\w+)\s+(?P<cmd>.*)$`)
 var spotlightDefRe = compileRe(`^spotlight\s+(?P<cmd>.*)$`)
 var cleanupDefRe = compileRe(`^cleanup\s+(?P<cmd>.*)$`)
 var prepareDefRe = compileRe(`^prepare\s+(?P<cmd>.*)$`)
-var parseDefRe = compileRe(`^parse\s+(?P<type>\S+)\s+(?P<name>\S+)\s+(?P<re>.*)$`)
+var parseDefRe = compileRe(`^signal\s+(?P<name>\S+)\s+(?P<type>\S+)\s+at\s+(?P<re>.*)$`)
 var checkDefRe = compileRe(`^check\s+(?P<expr>.*)$`)
 
 func parseRole(rd *bufio.Reader, roleName string) error {
@@ -89,9 +89,14 @@ func parseRole(rd *bufio.Reader, roleName string) error {
 		} else if parseDefRe.MatchString(line) {
 			rp := resultParser{}
 			reS := parseDefRe.ReplaceAllString(line, "${re}")
+
+			// Expand commonly known time formats.
+			reS = strings.Replace(reS, `(?P<ts_rfc3339>)`, `(?P<ts_rfc3339>\d\d\d\d-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)Z)`, 1)
+			reS = strings.Replace(reS, `(?P<ts_log>)`, `(?P<ts_log>\d{6} \d\d:\d\d:\d\d\.\d{6})`, 1)
+
 			re, err := regexp.Compile(reS)
 			if err != nil {
-				return fmt.Errorf("role %q: error compiling regexp %q: %+v", roleName, reS, err)
+				return fmt.Errorf("role %q: error compiling regexp %s: %+v", roleName, reS, err)
 			}
 			rp.re = re
 			pname := parseDefRe.ReplaceAllString(line, "${name}")
@@ -122,10 +127,12 @@ func parseRole(rd *bufio.Reader, roleName string) error {
 				return fmt.Errorf("role %q: unknown parser type %q: %s", roleName, ptype, line)
 			}
 
-			if hasSubexp(re, "abstime") {
-				rp.tsTyp = timeStyleAbs
-			} else if hasSubexp(re, "logtime") {
-				rp.tsTyp = timeStyleLog
+			if hasSubexp(re, "ts_rfc3339") {
+				rp.timeLayout = time.RFC3339Nano
+				rp.reGroup = "ts_rfc3339"
+			} else if hasSubexp(re, "ts_log") {
+				rp.timeLayout = logTimeLayout
+				rp.reGroup = "ts_log"
 			} else {
 				return fmt.Errorf("role %q: unknown time stamp format in regexp: %s", roleName, line)
 			}

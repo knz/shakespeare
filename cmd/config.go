@@ -23,9 +23,6 @@ func printCfg() {
 		for _, rp := range r.resParsers {
 			fmt.Printf("  signal %s\n", rp.String())
 		}
-		if r.checkExpr != "" {
-			fmt.Printf("  check %s\n", r.checkExpr)
-		}
 		for actName, a := range r.actionCmds {
 			fmt.Printf("  :%s %s\n", actName, a)
 		}
@@ -38,11 +35,32 @@ func printCfg() {
 		if a.extraEnv != "" {
 			fmt.Printf("(%s)", a.extraEnv)
 		}
-		fmt.Printf(" # ... from work dir %s", a.workDir)
 		fmt.Println()
+		fmt.Printf("  # %s plays from working directory %s", a.name, a.workDir)
+		fmt.Println()
+		for sig, audiences := range a.audiences {
+			plural := "s"
+			if strings.HasSuffix(sig, "s") {
+				plural = ""
+			}
+			fmt.Printf("  # %s %s%s are watched by audience %+v\n", a.name, sig, plural, audiences)
+		}
 	}
 	fmt.Println("end")
 	fmt.Println()
+
+	fmt.Println("audience")
+	for _, a := range audiences {
+		for sigName, source := range a.signals {
+			fmt.Printf("  %s watches %s %s\n", a.name, source.origin, sigName)
+		}
+		if a.ylabel != "" {
+			fmt.Printf("  %s measures %s\n", a.name, a.ylabel)
+		}
+	}
+	fmt.Println("end")
+	fmt.Println()
+
 	fmt.Println("actions")
 	for _, aa := range actions {
 		for _, a := range aa {
@@ -65,22 +83,31 @@ type cmd string
 
 // role is a model that can be played by zero or more actors.
 type role struct {
-	name         string
-	prepareCmd   cmd
-	cleanupCmd   cmd
+	name string
+	// prepareCmd is executed once at the beginning.
+	prepareCmd cmd
+	// cleanupCmd is executed once at the end, and also once before prepare.
+	cleanupCmd cmd
+	// spotlightCmd is executed in the background during the test.
 	spotlightCmd cmd
-	actionCmds   map[string]cmd
-	resParsers   []*resultParser
-	checkExpr    string
+	// actionCmds are executed upon steps in the script.
+	actionCmds map[string]cmd
+	// resParsers are the supported signals for each actor.
+	resParsers []*resultParser
 }
 
 type resultParser struct {
-	typ        parserType
-	name       string
-	re         *regexp.Regexp
+	typ parserType
+	// name is the name of this signal/source on each actor.
+	name string
+	// re is how to parse the signal/source to get data points.
+	re *regexp.Regexp
+	// reGroup is the regexp group holding the time stamp.
+	reGroup string
+	// timeLayout is how to parse the timestamp discovered by reGroup using time.Parse.
 	timeLayout string
-	reGroup    string
-	hasData    bool
+	// lastVal is the last value received, for deltas.
+	lastVal float64
 }
 
 type parserType int
@@ -113,6 +140,10 @@ type actor struct {
 	role     *role
 	workDir  string
 	extraEnv string
+	// audiences is the list of audiences that are listening to this
+	// actor's signal(s). The map key is the signal name, the value
+	// is the list of audiences.
+	audiences map[string][]string
 }
 
 // actors is the set of actors defined by the configuration.
@@ -161,3 +192,20 @@ var stanzas []string
 // tempo is the interval at which the stanzas are played.
 // This is populated during parsing, and used during compile().
 var tempo = time.Second
+
+type audience struct {
+	name    string
+	signals map[string]*audienceSource
+	ylabel  string
+	// hasData indicates whether data was received for this audience.
+	hasData bool
+}
+
+type audienceSource struct {
+	origin string
+	// hasData indicates whether data was received for this audience source.
+	hasData    bool
+	drawEvents bool
+}
+
+var audiences = make(map[string]*audience)

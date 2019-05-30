@@ -38,12 +38,12 @@ func printCfg() {
 		fmt.Println()
 		fmt.Printf("  # %s plays from working directory %s", a.name, a.workDir)
 		fmt.Println()
-		for sig, audiences := range a.audiences {
+		for sig, sink := range a.audiences {
 			plural := "s"
 			if strings.HasSuffix(sig, "s") {
 				plural = ""
 			}
-			fmt.Printf("  # %s %s%s are watched by audience %+v\n", a.name, sig, plural, audiences)
+			fmt.Printf("  # %s %s%s are watched by audience %+v\n", a.name, sig, plural, sink.audiences)
 		}
 	}
 	fmt.Println("end")
@@ -106,8 +106,6 @@ type resultParser struct {
 	reGroup string
 	// timeLayout is how to parse the timestamp discovered by reGroup using time.Parse.
 	timeLayout string
-	// lastVal is the last value received, for deltas.
-	lastVal float64
 }
 
 type parserType int
@@ -143,7 +141,13 @@ type actor struct {
 	// audiences is the list of audiences that are listening to this
 	// actor's signal(s). The map key is the signal name, the value
 	// is the list of audiences.
-	audiences map[string][]string
+	audiences map[string]*sink
+}
+
+type sink struct {
+	audiences []string
+	// lastVal is the last value received, for deltas.
+	lastVal float64
 }
 
 // actors is the set of actors defined by the configuration.
@@ -203,8 +207,8 @@ type audience struct {
 
 type audienceSource struct {
 	origin string
-	// hasData indicates whether data was received for this audience source.
-	hasData    bool
+	// hasData indicates whether data was received from a given actor.
+	hasData    map[string]bool
 	drawEvents bool
 }
 

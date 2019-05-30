@@ -419,15 +419,21 @@ const logTimeLayout = "060102 15:04:05.999999"
 
 func (a *actor) analyzeLine(ctx context.Context, collector chan<- dataEvent, line string) {
 	for _, rp := range a.role.resParsers {
-		audiences := a.audiences[rp.name]
-		if len(audiences) == 0 {
+		sink, ok := a.audiences[rp.name]
+		if !ok || len(sink.audiences) == 0 {
 			// No audience for this signal: don't even bother collecting the data.
 			continue
 		}
 		if !rp.re.MatchString(line) {
 			continue
 		}
-		ev := dataEvent{ts: time.Now().UTC(), typ: rp.typ, audiences: audiences, eventName: rp.name}
+		ev := dataEvent{
+			ts:        time.Now().UTC(),
+			typ:       rp.typ,
+			audiences: sink.audiences,
+			actorName: a.name,
+			eventName: rp.name,
+		}
 
 		// Parse the timestamp.
 		var err error
@@ -448,11 +454,13 @@ func (a *actor) analyzeLine(ctx context.Context, collector chan<- dataEvent, lin
 			curValS := rp.re.ReplaceAllString(line, "${delta}")
 			curVal, err := strconv.ParseFloat(curValS, 64)
 			if err != nil {
-				log.Warningf(ctx, "signal %s: error parsing %q for delta: %+v", ev.eventName, curValS, err)
+				log.Warningf(ctx,
+					"signal %s: error parsing %q for delta: %+v",
+					ev.eventName, curValS, err)
 				continue
 			}
-			ev.val = fmt.Sprintf("%f", curVal-rp.lastVal)
-			rp.lastVal = curVal
+			ev.val = fmt.Sprintf("%f", curVal-sink.lastVal)
+			sink.lastVal = curVal
 		}
 
 		select {

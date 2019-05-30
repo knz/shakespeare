@@ -16,13 +16,14 @@ import (
 type dataEvent struct {
 	typ       parserType
 	audiences []string
+	actorName string
 	eventName string
 	ts        time.Time
 	val       string
 }
 
-func csvFileName(audienceName, sigName string) string {
-	return fmt.Sprintf("%s.%s.csv", audienceName, sigName)
+func csvFileName(audienceName, actorName, sigName string) string {
+	return fmt.Sprintf("%s.%s.%s.csv", audienceName, actorName, sigName)
 }
 
 var minTime = math.Inf(1)
@@ -79,8 +80,8 @@ func collect(
 					return fmt.Errorf("event received for non-existence audience %q: %+v", audienceName, ev)
 				}
 				a.hasData = true
-				a.signals[ev.eventName].hasData = true
-				fName := filepath.Join(*dataDir, csvFileName(audienceName, ev.eventName))
+				a.signals[ev.eventName].hasData[ev.actorName] = true
+				fName := filepath.Join(*dataDir, csvFileName(audienceName, ev.actorName, ev.eventName))
 
 				w, ok := writers[fName]
 				if !ok {

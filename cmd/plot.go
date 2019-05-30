@@ -6,6 +6,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 func plot(ctx context.Context) error {
@@ -37,7 +38,7 @@ func plot(ctx context.Context) error {
 		}
 		group := plotgroup{
 			ylabel: a.ylabel,
-			name:   fmt.Sprintf("audience %s", a.name),
+			name:   fmt.Sprintf("audience %s", strings.Replace(a.name, "_", " ", -1)),
 		}
 		sigNum := 1
 		for sigName, as := range a.signals {
@@ -45,7 +46,9 @@ func plot(ctx context.Context) error {
 				fName := csvFileName(a.name, actName, sigName)
 				pl := plot{
 					fName: fName,
-					title: fmt.Sprintf("%s %s", actName, sigName),
+					title: fmt.Sprintf("%s %s",
+						strings.Replace(actName, "_", " ", -1),
+						strings.Replace(sigName, "_", " ", -1)),
 				}
 				if as.drawEvents {
 					pl.opts = fmt.Sprintf("using 1:(%d) with points pt 'o'", sigNum)
@@ -68,7 +71,7 @@ func plot(ctx context.Context) error {
 	fmt.Fprintf(f, "set output 'plot.pdf'\n")
 	fmt.Fprintf(f, "set multiplot layout %d,1\n", len(plots))
 	fmt.Fprintf(f, "set xrange [%f:%f]\n", minTime, maxTime)
-	fmt.Fprintf(f, "set xlabel 'time since start (s)'\n")
+	// fmt.Fprintf(f, "set xlabel 'time since start (s)'\n")
 	fmt.Fprintf(f, "set xtics out 5\n")
 	fmt.Fprintf(f, "set mxtics 5\n")
 	fmt.Fprintln(f, "set jitter overlap 1 spread .25 vertical")

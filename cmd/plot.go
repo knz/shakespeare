@@ -69,6 +69,8 @@ func plot(ctx context.Context) error {
 	fmt.Fprintf(f, "set multiplot layout %d,1\n", len(plots))
 	fmt.Fprintf(f, "set xrange [%f:%f]\n", minTime, maxTime)
 	fmt.Fprintf(f, "set xlabel 'time since start (s)'\n")
+	fmt.Fprintf(f, "set xtics out 5\n")
+	fmt.Fprintf(f, "set mxtics 5\n")
 	fmt.Fprintln(f, "set jitter overlap 1 spread .25 vertical")
 
 	// set object 1 rectangle from graph .5, graph 0 to graph 1, graph .5 fs solid 0.5 fc "red"

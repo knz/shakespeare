@@ -79,7 +79,7 @@ func parseAudience(rd *bufio.Reader) error {
 				a = &audience{name: aName, signals: make(map[string]*audienceSource)}
 				audiences[aName] = a
 			}
-			aSrc := &audienceSource{origin: target}
+			aSrc := &audienceSource{origin: target, hasData: make(map[string]bool)}
 			a.signals[signal] = aSrc
 
 			if strings.HasPrefix(target, "every ") {
@@ -100,7 +100,7 @@ func parseAudience(rd *bufio.Reader) error {
 					if act.role != r {
 						continue
 					}
-					act.audiences[signal] = append(act.audiences[signal], aName)
+					act.addAudience(signal, aName)
 					foundActor = true
 				}
 				if !foundActor {
@@ -117,7 +117,7 @@ func parseAudience(rd *bufio.Reader) error {
 					return fmt.Errorf("unknown signal %q for role %s: %s", signal, act.role.name, line)
 				}
 				aSrc.drawEvents = isEventSignal
-				act.audiences[signal] = append(act.audiences[signal], aName)
+				act.addAudience(signal, aName)
 			}
 		} else if measuresRe.MatchString(line) {
 			aName := measuresRe.ReplaceAllString(line, "${name}")
@@ -130,6 +130,15 @@ func parseAudience(rd *bufio.Reader) error {
 			a.ylabel = ylabel
 		}
 	}
+}
+
+func (a *actor) addAudience(sigName, audienceName string) {
+	s, ok := a.audiences[sigName]
+	if !ok {
+		s = &sink{}
+		a.audiences[sigName] = s
+	}
+	s.audiences = append(s.audiences, audienceName)
 }
 
 func getSignal(r *role, signal string) (isEventSignal bool, ok bool) {
@@ -286,7 +295,7 @@ func parseActors(rd *bufio.Reader) error {
 				role:      r,
 				extraEnv:  extraEnv,
 				workDir:   filepath.Join(artifactsDir, actorName),
-				audiences: make(map[string][]string),
+				audiences: make(map[string]*sink),
 			}
 			actors[actorName] = &act
 		} else {

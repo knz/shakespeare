@@ -19,13 +19,16 @@ func plot(ctx context.Context) error {
 	}()
 
 	type plot struct {
+		title string
 		fName string
 		opts  string
 	}
 	type plotgroup struct {
-		jitter bool
-		plots  []plot
-		ylabel string
+		name      string
+		jitter    bool
+		plots     []plot
+		ylabel    string
+		numEvents int
 	}
 	var plots []plotgroup
 	for _, a := range audiences {
@@ -34,21 +37,25 @@ func plot(ctx context.Context) error {
 		}
 		group := plotgroup{
 			ylabel: a.ylabel,
+			name:   fmt.Sprintf("audience %s", a.name),
 		}
 		sigNum := 1
 		for sigName, as := range a.signals {
-			if !as.hasData {
-				continue
+			for actName := range as.hasData {
+				fName := csvFileName(a.name, actName, sigName)
+				pl := plot{
+					fName: fName,
+					title: fmt.Sprintf("%s %s", actName, sigName),
+				}
+				if as.drawEvents {
+					pl.opts = fmt.Sprintf("using 1:(%d) with points pt 'o'", sigNum)
+					sigNum++
+					group.numEvents++
+				} else {
+					pl.opts = "using 1:2 with linespoints"
+				}
+				group.plots = append(group.plots, pl)
 			}
-			fName := csvFileName(a.name, sigName)
-			pl := plot{fName: fName}
-			if as.drawEvents {
-				pl.opts = fmt.Sprintf("using 1:(%d) with points pt 'o'", sigNum)
-				sigNum++
-			} else {
-				pl.opts = "using 1:2 with linespoints"
-			}
-			group.plots = append(group.plots, pl)
 		}
 		plots = append(plots, group)
 	}
@@ -78,10 +85,16 @@ func plot(ctx context.Context) error {
 	}
 
 	for _, p := range plots {
+		fmt.Fprintf(f, "set title %q\n", p.name)
+		if p.numEvents > 0 {
+			fmt.Fprintf(f, "set yrange [%d:%d]\n", 0, p.numEvents+1)
+		} else {
+			fmt.Fprintf(f, "set yrange [*:*]\n")
+		}
 		fmt.Fprintf(f, "set ylabel %q\n", p.ylabel)
 		fmt.Fprintln(f, `plot \`)
 		for i, pl := range p.plots {
-			fmt.Fprintf(f, "   '%s' %s", pl.fName, pl.opts)
+			fmt.Fprintf(f, "   '%s' %s t %q", pl.fName, pl.opts, pl.title)
 			if i < len(p.plots)-1 {
 				fmt.Fprint(f, `, \`)
 			}

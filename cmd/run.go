@@ -29,6 +29,7 @@ func main() {
 	flag.Parse()
 	artifactsDir = filepath.Join(*dataDir, "artifacts")
 	if *quiet {
+		// Disable logging to the screen.
 		flag.Lookup(logflags.LogToStderrName).Value.Set("NONE")
 	}
 
@@ -51,25 +52,30 @@ func main() {
 	}
 
 	if *parseOnly {
+		// No execution: stop before anything gets actually executed.
 		return
 	}
 
-	// Run the script.
+	// All the asynchronous activities will check their provided
+	// context for asynchronous termination.
+	ctx, cancel := context.WithCancel(bctx)
+
+	// Upon receiving a signal, terminate all the tasks.
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGHUP, syscall.SIGTERM)
-
-	ctx, cancel := context.WithCancel(bctx)
 	go func() {
 		_ = <-sigCh
 		cancel()
 	}()
 
 	defer func() {
-		// Terminate all the tasks.
+		// Upon the end of execution, terminate all the tasks.
+		// Also terminate the signal checker.
 		close(sigCh)
 		cancel()
 	}()
 
+	// Run the script.
 	conduct(ctx)
 
 	// Generate the plots.

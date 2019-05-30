@@ -1,14 +1,11 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"fmt"
-	"io"
 	"math"
 	"os"
 	"os/exec"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -235,6 +232,7 @@ func (a *actor) prepare(bctx context.Context) error {
 	if pCmd == "" {
 		return nil
 	}
+	// If the prepare command does not complete within 10 seconds, we'll terminate it.
 	ctx, cancel := context.WithDeadline(bctx, time.Now().Add(10*time.Second))
 	defer cancel()
 	cmd := a.makeShCmd(pCmd)
@@ -243,6 +241,8 @@ func (a *actor) prepare(bctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			if cmd.Process != nil {
+				cmd.Process.Signal(os.Interrupt)
+				time.Sleep(1)
 				cmd.Process.Kill()
 			}
 		}
@@ -346,128 +346,4 @@ func (a *actor) run(
 	}
 
 	return nil
-}
-
-func (a *actor) spotlight(
-	ctx context.Context, monLogger *log.SecondaryLogger, collector chan<- dataEvent,
-) error {
-	monCmd := a.role.spotlightCmd
-	cmd := a.makeShCmd(monCmd)
-	log.Infof(ctx, "executing: %s", strings.Join(cmd.Args, " "))
-	outstream, err := cmd.StderrPipe()
-	if err != nil {
-		return fmt.Errorf("setting up: %+v", err)
-	}
-	cmd.Stdout = cmd.Stderr
-	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("exec error: %+v", err)
-	}
-	rd := bufio.NewReader(outstream)
-
-	type res struct {
-		line string
-		err  error
-	}
-	lines := make(chan res)
-	go func() {
-		for {
-			line, err := rd.ReadString('\n')
-			line = strings.TrimSpace(line)
-			if line != "" {
-				lines <- res{line, nil}
-			}
-			if err != nil {
-				if err != io.EOF {
-					lines <- res{"", err}
-				}
-				close(lines)
-				return
-			}
-		}
-	}()
-
-	defer func() {
-		outstream.Close()
-		cmd.Process.Signal(os.Interrupt)
-		time.Sleep(1)
-		cmd.Process.Kill()
-		err := cmd.Wait()
-		log.Infof(ctx, "spotlight terminated: %+v", err)
-	}()
-
-	for {
-		select {
-		case res := <-lines:
-			if res.err != nil {
-				return res.err
-			}
-			if res.line == "" {
-				return nil
-			}
-			monLogger.Logf(ctx, "clamors: %q", res.line)
-			a.analyzeLine(ctx, collector, res.line)
-
-		case <-ctx.Done():
-			return ctx.Err()
-		}
-	}
-
-	return nil
-}
-
-const logTimeLayout = "060102 15:04:05.999999"
-
-func (a *actor) analyzeLine(ctx context.Context, collector chan<- dataEvent, line string) {
-	for _, rp := range a.role.resParsers {
-		sink, ok := a.audiences[rp.name]
-		if !ok || len(sink.audiences) == 0 {
-			// No audience for this signal: don't even bother collecting the data.
-			continue
-		}
-		if !rp.re.MatchString(line) {
-			continue
-		}
-		ev := dataEvent{
-			ts:        time.Now().UTC(),
-			typ:       rp.typ,
-			audiences: sink.audiences,
-			actorName: a.name,
-			eventName: rp.name,
-		}
-
-		// Parse the timestamp.
-		var err error
-		logTime := rp.re.ReplaceAllString(line, "${"+rp.reGroup+"}")
-		ev.ts, err = time.Parse(rp.timeLayout, logTime)
-		if err != nil {
-			log.Warningf(ctx, "invalid log timestamp %q in %q: %+v", logTime, line, err)
-			continue
-		}
-
-		// Parse the data.
-		switch rp.typ {
-		case parseEvent:
-			ev.val = rp.re.ReplaceAllString(line, "${event}")
-		case parseScalar:
-			ev.val = rp.re.ReplaceAllString(line, "${scalar}")
-		case parseDelta:
-			curValS := rp.re.ReplaceAllString(line, "${delta}")
-			curVal, err := strconv.ParseFloat(curValS, 64)
-			if err != nil {
-				log.Warningf(ctx,
-					"signal %s: error parsing %q for delta: %+v",
-					ev.eventName, curValS, err)
-				continue
-			}
-			ev.val = fmt.Sprintf("%f", curVal-sink.lastVal)
-			sink.lastVal = curVal
-		}
-
-		select {
-		case <-ctx.Done():
-			return
-		case collector <- ev:
-			// ok
-		}
-	}
 }

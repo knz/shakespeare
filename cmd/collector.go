@@ -7,7 +7,6 @@ import (
 	"math"
 	"os"
 	"path/filepath"
-	"strconv"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -16,13 +15,15 @@ import (
 
 type dataEvent struct {
 	typ       parserType
-	actorName string
+	audiences []string
 	eventName string
 	ts        time.Time
 	val       string
 }
 
-var collectedData = make(map[string]bool)
+func csvFileName(audienceName, sigName string) string {
+	return fmt.Sprintf("%s.%s.csv", audienceName, sigName)
+}
 
 var minTime = math.Inf(1)
 var maxTime = math.Inf(-1)
@@ -41,8 +42,6 @@ func collect(
 			_ = f.Close()
 		}
 	}()
-
-	lastVals := make(map[string]float64)
 
 	t := timeutil.NewTimer()
 	t.Reset(time.Second)
@@ -71,36 +70,31 @@ func collect(
 				minTime = sinceBeginning
 			}
 
-			baseName := fmt.Sprintf("%s.%s.csv", ev.actorName, ev.eventName)
+			dataLogger.Logf(ctx, "%.2f %+v %q %q",
+				sinceBeginning, ev.audiences, ev.eventName, ev.val)
 
-			if ev.typ == parseDelta {
-				curVal, err := strconv.ParseFloat(ev.val, 64)
-				if err != nil {
-					log.Warningf(ctx, "%s.%s: error parsing scalar: %+v", ev.actorName, ev.eventName, err)
-					continue
+			for _, audienceName := range ev.audiences {
+				a, ok := audiences[audienceName]
+				if !ok {
+					return fmt.Errorf("event received for non-existence audience %q: %+v", audienceName, ev)
 				}
-				prevVal := lastVals[baseName]
-				ev.val = fmt.Sprintf("%f", curVal-prevVal)
-				lastVals[baseName] = curVal
-			}
+				a.hasData = true
+				a.signals[ev.eventName].hasData = true
+				fName := filepath.Join(*dataDir, csvFileName(audienceName, ev.eventName))
 
-			dataLogger.Logf(ctx, "%.2f %q %q %q",
-				sinceBeginning, ev.actorName, ev.eventName, ev.val)
-
-			fName := filepath.Join(*dataDir, baseName)
-			w, ok := writers[fName]
-			if !ok {
-				f, err := os.OpenFile(fName, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
-				if err != nil {
-					log.Errorf(ctx, "opening %q: %+v", fName, err)
-					continue
+				w, ok := writers[fName]
+				if !ok {
+					f, err := os.OpenFile(fName, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+					if err != nil {
+						log.Errorf(ctx, "opening %q: %+v", fName, err)
+						continue
+					}
+					files[fName] = f
+					w = bufio.NewWriter(f)
+					writers[fName] = w
 				}
-				files[fName] = f
-				w = bufio.NewWriter(f)
-				writers[fName] = w
-				collectedData[baseName] = true
+				fmt.Fprintf(w, "%.4f %s\n", sinceBeginning, ev.val)
 			}
-			fmt.Fprintf(w, "%.4f %s\n", sinceBeginning, ev.val)
 			continue
 		}
 		break

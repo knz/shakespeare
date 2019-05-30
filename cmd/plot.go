@@ -19,27 +19,38 @@ func plot(ctx context.Context) error {
 	}()
 
 	type plot struct {
-		fName  string
-		jitter bool
-		opts   string
+		fName string
+		opts  string
 	}
-	var plots []plot
-	for _, a := range actors {
-		for _, rp := range a.role.resParsers {
-			fName := fmt.Sprintf("%s.%s.csv", a.name, rp.name)
-			if !collectedData[fName] {
+	type plotgroup struct {
+		jitter bool
+		plots  []plot
+		ylabel string
+	}
+	var plots []plotgroup
+	for _, a := range audiences {
+		if !a.hasData {
+			continue
+		}
+		group := plotgroup{
+			ylabel: a.ylabel,
+		}
+		sigNum := 1
+		for sigName, as := range a.signals {
+			if !as.hasData {
 				continue
 			}
+			fName := csvFileName(a.name, sigName)
 			pl := plot{fName: fName}
-			switch rp.typ {
-			case parseEvent:
-				pl.jitter = true
-				pl.opts = "using 1:(1) with points"
-			case parseScalar, parseDelta:
+			if as.drawEvents {
+				pl.opts = fmt.Sprintf("using 1:(%d) with points pt 'o'", sigNum)
+				sigNum++
+			} else {
 				pl.opts = "using 1:2 with linespoints"
 			}
-			plots = append(plots, pl)
+			group.plots = append(group.plots, pl)
 		}
+		plots = append(plots, group)
 	}
 
 	if minTime > 0 {
@@ -51,6 +62,7 @@ func plot(ctx context.Context) error {
 	fmt.Fprintf(f, "set multiplot layout %d,1\n", len(plots))
 	fmt.Fprintf(f, "set xrange [%f:%f]\n", minTime, maxTime)
 	fmt.Fprintf(f, "set xlabel 'time since start (s)'\n")
+	fmt.Fprintln(f, "set jitter overlap 1 spread .25 vertical")
 
 	// set object 1 rectangle from graph .5, graph 0 to graph 1, graph .5 fs solid 0.5 fc "red"
 	for i, amb := range ambiances {
@@ -66,12 +78,14 @@ func plot(ctx context.Context) error {
 	}
 
 	for _, p := range plots {
-		if p.jitter {
-			fmt.Fprintln(f, "set jitter overlap .1 spread .05 vertical")
-		}
-		fmt.Fprintf(f, "plot '%s' %s\n", p.fName, p.opts)
-		if p.jitter {
-			fmt.Fprintln(f, "unset jitter")
+		fmt.Fprintf(f, "set ylabel %q\n", p.ylabel)
+		fmt.Fprintln(f, `plot \`)
+		for i, pl := range p.plots {
+			fmt.Fprintf(f, "   '%s' %s", pl.fName, pl.opts)
+			if i < len(p.plots)-1 {
+				fmt.Fprint(f, `, \`)
+			}
+			fmt.Fprintln(f)
 		}
 	}
 	fmt.Fprintf(f, "unset multiplot\n")

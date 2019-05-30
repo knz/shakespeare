@@ -2,12 +2,15 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"io"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // parseCfg parses a configuration from the given buffered input.
@@ -33,6 +36,10 @@ func parseCfg(rd *bufio.Reader) error {
 			if err := parseActors(rd); err != nil {
 				return err
 			}
+		} else if audienceRe.MatchString(line) {
+			if err := parseAudience(rd); err != nil {
+				return err
+			}
 		} else if scriptRe.MatchString(line) {
 			if err := parseScript(rd); err != nil {
 				return err
@@ -47,13 +54,99 @@ func compileRe(re string) *regexp.Regexp {
 	return regexp.MustCompile(fmt.Sprintf("(?s:%s)", re))
 }
 
+var audienceRe = compileRe(`^audience$`)
+var watchRe = compileRe(`^(?P<name>\S+)\s+watches\s+(?P<target>every\s+\S+|\S+)\s+(?P<signal>\S+)\s*$`)
+var measuresRe = compileRe(`^(?P<name>\S+)\s+measures\s+(?P<ylabel>.*)$`)
+
+func parseAudience(rd *bufio.Reader) error {
+	for {
+		line, stop, skip, err := readLine(rd)
+		if err != nil || stop {
+			return err
+		} else if skip {
+			continue
+		}
+		if line == "end" {
+			return nil
+		}
+		if watchRe.MatchString(line) {
+			aName := watchRe.ReplaceAllString(line, "${name}")
+			target := watchRe.ReplaceAllString(line, "${target}")
+			signal := watchRe.ReplaceAllString(line, "${signal}")
+
+			a, ok := audiences[aName]
+			if !ok {
+				a = &audience{name: aName, signals: make(map[string]*audienceSource)}
+				audiences[aName] = a
+			}
+			aSrc := &audienceSource{origin: target}
+			a.signals[signal] = aSrc
+
+			if strings.HasPrefix(target, "every ") {
+				// Audience watches every actor playing a given role.
+				roleName := strings.TrimPrefix(target, "every ")
+				r, ok := roles[roleName]
+				if !ok {
+					return fmt.Errorf("unknown role %q: %s", roleName, line)
+				}
+				isEventSignal, ok := getSignal(r, signal)
+				if !ok {
+					return fmt.Errorf("unknown signal %q for role %s: %s", signal, r.name, line)
+				}
+				aSrc.drawEvents = isEventSignal
+
+				foundActor := false
+				for _, act := range actors {
+					if act.role != r {
+						continue
+					}
+					act.audiences[signal] = append(act.audiences[signal], aName)
+					foundActor = true
+				}
+				if !foundActor {
+					log.Warningf(context.TODO(), "there is no actor playing role %q for audience %q to watch", r.name, aName)
+				}
+			} else {
+				// Audience watches a specific actor.
+				act, ok := actors[target]
+				if !ok {
+					return fmt.Errorf("unknown actor %q: %s", target, line)
+				}
+				isEventSignal, ok := getSignal(act.role, signal)
+				if !ok {
+					return fmt.Errorf("unknown signal %q for role %s: %s", signal, act.role.name, line)
+				}
+				aSrc.drawEvents = isEventSignal
+				act.audiences[signal] = append(act.audiences[signal], aName)
+			}
+		} else if measuresRe.MatchString(line) {
+			aName := measuresRe.ReplaceAllString(line, "${name}")
+			ylabel := strings.TrimSpace(measuresRe.ReplaceAllString(line, "${ylabel}"))
+			a, ok := audiences[aName]
+			if !ok {
+				a = &audience{name: aName, signals: make(map[string]*audienceSource)}
+				audiences[aName] = a
+			}
+			a.ylabel = ylabel
+		}
+	}
+}
+
+func getSignal(r *role, signal string) (isEventSignal bool, ok bool) {
+	for _, rp := range r.resParsers {
+		if rp.name == signal {
+			return rp.typ == parseEvent, true
+		}
+	}
+	return false, false
+}
+
 var roleRe = compileRe(`^role\s+(?P<rolename>\w+)\s+is$`)
 var actionDefRe = compileRe(`^:(?P<actionname>\w+)\s+(?P<cmd>.*)$`)
 var spotlightDefRe = compileRe(`^spotlight\s+(?P<cmd>.*)$`)
 var cleanupDefRe = compileRe(`^cleanup\s+(?P<cmd>.*)$`)
 var prepareDefRe = compileRe(`^prepare\s+(?P<cmd>.*)$`)
 var parseDefRe = compileRe(`^signal\s+(?P<name>\S+)\s+(?P<type>\S+)\s+at\s+(?P<re>.*)$`)
-var checkDefRe = compileRe(`^check\s+(?P<expr>.*)$`)
 
 func parseRole(rd *bufio.Reader, roleName string) error {
 	if _, ok := roles[roleName]; ok {
@@ -138,8 +231,6 @@ func parseRole(rd *bufio.Reader, roleName string) error {
 			}
 
 			thisRole.resParsers = append(thisRole.resParsers, &rp)
-		} else if checkDefRe.MatchString(line) {
-			thisRole.checkExpr = checkDefRe.ReplaceAllString(line, "${expr}")
 		} else {
 			return fmt.Errorf("role %q: unknown syntax: %s", roleName, line)
 		}
@@ -191,10 +282,11 @@ func parseActors(rd *bufio.Reader) error {
 			}
 
 			act := actor{
-				name:     actorName,
-				role:     r,
-				extraEnv: extraEnv,
-				workDir:  filepath.Join(artifactsDir, actorName),
+				name:      actorName,
+				role:      r,
+				extraEnv:  extraEnv,
+				workDir:   filepath.Join(artifactsDir, actorName),
+				audiences: make(map[string][]string),
 			}
 			actors[actorName] = &act
 		} else {

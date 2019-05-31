@@ -7,85 +7,119 @@ import (
 
 // compile transforms a programmatic description
 // of a play (using stanzas) into an explicit list of steps.
-func compile() {
-	atTime := time.Duration(0)
-	i := 0
-	for {
-		foundAct := false
-		foundDo := false
-		for _, s := range stanzas {
-			if i < len(s) {
-				foundAct = true
-				aChar := s[i]
-				acts := actions[aChar]
-				for _, act := range acts {
-					switch act.typ {
-					case ambianceAction:
-						steps = append(steps,
-							step{typ: stepAmbiance, action: act.act})
-					case doAction:
-						for _, t := range act.targets {
-							if !foundDo {
-								steps = append(steps,
-									step{typ: stepWaitUntil, dur: atTime})
-							}
+func compile() error {
+	// Compute the maximum script length.
+	scriptLen := 0
+	for _, s := range stanzas {
+		if len(s.script) > scriptLen {
+			scriptLen = len(s.script)
+		}
+	}
 
-							foundDo = true
-							steps = append(steps,
-								step{typ: stepDo, character: t, action: act.act})
-						}
-					}
+	// We know how long the play is going to be.
+	play = make([]act, scriptLen+1)
+
+	// Compile the script.
+	atTime := time.Duration(0)
+	for i := 0; i < scriptLen; i++ {
+		thisAct := &play[i]
+		thisAct.waitUntil = atTime
+		for _, s := range stanzas {
+			script := s.script
+			if i >= len(script) {
+				continue
+			}
+
+			thisAct.concurrentLines = append(thisAct.concurrentLines, scriptLine{actor: s.actor})
+			curLine := &thisAct.concurrentLines[len(thisAct.concurrentLines)-1]
+
+			aChar := script[i]
+			acts := actions[aChar]
+
+			for _, act := range acts {
+				switch act.typ {
+				case ambianceAction:
+					curLine.steps = append(curLine.steps,
+						step{typ: stepAmbiance, action: act.act})
+				case doAction:
+					curLine.steps = append(curLine.steps,
+						step{typ: stepDo, action: act.act})
 				}
 			}
-		}
-		if !foundAct {
-			break
+			if len(curLine.steps) == 0 {
+				// No steps actually generated (or only nops). Erase the last line.
+				thisAct.concurrentLines = thisAct.concurrentLines[:len(thisAct.concurrentLines)-1]
+			}
 		}
 		atTime += tempo
-		i++
 	}
-	steps = append(steps,
-		step{typ: stepWaitUntil, dur: atTime})
+	play[len(play)-1].waitUntil = atTime
+	return nil
 }
 
 // printSteps prints the generated steps.
 func printSteps() {
 	fmt.Println("")
 	fmt.Println("# play")
-	for _, s := range steps {
-		fmt.Printf("#  %s\n", s.String())
+	for i, s := range play {
+		if s.waitUntil != 0 && (i == len(play)-1 || len(s.concurrentLines) > 0) {
+			fmt.Printf("#  (wait until %s)\n", s.waitUntil)
+		}
+		comma := ""
+		for _, line := range s.concurrentLines {
+			if len(line.steps) > 0 {
+				fmt.Print(comma)
+				comma = "#  (meanwhile)\n"
+			}
+			for _, step := range line.steps {
+				switch step.typ {
+				case stepDo:
+					fmt.Printf("#  %s: %s!\n", line.actor.name, step.action)
+				case stepAmbiance:
+					fmt.Printf("#  (mood: %s)\n", step.action)
+				}
+			}
+		}
 	}
 	fmt.Println("# end")
 }
 
-// step is one action during the play.
-type step struct {
-	typ       stepType
-	dur       time.Duration
-	character string
-	action    string
+// act describes one act of the play.
+type act struct {
+	waitUntil       time.Duration
+	concurrentLines []scriptLine
 }
 
-func (s *step) String() string {
-	switch s.typ {
-	case stepWaitUntil:
-		return fmt.Sprintf("(wait until %s)", s.dur)
-	case stepDo:
-		return fmt.Sprintf("%s: %s!", s.character, s.action)
-	case stepAmbiance:
-		return fmt.Sprintf("(mood: %s)", s.action)
-	}
-	return "<step???>"
+// scriptLine describes what one actor should play during one act.
+type scriptLine struct {
+	actor *actor
+	steps []step
+}
+
+// step is one action for one actor during the act.
+type step struct {
+	typ    stepType
+	action string
 }
 
 type stepType int
 
 const (
 	stepDo stepType = iota
-	stepWaitUntil
 	stepAmbiance
 )
 
-// steps is the list of actions to play.
+// play is the list of actions to play.
 // This is populated by compile().
-var steps []step
+var play []act
+
+// FIXME
+var steps []oldstep
+
+type oldstep struct {
+	typ       stepType
+	dur       time.Duration
+	character string
+	action    string
+	targets   []string
+}

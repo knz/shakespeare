@@ -46,7 +46,10 @@ func main() {
 	}
 
 	// Generate the steps.
-	compile()
+	if err := compile(); err != nil {
+		log.Errorf(bctx, "compile error: %+v", err)
+		os.Exit(1)
+	}
 	if *doPrint {
 		printSteps()
 	}
@@ -76,7 +79,10 @@ func main() {
 	}()
 
 	// Run the script.
-	conduct(ctx)
+	if err := conduct(ctx); err != nil {
+		log.Errorf(ctx, "play error: %+v", err)
+		os.Exit(1)
+	}
 
 	// Generate the plots.
 	if err := plot(ctx); err != nil {

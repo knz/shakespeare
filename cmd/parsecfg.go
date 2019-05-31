@@ -244,6 +244,9 @@ func parseRole(rd *bufio.Reader, roleName string) error {
 				const logTimeLayout = "060102 15:04:05.999999"
 				rp.timeLayout = logTimeLayout
 				rp.reGroup = "ts_log"
+			} else if hasSubexp(re, "ts_now") {
+				// Special "format": there is actually no timestamp. We'll auto-generate values.
+				rp.reGroup = ""
 			} else {
 				return fmt.Errorf("role %q: unknown time stamp format in regexp: %s", roleName, line)
 			}

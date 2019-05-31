@@ -118,7 +118,6 @@ func (a *actor) detectSignals(ctx context.Context, collector chan<- dataEvent, l
 			continue
 		}
 		ev := dataEvent{
-			ts:        time.Now().UTC(),
 			typ:       rp.typ,
 			audiences: sink.audiences,
 			actorName: a.name,
@@ -126,12 +125,18 @@ func (a *actor) detectSignals(ctx context.Context, collector chan<- dataEvent, l
 		}
 
 		// Parse the timestamp.
-		var err error
-		logTime := rp.re.ReplaceAllString(line, "${"+rp.reGroup+"}")
-		ev.ts, err = time.Parse(rp.timeLayout, logTime)
-		if err != nil {
-			log.Warningf(ctx, "invalid log timestamp %q in %q: %+v", logTime, line, err)
-			continue
+		if rp.reGroup == "" {
+			// If the reGroup is empty, that means we're OK with
+			// the auto-generated "now" timestamp.
+			ev.ts = time.Now().UTC()
+		} else {
+			var err error
+			logTime := rp.re.ReplaceAllString(line, "${"+rp.reGroup+"}")
+			ev.ts, err = time.Parse(rp.timeLayout, logTime)
+			if err != nil {
+				log.Warningf(ctx, "invalid log timestamp %q in %q: %+v", logTime, line, err)
+				continue
+			}
 		}
 
 		// Parse the data.

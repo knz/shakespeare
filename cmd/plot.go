@@ -6,7 +6,6 @@ import (
 	"math"
 	"os"
 	"path/filepath"
-	"strings"
 )
 
 func plot(ctx context.Context) error {
@@ -43,7 +42,7 @@ func plot(ctx context.Context) error {
 		// This audience has at least one plot. Prepare the group.
 		group := plotgroup{
 			ylabel: a.ylabel,
-			title:  fmt.Sprintf("audience %s", strings.Replace(a.name, "_", " ", -1)),
+			title:  fmt.Sprintf("audience %s", a.name),
 		}
 
 		// Find the timeseries to plot for the audience.
@@ -55,15 +54,15 @@ func plot(ctx context.Context) error {
 				fName := csvFileName(a.name, actName, sigName)
 				pl := plot{
 					fName: fName,
-					title: fmt.Sprintf("%s %s",
-						strings.Replace(actName, "_", " ", -1),
-						strings.Replace(sigName, "_", " ", -1)),
+					title: fmt.Sprintf("%s %s", actName, sigName),
 				}
 
 				if as.drawEvents {
+					// Indicate the value used in the title.
+					pl.title = fmt.Sprintf("%s (around y=%d)", pl.title, sigNum)
 					// If the signal is an event source, we'll plot points on
 					// a horizontal line (with some jitter).
-					pl.opts = fmt.Sprintf("using 1:(%d) with points pt 'o'", sigNum)
+					pl.opts = fmt.Sprintf("using 1:(%d+$3):2 with labels hypertext point pt 6 ps .5", sigNum)
 					sigNum++
 					group.numEvents++
 				} else {
@@ -76,8 +75,8 @@ func plot(ctx context.Context) error {
 		plots = append(plots, group)
 	}
 
-	// We'll write to a file named "plot.gp".
-	// The user will be responsible for running gnuplot on it.
+	// We'll write to two file named "plot.gp" and "runme.gp".
+	// The user will be responsible for running gnuplot on the latter.
 	fName := filepath.Join(*dataDir, "plot.gp")
 	f, err := os.Create(fName)
 	if err != nil {
@@ -86,12 +85,13 @@ func plot(ctx context.Context) error {
 	defer func() {
 		_ = f.Close()
 	}()
+	fmt.Fprintf(f, "# auto-generated file.\n# See 'runme.gp' to actually generate plots.\n")
 
 	// Common plot definitions.
 
-	// We'll generate PDF.
-	fmt.Fprintf(f, "set term pdf enhanced color size 7,10 font \",6\"\n")
-	fmt.Fprintf(f, "set output 'plot.pdf'\n")
+	// Our text labels may contain underscores, we don't want to have
+	// them handled as subscripts (math notation).
+	fmt.Fprintf(f, "set termoption noenhanced\n")
 
 	// We want multiple plots sharing the same objects (overlays).
 	fmt.Fprintf(f, "set multiplot layout %d,1\n", len(plots))
@@ -106,7 +106,10 @@ func plot(ctx context.Context) error {
 	fmt.Fprintf(f, "set mxtics 5\n")
 
 	// For event plots, ensure that the event dots do not overlap.
-	fmt.Fprintln(f, "set jitter overlap 1 spread .25 vertical")
+	// Note: this is disabled for now, because "labels hypertext" does not
+	// implement the jitter option. Instead, we use a shuffle value
+	// to move the event points randomly along the y axis.
+	// fmt.Fprintln(f, "set jitter overlap 1 spread .25 vertical")
 
 	// Generate the ambiance overlays.
 	for i, amb := range ambiances {
@@ -126,8 +129,12 @@ func plot(ctx context.Context) error {
 		fmt.Fprintf(f, "set title %q\n", p.title)
 		if p.numEvents > 0 {
 			fmt.Fprintf(f, "set yrange [%d:%d]\n", 0, p.numEvents+1)
+			fmt.Fprintf(f, "set grid ytics\n")
+			fmt.Fprintf(f, "set ytics 1\n")
 		} else {
 			fmt.Fprintf(f, "set yrange [*:*]\n")
+			fmt.Fprintf(f, "set grid noytics\n")
+			fmt.Fprintf(f, "set ytics auto\n")
 		}
 		fmt.Fprintf(f, "set ylabel %q\n", p.ylabel)
 		fmt.Fprintln(f, `plot \`)
@@ -142,6 +149,24 @@ func plot(ctx context.Context) error {
 
 	// End the plot set.
 	fmt.Fprintf(f, "unset multiplot\n")
+
+	fName = filepath.Join(*dataDir, "runme.gp")
+	f2, err := os.Create(fName)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = f2.Close()
+	}()
+
+	// We'll generate PDF.
+	fmt.Fprintf(f2, "# auto-generated file.\n# Run 'gnuplot runme.gp' to actually generate plots.\n")
+	fmt.Fprintf(f2, "set term pdf color size 7,%d font \",6\"\n", 2*len(plots))
+	fmt.Fprintf(f2, "set output 'plot.pdf'\n")
+	fmt.Fprintf(f2, "load 'plot.gp'\n")
+	fmt.Fprintf(f2, "set term svg mouse standalone size 600,%d dynamic font \",6\"\n", 200*len(plots))
+	fmt.Fprintf(f2, "set output 'plot.svg'\n")
+	fmt.Fprintf(f2, "load 'plot.gp'\n")
 
 	return nil
 }

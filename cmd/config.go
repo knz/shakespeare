@@ -59,20 +59,17 @@ func printCfg() {
 		}
 	}
 	fmt.Println("end")
-	fmt.Println()
 
-	fmt.Println("actions")
-	for _, aa := range actions {
-		for _, a := range aa {
-			fmt.Printf("  %s %s\n", a.name, a.String())
-		}
-	}
-	fmt.Println("end")
 	fmt.Println()
 	fmt.Println("script")
 	fmt.Printf("  tempo %s\n", tempo)
+	for _, aa := range actions {
+		for _, a := range aa {
+			fmt.Printf("  action %s entails %s\n", a.name, a.String())
+		}
+	}
 	for _, stanza := range stanzas {
-		fmt.Printf("  stanza %s\n", stanza)
+		fmt.Printf("  prompt %-10s %s\n", stanza.actor.name, stanza.script)
 	}
 	fmt.Println("end")
 }
@@ -159,11 +156,10 @@ var actors = make(map[string]*actor)
 // action is the description of a step that can be mentioned
 // in a play stanza.
 type action struct {
-	name    string
-	typ     actionType
-	dur     time.Duration
-	act     string
-	targets []string
+	name string
+	typ  actionType
+	dur  time.Duration
+	act  string
 }
 
 func (a *action) String() string {
@@ -173,7 +169,7 @@ func (a *action) String() string {
 	case ambianceAction:
 		return fmt.Sprintf("mood %s", a.act)
 	case doAction:
-		return fmt.Sprintf("%s:%s", strings.Join(a.targets, ","), a.act)
+		return fmt.Sprintf(":%s", a.act)
 	}
 	return "<action???>"
 }
@@ -193,7 +189,13 @@ var actions = make(map[byte][]*action)
 // stanzas defines the programmatic play scenario.
 // This is populated during parsing, and transformed
 // into steps during compile().
-var stanzas []string
+var stanzas []stanza
+
+// stanza describes a play line for one actor.
+type stanza struct {
+	actor  *actor
+	script string
+}
 
 // tempo is the interval at which the stanzas are played.
 // This is populated during parsing, and used during compile().

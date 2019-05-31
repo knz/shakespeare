@@ -15,123 +15,195 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
 )
 
+type status struct {
+	who string
+	err error
+}
+
 // conduct runs the play.
-func conduct(ctx context.Context) bool {
+func conduct(ctx context.Context) (err error) {
 	// Prepare all the working directories.
 	for _, a := range actors {
 		if err := os.MkdirAll(a.workDir, os.ModePerm); err != nil {
-			log.Errorf(ctx, "mkdir %s: %+v", a.workDir, err)
-			return true
+			return fmt.Errorf("mkdir %s: %+v", a.workDir, err)
 		}
 	}
+
+	// Initialize all the actors.
+	if err := runPrepare(ctx); err != nil {
+		return err
+	}
+
+	// Ensure the cleanup actions are run at the end
+	// even during early return.
+	defer func() {
+		if cleanupErr := runCleanup(ctx); cleanupErr != nil {
+			// Error during cleanup. runCleanup already
+			// printed out the details via log.Errorf.
+			if err == nil {
+				// We only propagate the cleanup error as final error
+				// if there was no error yet.
+				err = cleanupErr
+			}
+		}
+	}()
 
 	// We'll log all the monitored and extracted data to a secondary logger.
 	monLogger := log.NewSecondaryLogger(ctx, nil, "spotlight", true /*enableGc*/, false /*forceSyncWrite*/)
 	dataLogger := log.NewSecondaryLogger(ctx, nil, "collector", true /*enableGc*/, false /*forceSyncWrite*/)
 	defer func() { log.Flush() }()
 
-	type status struct {
-		who string
-		err error
-	}
-	errCh := make(chan status, len(actors))
-
-	// Run the pre-flight routines.
-	var wg sync.WaitGroup
-	for actName := range actors {
-		// Start one actor.
-		actCtx := logtags.AddTag(ctx, "init", nil)
-		actCtx = logtags.AddTag(actCtx, "actor", actName)
-		actCtx = logtags.AddTag(actCtx, "role", actors[actName].role.name)
-		log.Info(actCtx, "<prepare>")
-		wg.Add(1)
-		go func(ctx context.Context, a *actor) {
-			if err := a.prepare(ctx); err != nil {
-				errCh <- status{who: fmt.Sprintf("%s [%s]", a.role.name, a.name), err: err}
-			}
-			log.Info(ctx, "<ready>")
-			wg.Done()
-		}(actCtx, actors[actName])
-	}
-	wg.Wait()
-
-	close(errCh)
-	hasErr := false
-	for st := range errCh {
-		if st.err != context.Canceled {
-			log.Errorf(ctx, "complaint from %s: %+v", st.who, st.err)
-			hasErr = true
-		}
-	}
-	if hasErr {
-		return true
-	}
-
-	actorChans := make(map[string]chan string)
+	errCh := make(chan status, len(actors)+2)
 	spotlightChan := make(chan dataEvent, len(actors))
 	actionChan := make(chan actionEvent, len(actors))
-	errCh = make(chan status, len(actors)+2)
 
 	// Start the collector.
+	// The collector is running in the background.
 	var wgcol sync.WaitGroup
-	wgcol.Add(1)
-	colCtx, colDone := context.WithCancel(ctx)
-	go func() {
-		colCtx = logtags.AddTag(colCtx, "collector", nil)
-		log.Info(colCtx, "<intrat>")
-		if err := collect(colCtx, dataLogger, actionChan, spotlightChan); err != nil {
-			errCh <- status{who: "collector", err: err}
-		}
-		log.Info(colCtx, "<exit>")
-		wgcol.Done()
-	}()
+	colDone := startCollector(ctx, &wgcol, dataLogger, actionChan, spotlightChan, errCh)
 
-	for actName := range actors {
-		// Start one actor.
-		actCtx := logtags.AddTag(ctx, "actor", actName)
-		actCtx = logtags.AddTag(actCtx, "role", actors[actName].role.name)
-		log.Info(actCtx, "<intrat>")
-		actorChan := make(chan string)
-		actorChans[actName] = actorChan
-		wg.Add(1)
-		go func(ctx context.Context, a *actor) {
-			if err := a.run(ctx, &wg, monLogger, actionChan, spotlightChan, actorChan); err != nil {
-				errCh <- status{who: fmt.Sprintf("%s [%s]", a.role.name, a.name), err: err}
-			}
-			log.Info(ctx, "<exit>")
-			wg.Done()
-		}(actCtx, actors[actName])
-	}
+	// Start the spotlights.
+	// The spotlights are running in the background until canceled
+	// via allSpotsDone().
+	var wgspot sync.WaitGroup
+	allSpotsDone := startSpotlights(ctx, &wgspot, monLogger, spotlightChan, errCh)
 
-	// Start the prompter.
-	wg.Add(1)
-	go func() {
-		dirCtx := logtags.AddTag(ctx, "prompter", nil)
-		log.Info(dirCtx, "<intrat>")
-		if err := prompt(dirCtx, actorChans); err != nil {
-			errCh <- status{who: "prompter", err: err}
-		}
-		log.Info(dirCtx, "<exit>")
-		wg.Done()
-	}()
+	// Run the prompter.
+	// The play steps will thus run in the main thread.
+	runPrompter(ctx, actionChan, errCh)
 
-	// Wait for the prompter and actors to complete.
-	wg.Wait()
+	// Stop all the spotlights and wait for them to turn off.
+	allSpotsDone()
+	wgspot.Wait()
 
 	// Stop the collector and wait for it to complete.
 	colDone()
 	wgcol.Wait()
 
 	close(errCh)
-	hasErr = false
-	for st := range errCh {
-		if st.err != context.Canceled {
-			log.Errorf(ctx, "complaint from %s: %+v", st.who, st.err)
-			hasErr = true
-		}
-	}
+	return collectErrors(ctx, errCh, "play")
+}
 
-	return hasErr
+// runPrompter runs the prompter until completion.
+func runPrompter(ctx context.Context, actionChan chan<- actionEvent, errCh chan<- status) {
+	dirCtx := logtags.AddTag(ctx, "prompter", nil)
+	log.Info(dirCtx, "<intrat>")
+	if err := prompt(dirCtx, actionChan); err != nil {
+		errCh <- status{who: "prompter", err: err}
+	}
+	log.Info(dirCtx, "<exit>")
+}
+
+// startCollector starts the collector in the background.
+func startCollector(
+	ctx context.Context,
+	wg *sync.WaitGroup,
+	dataLogger *log.SecondaryLogger,
+	actionChan <-chan actionEvent,
+	spotlightChan <-chan dataEvent,
+	errCh chan<- status,
+) (cancelFunc func()) {
+	wg.Add(1)
+	colCtx, colDone := context.WithCancel(ctx)
+	go func() {
+		colCtx = logtags.AddTag(colCtx, "collector", nil)
+		log.Info(colCtx, "<intrat>")
+		if err := collect(colCtx, dataLogger, actionChan, spotlightChan); err != nil && err != context.Canceled {
+			// We ignore cancellation errors here, so as to avoid reporting
+			// a general error when the collector is merely canceled at the
+			// end of the play.
+			errCh <- status{who: "collector", err: err}
+		}
+		log.Info(colCtx, "<exit>")
+		wg.Done()
+	}()
+	return colDone
+}
+
+// startSpotlights starts all the spotlights in the background.
+func startSpotlights(
+	ctx context.Context,
+	wg *sync.WaitGroup,
+	monLogger *log.SecondaryLogger,
+	spotlightChan chan<- dataEvent,
+	errCh chan<- status,
+) (cancelFunc func()) {
+	allSpotsCtx, allSpotsDone := context.WithCancel(ctx)
+	for actName, thisActor := range actors {
+		if thisActor.role.spotlightCmd == "" {
+			// No spotlight defined, don't start anything.
+			continue
+		}
+		spotCtx := logtags.AddTag(allSpotsCtx, "spotlight", nil)
+		spotCtx = logtags.AddTag(spotCtx, "actor", actName)
+		spotCtx = logtags.AddTag(spotCtx, "role", thisActor.role.name)
+		log.Info(spotCtx, "<shining>")
+		wg.Add(1)
+		go func(ctx context.Context, a *actor) {
+			if err := a.spotlight(ctx, monLogger, spotlightChan); err != nil && err != context.Canceled {
+				// We ignore cancellation errors here, so as to avoid reporting
+				// a general error when a spotlight is merely canceled at the
+				// end of the play.
+				errCh <- status{who: fmt.Sprintf("%s [%s]", a.role.name, a.name), err: err}
+			}
+			log.Info(ctx, "<off>")
+			wg.Done()
+		}(spotCtx, thisActor)
+	}
+	return allSpotsDone
+}
+
+// runPrepare runs all the prepare routines.
+func runPrepare(ctx context.Context) error {
+	if err := runCleanup(ctx); err != nil {
+		return err
+	}
+	return runForAllActors(ctx, "prepare", func(a *actor) cmd { return a.role.prepareCmd })
+}
+
+func runCleanup(ctx context.Context) error {
+	return runForAllActors(ctx, "cleanup", func(a *actor) cmd { return a.role.cleanupCmd })
+}
+
+func runForAllActors(ctx context.Context, prefix string, getCommand func(a *actor) cmd) error {
+	errCh := make(chan status, len(actors))
+	var wg sync.WaitGroup
+	for actName, thisActor := range actors {
+		pCmd := getCommand(thisActor)
+		if pCmd == "" {
+			// No command to run. Nothing to do.
+			continue
+		}
+		// Start one actor.
+		actCtx := logtags.AddTag(ctx, prefix, nil)
+		actCtx = logtags.AddTag(actCtx, "actor", actName)
+		actCtx = logtags.AddTag(actCtx, "role", thisActor.role.name)
+		log.Info(actCtx, "<start>")
+		wg.Add(1)
+		go func(ctx context.Context, a *actor) {
+			if err := a.runActorCommand(ctx, pCmd); err != nil {
+				errCh <- status{who: fmt.Sprintf("%s %s", a.role.name, a.name), err: err}
+			}
+			log.Info(ctx, "<done>")
+			wg.Done()
+		}(actCtx, thisActor)
+	}
+	wg.Wait()
+
+	close(errCh)
+	return collectErrors(ctx, errCh, prefix)
+}
+
+func collectErrors(ctx context.Context, errCh <-chan status, prefix string) error {
+	numErr := 0
+	for st := range errCh {
+		log.Errorf(ctx, "complaint from %s during %s: %+v", st.who, prefix, st.err)
+		numErr++
+	}
+	if numErr > 0 {
+		return fmt.Errorf("%d %s errors occurred", numErr, prefix)
+	}
+	return nil
 }
 
 var curAmbiance = "clear"
@@ -145,7 +217,7 @@ type ambiancePeriod struct {
 
 var ambiances []ambiancePeriod
 
-func prompt(ctx context.Context, actorChans map[string]chan string) error {
+func prompt(ctx context.Context, actionChan chan<- actionEvent) error {
 	startTime := time.Now().UTC()
 
 	// At end:
@@ -158,46 +230,73 @@ func prompt(ctx context.Context, actorChans map[string]chan string) error {
 				ambiance:  curAmbiance,
 			})
 		}
-
-		// Tell all actors to exit.
-		for _, ch := range actorChans {
-			select {
-			case <-ctx.Done():
-			case ch <- "":
-			}
-		}
 	}()
 
-	for i, step := range steps {
-		stepCtx := logtags.AddTag(ctx, "step", i)
+	for i, act := range play {
+		actCtx := logtags.AddTag(ctx, "act", i)
+
+		now := time.Now().UTC()
+		elapsed := now.Sub(startTime)
+		toWait := act.waitUntil - elapsed
+		if toWait > 0 {
+			log.Infof(actCtx, "waiting for %.2fs", toWait.Seconds())
+			tm := time.After(toWait)
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-tm:
+				// Wait.
+			}
+		} else {
+			if toWait < 0 {
+				log.Infof(actCtx, "running behind schedule: %s", toWait)
+			}
+		}
+
+		if err := runLines(actCtx, startTime, act.concurrentLines, actionChan); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func runLines(
+	ctx context.Context, startTime time.Time, lines []scriptLine, actionChan chan<- actionEvent,
+) error {
+	errCh := make(chan status, len(lines))
+	var wg sync.WaitGroup
+	for _, line := range lines {
+		wg.Add(1)
+		go func(a *actor, steps []step) {
+			actorCtx := logtags.AddTag(ctx, "role", a.role.name)
+			actorCtx = logtags.AddTag(ctx, "actor", a.name)
+			if err := a.runLine(actorCtx, startTime, steps, actionChan); err != nil {
+				errCh <- status{who: fmt.Sprintf("%s %s", a.role.name, a.name), err: err}
+			}
+			wg.Done()
+		}(line.actor, line.steps)
+	}
+	wg.Wait()
+	close(errCh)
+	return collectErrors(ctx, errCh, "prompt")
+}
+
+func (a *actor) runLine(
+	ctx context.Context, startTime time.Time, steps []step, actionChan chan<- actionEvent,
+) error {
+	for stepNum, step := range steps {
+		stepCtx := logtags.AddTag(ctx, "step", stepNum+1)
+
+		now := time.Now().UTC()
+		elapsed := now.Sub(startTime)
 
 		switch step.typ {
-		case stepWaitUntil:
-			now := time.Now().UTC()
-			elapsed := now.Sub(startTime)
-			toWait := step.dur - elapsed
-			if toWait > 0 {
-				log.Infof(stepCtx, "waiting for %.2fs", toWait.Seconds())
-				tm := time.After(toWait)
-				select {
-				case <-ctx.Done():
-					return ctx.Err()
-				case <-tm:
-					// Wait.
-				}
-			} else {
-				if toWait < 0 {
-					log.Infof(stepCtx, "running behind schedule: %s", toWait)
-				}
-			}
-
 		case stepAmbiance:
 			if step.action == curAmbiance {
 				continue
 			}
 			log.Infof(stepCtx, "the mood changes to %s", step.action)
-			now := time.Now().UTC()
-			elapsed := now.Sub(startTime)
 			if curAmbiance != "clear" {
 				ambiances = append(ambiances, ambiancePeriod{
 					startTime: curAmbianceStart,
@@ -209,48 +308,70 @@ func prompt(ctx context.Context, actorChans map[string]chan string) error {
 			curAmbiance = step.action
 
 		case stepDo:
-			log.Infof(stepCtx, "%s: %s!", step.character, step.action)
-			ch := actorChans[step.character]
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case ch <- step.action:
-				// Ok done.
+			log.Infof(stepCtx, "%s: %s!", a.name, step.action)
+			if err := a.runAction(stepCtx, step.action, actionChan); err != nil {
+				return err
 			}
 		}
 	}
-
 	return nil
 }
 
-func (a *actor) prepare(bctx context.Context) error {
-	if cCmd := a.role.cleanupCmd; cCmd != "" {
-		// If there is a cleanup command, run it before the prepare, to
-		// ensure a pristime environment.
-		a.cleanup(bctx)
+func (a *actor) runAction(ctx context.Context, action string, actionChan chan<- actionEvent) error {
+	aCmd, ok := a.role.actionCmds[action]
+	if !ok {
+		return fmt.Errorf("unknown action: %q", action)
 	}
 
-	pCmd := a.role.prepareCmd
-	if pCmd == "" {
-		return nil
+	cmd := a.makeShCmd(aCmd)
+	log.Infof(ctx, "executing %q: %s", action, strings.Join(cmd.Args, " "))
+
+	go func() {
+		select {
+		case <-ctx.Done():
+			proc := cmd.Process
+			if proc != nil {
+				proc.Signal(os.Interrupt)
+				time.Sleep(1)
+				proc.Kill()
+			}
+			err := cmd.Wait()
+			log.Infof(ctx, "command terminated: %+v", err)
+		}
+	}()
+
+	actStart := time.Now().UTC()
+	outdata, err := cmd.CombinedOutput()
+	actEnd := time.Now().UTC()
+
+	if _, ok := err.(*exec.ExitError); err != nil && !ok {
+		return err
 	}
+
+	return a.reportAction(ctx, actionChan, action,
+		actStart, actEnd,
+		string(outdata), cmd.ProcessState)
+}
+
+func (a *actor) runActorCommand(bctx context.Context, pCmd cmd) error {
 	// If the prepare command does not complete within 10 seconds, we'll terminate it.
 	ctx, cancel := context.WithDeadline(bctx, time.Now().Add(10*time.Second))
 	defer cancel()
 	cmd := a.makeShCmd(pCmd)
-	log.Infof(ctx, "prepare: %s", strings.Join(cmd.Args, " "))
+	log.Infof(ctx, "running: %s", strings.Join(cmd.Args, " "))
 	go func() {
 		select {
 		case <-ctx.Done():
-			if cmd.Process != nil {
-				cmd.Process.Signal(os.Interrupt)
+			proc := cmd.Process
+			if proc != nil {
+				proc.Signal(os.Interrupt)
 				time.Sleep(1)
-				cmd.Process.Kill()
+				proc.Kill()
 			}
 		}
 	}()
 	outdata, err := cmd.CombinedOutput()
-	log.Infof(ctx, "prepare done\n%s\n-- %s", string(outdata), cmd.ProcessState.String())
+	log.Infof(ctx, "done\n%s\n-- %s", string(outdata), cmd.ProcessState.String())
 	return err
 }
 
@@ -296,28 +417,6 @@ func (a *actor) run(
 	spotlightChan chan<- dataEvent,
 	events <-chan string,
 ) error {
-	if a.role.spotlightCmd != "" {
-		monCtx, monCancel := context.WithCancel(ctx)
-		monCtx = logtags.AddTag(monCtx, "spotlight", nil)
-
-		log.Info(monCtx, "<intrat>")
-		wg.Add(1)
-		go func() {
-			a.spotlight(monCtx, monLogger, spotlightChan)
-			log.Info(monCtx, "<exit>")
-			wg.Done()
-		}()
-		defer func() {
-			monCancel()
-		}()
-	}
-
-	if cCmd := a.role.cleanupCmd; cCmd != "" {
-		// If there is a cleanup command, run it at the end.
-		defer func() {
-			a.cleanup(ctx)
-		}()
-	}
 
 	for {
 		select {

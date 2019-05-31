@@ -19,7 +19,6 @@ func parseCfg(rd *bufio.Reader) error {
 		headerRe *regexp.Regexp
 		parseFn  func(line string) error
 	}{
-		{actionsRe, parseActs},
 		{actorsRe, parseActors},
 		{scriptRe, parseScript},
 		{audienceRe, parseAudience},
@@ -90,50 +89,33 @@ func parseAudience(line string) error {
 		target := watchRe.ReplaceAllString(line, "${target}")
 		signal := watchRe.ReplaceAllString(line, "${signal}")
 
+		r, foundActors, err := selectActors(target)
+		if err != nil {
+			return fmt.Errorf("%s: %s", err, line)
+		}
+		if len(foundActors) == 0 {
+			log.Warningf(context.TODO(), "there is no actor playing role %q for audience %q to watch", r.name, aName)
+			return nil
+		}
+		isEventSignal, ok := getSignal(r, signal)
+		if !ok {
+			return fmt.Errorf("unknown signal %q for role %s: %s", signal, r.name, line)
+		}
+
 		a, ok := audiences[aName]
 		if !ok {
 			a = &audience{name: aName, signals: make(map[string]*audienceSource)}
 			audiences[aName] = a
 		}
-		aSrc := &audienceSource{origin: target, hasData: make(map[string]bool)}
+		aSrc := &audienceSource{
+			origin:     target,
+			hasData:    make(map[string]bool),
+			drawEvents: isEventSignal,
+		}
 		a.signals[signal] = aSrc
 
-		if strings.HasPrefix(target, "every ") {
-			// Audience watches every actor playing a given role.
-			roleName := strings.TrimPrefix(target, "every ")
-			r, ok := roles[roleName]
-			if !ok {
-				return fmt.Errorf("unknown role %q: %s", roleName, line)
-			}
-			isEventSignal, ok := getSignal(r, signal)
-			if !ok {
-				return fmt.Errorf("unknown signal %q for role %s: %s", signal, r.name, line)
-			}
-			aSrc.drawEvents = isEventSignal
-
-			foundActor := false
-			for _, act := range actors {
-				if act.role != r {
-					continue
-				}
-				act.addAudience(signal, aName)
-				foundActor = true
-			}
-			if !foundActor {
-				log.Warningf(context.TODO(), "there is no actor playing role %q for audience %q to watch", r.name, aName)
-			}
-		} else {
-			// Audience watches a specific actor.
-			act, ok := actors[target]
-			if !ok {
-				return fmt.Errorf("unknown actor %q: %s", target, line)
-			}
-			isEventSignal, ok := getSignal(act.role, signal)
-			if !ok {
-				return fmt.Errorf("unknown signal %q for role %s: %s", signal, act.role.name, line)
-			}
-			aSrc.drawEvents = isEventSignal
-			act.addAudience(signal, aName)
+		for _, actor := range foundActors {
+			actor.addAudience(signal, aName)
 		}
 	} else if measuresRe.MatchString(line) {
 		aName := measuresRe.ReplaceAllString(line, "${name}")
@@ -146,6 +128,29 @@ func parseAudience(line string) error {
 		a.ylabel = ylabel
 	}
 	return nil
+}
+
+func selectActors(target string) (*role, []*actor, error) {
+	if strings.HasPrefix(target, "every ") {
+		roleName := strings.TrimPrefix(target, "every ")
+		r, ok := roles[roleName]
+		if !ok {
+			return nil, nil, fmt.Errorf("unknown role %q", roleName)
+		}
+		var res []*actor
+		for _, a := range actors {
+			if a.role != r {
+				continue
+			}
+			res = append(res, a)
+		}
+		return r, res, nil
+	}
+	act, ok := actors[target]
+	if !ok {
+		return nil, nil, fmt.Errorf("unknown actor %q")
+	}
+	return act.role, []*actor{act}, nil
 }
 
 func (a *actor) addAudience(sigName, audienceName string) {
@@ -306,62 +311,44 @@ func parseActors(line string) error {
 	return nil
 }
 
-var actionsRe = compileRe(`^actions$`)
-var actionRe = compileRe(`^(?P<char>\S)\s+(?P<chardef>.*)$`)
-var nopRe = compileRe(`^nop$`)
-var doRe = compileRe(`^(?P<actor>[^:]+):(?P<action>.*)$`)
-var ambianceRe = compileRe(`^mood\s+(?P<mood>.*)$`)
-
-func parseActs(line string) error {
-	if !actionRe.MatchString(line) {
-		return fmt.Errorf("unknown syntax: %s", line)
-	}
-
-	actShorthand := actionRe.ReplaceAllString(line, "${char}")
-	actChar := actShorthand[0]
-
-	a := action{name: actShorthand}
-	actions[actChar] = append(actions[actChar], &a)
-
-	actAction := actionRe.ReplaceAllString(line, "${chardef}")
-	actAction = strings.TrimSpace(actAction)
-	if nopRe.MatchString(actAction) {
-		a.typ = nopAction
-	} else if ambianceRe.MatchString(actAction) {
-		a.typ = ambianceAction
-		act := ambianceRe.ReplaceAllString(actAction, "${mood}")
-		a.act = strings.TrimSpace(act)
-	} else if doRe.MatchString(actAction) {
-		a.typ = doAction
-		act := doRe.ReplaceAllString(actAction, "${action}")
-		act = strings.TrimSpace(act)
-
-		target := doRe.ReplaceAllString(actAction, "${actor}")
-		targets := strings.Split(target, ",")
-		for i := range targets {
-			targets[i] = strings.TrimSpace(targets[i])
-			theActor, ok := actors[targets[i]]
-			if !ok {
-				return fmt.Errorf("undefined actor %q: %s", targets[i], line)
-			}
-			if _, ok := theActor.role.actionCmds[act]; !ok {
-				return fmt.Errorf("undefined action %q for role %s: %s", act, theActor.role.name, line)
-			}
-		}
-		a.targets = targets
-		a.act = act
-	} else {
-		return fmt.Errorf("unknown action syntax: %s", line)
-	}
-	return nil
-}
-
 var scriptRe = compileRe(`^script$`)
-var stanzaRe = compileRe(`^stanza\s+(?P<stanza>.*)$`)
 var tempoRe = compileRe(`^tempo\s+(?P<dur>.*)$`)
+var actionRe = compileRe(`^action\s+(?P<char>\S)\s+entails\s+(?P<chardef>.*)$`)
+var doRe = compileRe(`^:(?P<action>.*)$`)
+var nopRe = compileRe(`^nop$`)
+var ambianceRe = compileRe(`^mood\s+(?P<mood>.*)$`)
+var stanzaRe = compileRe(`^prompt\s+(?P<target>every\s+\S+|\S+)\s+(?P<stanza>.*)$`)
 
 func parseScript(line string) error {
-	if tempoRe.MatchString(line) {
+	if actionRe.MatchString(line) {
+		actShorthand := actionRe.ReplaceAllString(line, "${char}")
+		actChar := actShorthand[0]
+		actActions := actionRe.ReplaceAllString(line, "${chardef}")
+		components := strings.Split(actActions, ";")
+		for _, c := range components {
+			actAction := strings.TrimSpace(c)
+
+			a := action{name: actShorthand}
+			actions[actChar] = append(actions[actChar], &a)
+
+			if nopRe.MatchString(actAction) {
+				// action . nop
+				a.typ = nopAction
+			} else if ambianceRe.MatchString(actAction) {
+				// action r mood red
+				a.typ = ambianceAction
+				act := ambianceRe.ReplaceAllString(actAction, "${mood}")
+				a.act = strings.TrimSpace(act)
+			} else if doRe.MatchString(actAction) {
+				// action r :dosomething
+				a.typ = doAction
+				act := doRe.ReplaceAllString(actAction, "${action}")
+				a.act = act
+			} else {
+				return fmt.Errorf("unknown action syntax: %s", line)
+			}
+		}
+	} else if tempoRe.MatchString(line) {
 		durS := tempoRe.ReplaceAllString(line, "${dur}")
 		dur, err := time.ParseDuration(durS)
 		if err != nil {
@@ -369,13 +356,38 @@ func parseScript(line string) error {
 		}
 		tempo = dur
 	} else if stanzaRe.MatchString(line) {
-		stanza := stanzaRe.ReplaceAllString(line, "${stanza}")
-		for i := 0; i < len(stanza); i++ {
-			if _, ok := actions[stanza[i]]; !ok {
-				return fmt.Errorf("action '%c' not defined: %s", stanza[i], line)
+		script := stanzaRe.ReplaceAllString(line, "${stanza}")
+		target := stanzaRe.ReplaceAllString(line, "${target}")
+
+		r, foundActors, err := selectActors(target)
+		if err != nil {
+			return fmt.Errorf("%s: %s", err, line)
+		}
+		if len(foundActors) == 0 {
+			log.Warningf(context.TODO(), "there is no actor playing role %q to play this script: %s", r.name, line)
+			return nil
+		}
+
+		for i := 0; i < len(script); i++ {
+			actionSteps, ok := actions[script[i]]
+			if !ok {
+				return fmt.Errorf("action '%c' not defined: %s", script[i], line)
+			}
+			for _, act := range actionSteps {
+				if act.typ != doAction {
+					continue
+				}
+				if _, ok := r.actionCmds[act.act]; !ok {
+					return fmt.Errorf("action '%c', :%q not defined for role %q: %s", script[i], act.act, r.name, line)
+				}
 			}
 		}
-		stanzas = append(stanzas, stanza)
+		for _, actor := range foundActors {
+			stanzas = append(stanzas, stanza{
+				actor:  actor,
+				script: script,
+			})
+		}
 	} else {
 		return fmt.Errorf("unknown syntax: %s", line)
 	}

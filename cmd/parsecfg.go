@@ -175,7 +175,6 @@ var roleRe = compileRe(`^role\s+(?P<rolename>\w+)\s+is$`)
 var actionDefRe = compileRe(`^:(?P<actionname>\w+)\s+(?P<cmd>.*)$`)
 var spotlightDefRe = compileRe(`^spotlight\s+(?P<cmd>.*)$`)
 var cleanupDefRe = compileRe(`^cleanup\s+(?P<cmd>.*)$`)
-var prepareDefRe = compileRe(`^prepare\s+(?P<cmd>.*)$`)
 var parseDefRe = compileRe(`^signal\s+(?P<name>\S+)\s+(?P<type>\S+)\s+at\s+(?P<re>.*)$`)
 
 func parseRole(rd *bufio.Reader, roleName string) error {
@@ -199,8 +198,6 @@ func parseRole(rd *bufio.Reader, roleName string) error {
 			thisRole.spotlightCmd = cmd(spotlightDefRe.ReplaceAllString(line, "${cmd}"))
 		} else if cleanupDefRe.MatchString(line) {
 			thisRole.cleanupCmd = cmd(cleanupDefRe.ReplaceAllString(line, "${cmd}"))
-		} else if prepareDefRe.MatchString(line) {
-			thisRole.prepareCmd = cmd(prepareDefRe.ReplaceAllString(line, "${cmd}"))
 		} else if parseDefRe.MatchString(line) {
 			rp := resultParser{}
 			reS := parseDefRe.ReplaceAllString(line, "${re}")

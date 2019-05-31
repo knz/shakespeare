@@ -142,6 +142,8 @@ type actor struct {
 	// actor's signal(s). The map key is the signal name, the value
 	// is the list of audiences.
 	audiences map[string]*sink
+	// hasData indicates there were action events executed for this actor.
+	hasData bool
 }
 
 type sink struct {

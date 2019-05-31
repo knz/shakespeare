@@ -15,9 +15,9 @@ import (
 )
 
 // spotlight stats the monitoring (spotlight) thread for a given actor.
-// The collected events are sent to the given collector.
+// The collected events are sent to the given spotlightChan.
 func (a *actor) spotlight(
-	ctx context.Context, monLogger *log.SecondaryLogger, collector chan<- dataEvent,
+	ctx context.Context, monLogger *log.SecondaryLogger, spotlightChan chan<- dataEvent,
 ) error {
 	// Start the spotlight command in the background.
 	cmd := a.makeShCmd(a.role.spotlightCmd)
@@ -95,7 +95,7 @@ func (a *actor) spotlight(
 				return nil
 			}
 			monLogger.Logf(ctx, "clamors: %q", res.line)
-			a.detectSignals(ctx, collector, res.line)
+			a.detectSignals(ctx, spotlightChan, res.line)
 
 		case <-ctx.Done():
 			return ctx.Err()
@@ -106,8 +106,8 @@ func (a *actor) spotlight(
 }
 
 // detectSignals parses a line produced by the spotlight to detect any
-// signal is contains. Detected signals are sent to the collector.
-func (a *actor) detectSignals(ctx context.Context, collector chan<- dataEvent, line string) {
+// signal is contains. Detected signals are sent to the spotlightChan.
+func (a *actor) detectSignals(ctx context.Context, spotlightChan chan<- dataEvent, line string) {
 	for _, rp := range a.role.resParsers {
 		sink, ok := a.audiences[rp.name]
 		if !ok || len(sink.audiences) == 0 {
@@ -163,7 +163,7 @@ func (a *actor) detectSignals(ctx context.Context, collector chan<- dataEvent, l
 		select {
 		case <-ctx.Done():
 			return
-		case collector <- ev:
+		case spotlightChan <- ev:
 			// ok
 		}
 	}

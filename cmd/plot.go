@@ -94,21 +94,66 @@ func plot(ctx context.Context) error {
 	fmt.Fprintf(f, "set termoption noenhanced\n")
 
 	// We want multiple plots sharing the same objects (overlays).
-	fmt.Fprintf(f, "set multiplot layout %d,1\n", len(plots))
+	fmt.Fprintf(f, "set multiplot layout %d,1\n", len(plots)+1)
 
 	// Ensure the x axis always start at zero, even if no
 	// event was received until later on the time line.
 	if minTime > 0 {
 		minTime = 0
 	}
+	// Sanity check.
+	if maxTime < 0 {
+		maxTime = 1
+	}
+	// We force the x range to be the same for all the plots.
+	// If we did not do that, each plot may get a different x range
+	// (adjusted automatically based on the data collected for that plot).
 	fmt.Fprintf(f, "set xrange [%f:%f]\n", minTime, maxTime)
-	fmt.Fprintf(f, "set xtics out 5\n")
-	fmt.Fprintf(f, "set mxtics 5\n")
+	if maxTime < 10 {
+		fmt.Fprintf(f, "set xtics out 1\n")
+		fmt.Fprintf(f, "set mxtics 2\n")
+	} else {
+		fmt.Fprintf(f, "set xtics out 5\n")
+		fmt.Fprintf(f, "set mxtics 5\n")
+	}
+	// Generate the action plot. we do this before generating the ambiance
+	// overlays, since these are part of the "audience" observations.
+	numActiveActors := 0
+	for _, a := range actors {
+		if a.hasData {
+			numActiveActors++
+		}
+	}
+	fmt.Fprintf(f, "set title 'actions'\n")
+	fmt.Fprintf(f, "set yrange [0:%d]\n", numActiveActors+1)
+	fmt.Fprintf(f, "set ytics 1\n")
+	fmt.Fprintf(f, "set ylabel ''\n")
+	fmt.Fprintf(f, "set grid ytics\n")
+	fmt.Fprintf(f, "plot \\\n")
+	plotNum := 1
+	for actorName, a := range actors {
+		if !a.hasData {
+			continue
+		}
+		fmt.Fprintf(f, "  '%s.csv' using 1:(%d):1:($1+$2):(%d-0.25):(%d+0.25):(65536*($4 > 0 ? 255 : 0)+256*($4 > 0 ? 0 : 255)) "+
+			"with boxxyerror notitle fs solid 1.0 fc rgbcolor variable, \\\n",
+			actorName, plotNum, plotNum, plotNum)
+		fmt.Fprintf(f, "  '%s.csv' using 1:(%d+0.25):3 with labels t '%s events (at y=%d)', \\\n",
+			actorName, plotNum, actorName, plotNum)
+		fmt.Fprintf(f, "  '%s.csv' using ($1+$2):(%d-0.25):5 with labels hypertext point pt 6 ps .5 notitle",
+			actorName, plotNum)
+		if plotNum < numActiveActors {
+			fmt.Fprintf(f, ", \\")
+		}
+		fmt.Fprintln(f)
+		plotNum++
+	}
 
 	// For event plots, ensure that the event dots do not overlap.
 	// Note: this is disabled for now, because "labels hypertext" does not
 	// implement the jitter option. Instead, we use a shuffle value
 	// to move the event points randomly along the y axis.
+	//
 	// fmt.Fprintln(f, "set jitter overlap 1 spread .25 vertical")
 
 	// Generate the ambiance overlays.
@@ -148,6 +193,9 @@ func plot(ctx context.Context) error {
 	}
 
 	// End the plot set.
+	for i := range ambiances {
+		fmt.Fprintf(f, "unset object %d\n", i+1)
+	}
 	fmt.Fprintf(f, "unset multiplot\n")
 
 	fName = filepath.Join(*dataDir, "runme.gp")
@@ -161,12 +209,26 @@ func plot(ctx context.Context) error {
 
 	// We'll generate PDF.
 	fmt.Fprintf(f2, "# auto-generated file.\n# Run 'gnuplot runme.gp' to actually generate plots.\n")
-	fmt.Fprintf(f2, "set term pdf color size 7,%d font \",6\"\n", 2*len(plots))
+	fmt.Fprintf(f2, "set term pdf color size 7,%d font \",6\"\n", 2*(len(plots)+1))
 	fmt.Fprintf(f2, "set output 'plot.pdf'\n")
 	fmt.Fprintf(f2, "load 'plot.gp'\n")
-	fmt.Fprintf(f2, "set term svg mouse standalone size 600,%d dynamic font \",6\"\n", 200*len(plots))
+	fmt.Fprintf(f2, "set term svg mouse standalone size 600,%d dynamic font \",6\"\n", 200*(len(plots)+1))
 	fmt.Fprintf(f2, "set output 'plot.svg'\n")
 	fmt.Fprintf(f2, "load 'plot.gp'\n")
 
 	return nil
+}
+
+// minTime and maxTime are used to compute the x range of plots.
+var minTime = math.Inf(1)
+var maxTime = math.Inf(-1)
+
+// expandTimeRange should be called for each processed event time stamp.
+func expandTimeRange(instant float64) {
+	if instant > maxTime {
+		maxTime = instant
+	}
+	if instant < minTime {
+		minTime = instant
+	}
 }

@@ -11,9 +11,6 @@ import (
 func printCfg() {
 	for _, r := range roles {
 		fmt.Printf("role %s is\n", r.name)
-		if r.prepareCmd != "" {
-			fmt.Printf("  prepare %s\n", r.prepareCmd)
-		}
 		if r.cleanupCmd != "" {
 			fmt.Printf("  cleanup %s\n", r.cleanupCmd)
 		}
@@ -81,9 +78,7 @@ type cmd string
 // role is a model that can be played by zero or more actors.
 type role struct {
 	name string
-	// prepareCmd is executed once at the beginning.
-	prepareCmd cmd
-	// cleanupCmd is executed once at the end, and also once before prepare.
+	// cleanupCmd is executed once at the end, and also once at the beginning.
 	cleanupCmd cmd
 	// spotlightCmd is executed in the background during the test.
 	spotlightCmd cmd

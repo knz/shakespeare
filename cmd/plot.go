@@ -105,6 +105,10 @@ func plot(ctx context.Context) error {
 	if maxTime < 0 {
 		maxTime = 1
 	}
+	// Give some breathing room to action labels.
+	minTime -= 1.0
+	maxTime += 1.0
+
 	// We force the x range to be the same for all the plots.
 	// If we did not do that, each plot may get a different x range
 	// (adjusted automatically based on the data collected for that plot).

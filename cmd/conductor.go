@@ -30,7 +30,7 @@ func conduct(ctx context.Context) (err error) {
 	}
 
 	// Initialize all the actors.
-	if err := runPrepare(ctx); err != nil {
+	if err := runCleanup(ctx); err != nil {
 		return err
 	}
 
@@ -151,14 +151,6 @@ func startSpotlights(
 		}(spotCtx, thisActor)
 	}
 	return allSpotsDone
-}
-
-// runPrepare runs all the prepare routines.
-func runPrepare(ctx context.Context) error {
-	if err := runCleanup(ctx); err != nil {
-		return err
-	}
-	return runForAllActors(ctx, "prepare", func(a *actor) cmd { return a.role.prepareCmd })
 }
 
 func runCleanup(ctx context.Context) error {
@@ -354,7 +346,7 @@ func (a *actor) runAction(ctx context.Context, action string, actionChan chan<- 
 }
 
 func (a *actor) runActorCommand(bctx context.Context, pCmd cmd) error {
-	// If the prepare command does not complete within 10 seconds, we'll terminate it.
+	// If the command does not complete within 10 seconds, we'll terminate it.
 	ctx, cancel := context.WithDeadline(bctx, time.Now().Add(10*time.Second))
 	defer cancel()
 	cmd := a.makeShCmd(pCmd)

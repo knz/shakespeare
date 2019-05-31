@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"time"
@@ -94,7 +95,9 @@ func collect(
 					w = bufio.NewWriter(f)
 					writers[fName] = w
 				}
-				fmt.Fprintf(w, "%.4f %s\n", sinceBeginning, ev.val)
+				// shuffle is a random value between [-.25, +.25] used to randomize event plots.
+				shuffle := (.5 * rand.Float64()) - .25
+				fmt.Fprintf(w, "%.4f %s %.3f\n", sinceBeginning, ev.val, shuffle)
 			}
 			continue
 		}

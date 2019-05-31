@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"html"
 	"io"
 	"os"
 	"strconv"
@@ -136,7 +137,9 @@ func (a *actor) detectSignals(ctx context.Context, collector chan<- dataEvent, l
 		// Parse the data.
 		switch rp.typ {
 		case parseEvent:
-			ev.val = rp.re.ReplaceAllString(line, "${event}")
+			evText := rp.re.ReplaceAllString(line, "${event}")
+			evText = html.EscapeString(evText)
+			ev.val = fmt.Sprintf("%q", evText)
 		case parseScalar:
 			ev.val = rp.re.ReplaceAllString(line, "${scalar}")
 		case parseDelta:

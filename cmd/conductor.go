@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"html"
 	"math"
 	"os"
 	"os/exec"
@@ -66,8 +67,9 @@ func conduct(ctx context.Context) bool {
 		return true
 	}
 
-	actChans := make(map[string]chan string)
-	collector := make(chan dataEvent, len(actors))
+	actorChans := make(map[string]chan string)
+	spotlightChan := make(chan dataEvent, len(actors))
+	actionChan := make(chan actionEvent, len(actors))
 	errCh = make(chan status, len(actors)+2)
 
 	// Start the collector.
@@ -77,7 +79,7 @@ func conduct(ctx context.Context) bool {
 	go func() {
 		colCtx = logtags.AddTag(colCtx, "collector", nil)
 		log.Info(colCtx, "<intrat>")
-		if err := collect(colCtx, dataLogger, collector); err != nil {
+		if err := collect(colCtx, dataLogger, actionChan, spotlightChan); err != nil {
 			errCh <- status{who: "collector", err: err}
 		}
 		log.Info(colCtx, "<exit>")
@@ -89,11 +91,11 @@ func conduct(ctx context.Context) bool {
 		actCtx := logtags.AddTag(ctx, "actor", actName)
 		actCtx = logtags.AddTag(actCtx, "role", actors[actName].role.name)
 		log.Info(actCtx, "<intrat>")
-		actChan := make(chan string)
-		actChans[actName] = actChan
+		actorChan := make(chan string)
+		actorChans[actName] = actorChan
 		wg.Add(1)
 		go func(ctx context.Context, a *actor) {
-			if err := a.run(ctx, &wg, monLogger, collector, actChan); err != nil {
+			if err := a.run(ctx, &wg, monLogger, actionChan, spotlightChan, actorChan); err != nil {
 				errCh <- status{who: fmt.Sprintf("%s [%s]", a.role.name, a.name), err: err}
 			}
 			log.Info(ctx, "<exit>")
@@ -106,7 +108,7 @@ func conduct(ctx context.Context) bool {
 	go func() {
 		dirCtx := logtags.AddTag(ctx, "prompter", nil)
 		log.Info(dirCtx, "<intrat>")
-		if err := prompt(dirCtx, actChans); err != nil {
+		if err := prompt(dirCtx, actorChans); err != nil {
 			errCh <- status{who: "prompter", err: err}
 		}
 		log.Info(dirCtx, "<exit>")
@@ -143,7 +145,7 @@ type ambiancePeriod struct {
 
 var ambiances []ambiancePeriod
 
-func prompt(ctx context.Context, actChans map[string]chan string) error {
+func prompt(ctx context.Context, actorChans map[string]chan string) error {
 	startTime := time.Now().UTC()
 
 	// At end:
@@ -158,7 +160,7 @@ func prompt(ctx context.Context, actChans map[string]chan string) error {
 		}
 
 		// Tell all actors to exit.
-		for _, ch := range actChans {
+		for _, ch := range actorChans {
 			select {
 			case <-ctx.Done():
 			case ch <- "":
@@ -208,7 +210,7 @@ func prompt(ctx context.Context, actChans map[string]chan string) error {
 
 		case stepDo:
 			log.Infof(stepCtx, "%s: %s!", step.character, step.action)
-			ch := actChans[step.character]
+			ch := actorChans[step.character]
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
@@ -290,7 +292,8 @@ func (a *actor) run(
 	ctx context.Context,
 	wg *sync.WaitGroup,
 	monLogger *log.SecondaryLogger,
-	collector chan<- dataEvent,
+	actionChan chan<- actionEvent,
+	spotlightChan chan<- dataEvent,
 	events <-chan string,
 ) error {
 	if a.role.spotlightCmd != "" {
@@ -300,7 +303,7 @@ func (a *actor) run(
 		log.Info(monCtx, "<intrat>")
 		wg.Add(1)
 		go func() {
-			a.spotlight(monCtx, monLogger, collector)
+			a.spotlight(monCtx, monLogger, spotlightChan)
 			log.Info(monCtx, "<exit>")
 			wg.Done()
 		}()
@@ -336,14 +339,47 @@ func (a *actor) run(
 			}
 			cmd := a.makeShCmd(aCmd)
 			log.Infof(ctx, "executing %q: %s", ev, strings.Join(cmd.Args, " "))
+			actStart := time.Now()
 			outdata, err := cmd.CombinedOutput()
+			actEnd := time.Now()
 			if _, ok := err.(*exec.ExitError); err != nil && !ok {
 				log.Errorf(ctx, "exec error: %+v", err)
 				continue
 			}
-			log.Infof(ctx, "%q done\n%s\n-- %s", ev, string(outdata), cmd.ProcessState.String())
+			if err := a.reportAction(ctx, actionChan, ev,
+				actStart, actEnd,
+				string(outdata), cmd.ProcessState); err != nil {
+				return err
+			}
 		}
 	}
 
+	return nil
+}
+
+func (a *actor) reportAction(
+	ctx context.Context,
+	actionChan chan<- actionEvent,
+	action string,
+	actStart, actEnd time.Time,
+	outdata string,
+	ps *os.ProcessState,
+) error {
+	dur := actEnd.Sub(actStart)
+	log.Infof(ctx, "%q done (%s)\n%s-- %s", action, dur, outdata, ps)
+	ev := actionEvent{
+		startTime: actStart,
+		duration:  dur.Seconds(),
+		actor:     a.name,
+		action:    action,
+		success:   ps.Success(),
+		output:    html.EscapeString(ps.String()),
+	}
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case actionChan <- ev:
+		// ok
+	}
 	return nil
 }

@@ -26,7 +26,7 @@ func printCfg() {
 		fmt.Println("end")
 		fmt.Println()
 	}
-	fmt.Println("actors")
+	fmt.Println("cast")
 	for _, a := range actors {
 		fmt.Printf("  %s plays %s", a.name, a.role.name)
 		if a.extraEnv != "" {

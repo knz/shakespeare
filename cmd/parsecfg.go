@@ -270,7 +270,7 @@ func hasSubexp(re *regexp.Regexp, n string) bool {
 	return false
 }
 
-var actorsRe = compileRe(`^actors$`)
+var actorsRe = compileRe(`^cast$`)
 var actorDefRe = compileRe(`^(?P<actorname>\S+)\s+plays\s+(?P<rolename>\w+)\s*(?P<extraenv>\(.*\)|)\s*$`)
 
 func parseActors(line string) error {

@@ -224,14 +224,14 @@ func prompt(ctx context.Context, actionChan chan<- actionEvent) error {
 		}
 	}()
 
-	for i, act := range play {
-		actCtx := logtags.AddTag(ctx, "act", i)
+	for i, scene := range play {
+		sceneCtx := logtags.AddTag(ctx, "act", i)
 
 		now := time.Now().UTC()
 		elapsed := now.Sub(startTime)
-		toWait := act.waitUntil - elapsed
+		toWait := scene.waitUntil - elapsed
 		if toWait > 0 {
-			log.Infof(actCtx, "waiting for %.2fs", toWait.Seconds())
+			log.Infof(sceneCtx, "waiting for %.2fs", toWait.Seconds())
 			tm := time.After(toWait)
 			select {
 			case <-ctx.Done():
@@ -241,11 +241,11 @@ func prompt(ctx context.Context, actionChan chan<- actionEvent) error {
 			}
 		} else {
 			if toWait < 0 {
-				log.Infof(actCtx, "running behind schedule: %s", toWait)
+				log.Infof(sceneCtx, "running behind schedule: %s", toWait)
 			}
 		}
 
-		if err := runLines(actCtx, startTime, act.concurrentLines, actionChan); err != nil {
+		if err := runLines(sceneCtx, startTime, scene.concurrentLines, actionChan); err != nil {
 			return err
 		}
 	}

@@ -17,7 +17,7 @@ func compile() error {
 	}
 
 	// We know how long the play is going to be.
-	play = make([]act, scriptLen+1)
+	play = make([]scene, scriptLen+1)
 
 	// Compile the script.
 	atTime := time.Duration(0)
@@ -84,19 +84,19 @@ func printSteps() {
 	fmt.Println("# end")
 }
 
-// act describes one act of the play.
-type act struct {
+// scene describes one scene of the play.
+type scene struct {
 	waitUntil       time.Duration
 	concurrentLines []scriptLine
 }
 
-// scriptLine describes what one actor should play during one act.
+// scriptLine describes what one actor should play during one scene.
 type scriptLine struct {
 	actor *actor
 	steps []step
 }
 
-// step is one action for one actor during the act.
+// step is one action for one actor during the scene.
 type step struct {
 	typ    stepType
 	action string
@@ -111,15 +111,4 @@ const (
 
 // play is the list of actions to play.
 // This is populated by compile().
-var play []act
-
-// FIXME
-var steps []oldstep
-
-type oldstep struct {
-	typ       stepType
-	dur       time.Duration
-	character string
-	action    string
-	targets   []string
-}
+var play []scene

@@ -27,6 +27,18 @@ the manual:
   [`govaluate` expression
   language](https://github.com/Knetic/govaluate)).
 
+Additionally, `shakespeare` supports:
+
+- specifications spanning multiple lines: a backslash `\` at the end of
+  the current line will cause `shakespeare` to continue reading input
+  on the subsequent line. The result line preserves the backslash and
+  newline characters. (This is automatically suitable for shell
+  commands.)
+
+- comments: a line starting by whitespace, followed by `#`, followed
+  by arbitrary characters (possibly spanning multiple lines with
+  `\`). These are ignored.
+
 ## Roles configuration
 
 One or more roles definitions is expected. 

@@ -15,7 +15,7 @@ activity over time.
 
 ## How it works
 
-1. shakespeare reads a configuration from its standard input that defines:
+1. `shakespeare` reads a configuration from its standard input that defines:
    - one or more *actors*, each playing a *role* (multiple actors can play the same role);
    - a *script* that defines what the actors should be doing over time;
    - optionally, to obtain diagrams of the behavior:
@@ -24,7 +24,7 @@ activity over time.
    - optionally, to verify the behavior:
      - *auditors* that check whether the actors perform well.
 
-2. shakespeare reads the configuration from its standard input and
+2. `shakespeare` reads the configuration from its standard input and
    compiles the script to a *sequence of scenes* for the actors to
    follow.
 
@@ -32,7 +32,7 @@ activity over time.
    - an actor can be called to perform some *actions* (a command is executed);
    - the *mood* of the stage can be altered (a period of interest is marked in the output diagrams);
 
-3. shakespeare brings the conductor on stage. The play begins. The
+3. `shakespeare` brings the conductor on stage. The play begins. The
    conductor does the following:
 
    - calls the spotlights to shine upon the actors (starts the monitoring processes)

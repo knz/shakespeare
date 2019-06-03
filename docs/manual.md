@@ -86,6 +86,10 @@ Behavior:
   spotlight's output. Each matching line becomes an event or a data
   point with the provided signal name.
 
+- The data collected by signals are written to CSV files in the output
+  directory (specified via `--output-dir` on the command line, by
+  default the current directory).
+
 - The following signal types are defined:
 
   - `event` signals: these collect a *string* associated with moments
@@ -285,7 +289,12 @@ Constraints:
 
 Behavior:
 
-- Each unique observer name defines a separate plot in the output.
+- When `shakespeare` completes a play, it generates a
+  [Gnuplot](http://www.gnuplot.info/) script that generates output
+  plots. The user is responsible for executing the `gnuplot` command,
+  for example `cd data ; gnuplot runme.gp`.
+
+- Each unique observer name defines a separate plot box in the output.
 
 - Each plot's x-axis is time.
 

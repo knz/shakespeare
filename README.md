@@ -16,6 +16,7 @@ activity over time.
   - [Audience and spotlights](#Audience-and-spotlights)
   - [Example configuration (simplified)](#Example-configuration-simplified)
   - [Example output diagram](#Example-output-diagram)
+  - [Keeping the cars stopped](#Keeping-the-cars-stopped)
 
 ## How it works
 
@@ -291,4 +292,61 @@ The bottom plot shows the behavior that resulted.
 (The image is a SVG with hyperlinks: when viewed *outside of the
 Github interface*, the event points in the bottom plot display the
 event text when hovered by the mouse cursor.)
+
+### Keeping the cars stopped
+
+The configuration above has the cars ride on the road regardless of
+the state of the traffic light. This can cause accidents.
+
+We actually would like to see the cars stop when the light is
+red. We'll define this as follows:
+
+```
+role road is
+  :car  if test -e blocked; then \
+          echo "car stopped"; \
+        else \
+          echo "car rides"; \
+        fi >>traffic.log
+  spotlight touch traffic.log; tail -F traffic.log
+  signal ride event at (?P<ts_now>)(?P<event>car rides
+  signal stop event at (?P<ts_now>)(?P<event>car stopped)
+  cleanup rm -f traffic.log
+end
+
+role redlight is
+  :red   touch ../$road/blocked
+  :green rm -f ../$road/blocked
+end
+```
+
+This instructs the road to only let car rides when the file named
+`blocked` does not exist. Concurrently, the red light will either
+create or remove the `blocked` file depending on the action played.
+
+Notice how the `red` and `green` action use the shell parameter
+`$road`. This refers to the parameter [configured in the cast](#Cast)
+above:
+
+```
+  mylight plays redlight(road=myroad)
+```
+
+The new `road` role defines two signals `ride` and `stop`, which we
+now must observe separately:
+
+```
+audience
+  observer watches myroad ride
+  observer watches myroad stop
+end
+```
+
+Splitting the signals yields two separate curves in the behavior plot:
+
+![simple example plot with behavior](examples/redlight2.svg)
+
+Again the top plot show the action. Now the bottom plot has separated
+the ride and stop events into two curves. As intended, the cars only
+ride when the light has not been red recently.
 

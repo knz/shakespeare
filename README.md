@@ -346,7 +346,42 @@ Splitting the signals yields two separate curves in the behavior plot:
 
 ![simple example plot with behavior](examples/redlight2.svg)
 
-Again the top plot show the action. Now the bottom plot has separated
-the ride and stop events into two curves. As intended, the cars only
-ride when the light has not been red recently.
+([link to configuration](examples/redlight2.cfg))
 
+Again the top plot show the action. Now the bottom plot has separated
+the ride and stop events into two areas (separate y-values). As
+intended, the cars only ride when the light has not been red recently.
+
+## Clarifying periods of interest with moods
+
+In the last plot above, it is not so easy to visually match periods
+where the light was red with traffic events.
+
+To clarify this, shakespeare can color the background of the plot
+during specific periods.
+
+The periods are defined as the *mood* of the play. The mood is
+influenced as pseudo-actions in the script.
+
+For example, we can extend the [script defined above](#Script) as follows:
+
+```
+script
+  ...
+  action r entails :red; mood red
+  action g entails :green; mood clear
+  ...
+```
+
+This specifies that the script letter `r` now both performs the `:red`
+action and set the current mood of the play to `red`.
+
+The resulting plot looks like this:
+
+![simple example plot with behavior and mood](examples/redlight3.svg)
+
+([link to configuration](examples/redlight3.cfg))
+
+By introducing moods, we can more easily verify (visually) that no car
+rides during a red period, and that cars only ride during a clear
+(non-red) period.

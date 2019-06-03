@@ -11,6 +11,7 @@ activity over time.
 - [Command line parameters](#Command-line-parameters)
 - [Example: traffic and red lights](#Example-traffic-and-red-lights)
 - [Example: CockroachDB sustaining client traffic while a node is  down](#Example-CockroachDB-sustaining-client-traffic-while-a-node-is-down)
+- [Reference manual](#Reference-manual)
 
 ## How it works
 
@@ -90,3 +91,8 @@ The top plot shows the actions carried out by `shakespeare` on the system.
 The bottom plots show how the system reacted.
 
 ([link to configuration](examples/kv3.cfg))
+
+## Reference manual
+
+A [reference manual](docs/manual.md) (currently incomplete) is
+included in the `docs/` sub-directory.

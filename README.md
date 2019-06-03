@@ -71,7 +71,7 @@ Example behavior diagram:
 
 ![simple example plot with behavior and mood](examples/redlight3.svg)
 
-([link to configuration](examples/redlight3.cfg))
+([link to configuration](examples/redlight3.cfg) — [link to doc](docs/redlight.md))
 
 ## Example: CockroachDB sustaining client traffic while a node is down
 

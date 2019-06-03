@@ -121,15 +121,15 @@ Behavior:
 
   - if the regular expression contains the pseudo-pattern
     `(?P<ts_now>)`, then the time at which the line of data was
-    received is used as timestamp.
+    received by `shakespeare` is used as timestamp.
 
   - the pseudo-pattern `(?P<ts_rfc3889>)` expands to a regular
     expression that matches a date/time printed in the RFC 3339 format,
-    which is then used to determine the timestamp from the input.
+    which is then used to determine the timestamp from the spotlight input.
     
   - the pseudo-pattern `(?P<ts_log>)` expands to a regular expression
     that matches a date/time printed using the CockroachDB log format,
-    which is then used to determine the timestamp from the input.
+    which is then used to determine the timestamp from the sportlight input.
 
   In general, it is preferrable to have the underlying system
   process log and report (via a spotlight) its own time measurements.

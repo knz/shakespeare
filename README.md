@@ -266,8 +266,8 @@ script
   tempo 100ms
   action . entails nop
   action c entails :car
-  action r entails :red; mood red
-  action g entails :green; mood clear
+  action r entails :red
+  action g entails :green
   prompt myroad  ....c...c..c..c..c..c..c...
   prompt mylight ..r...g...r...g...r...g....
 end
@@ -309,7 +309,7 @@ role road is
           echo "car rides"; \
         fi >>traffic.log
   spotlight touch traffic.log; tail -F traffic.log
-  signal ride event at (?P<ts_now>)(?P<event>car rides
+  signal ride event at (?P<ts_now>)(?P<event>car rides)
   signal stop event at (?P<ts_now>)(?P<event>car stopped)
   cleanup rm -f traffic.log
 end

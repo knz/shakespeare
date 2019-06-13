@@ -17,7 +17,7 @@ type dataEvent struct {
 	typ       parserType
 	audiences []string
 	actorName string
-	eventName string
+	sigName   string
 	ts        time.Time
 	val       string
 }
@@ -96,7 +96,7 @@ func collect(
 			expandTimeRange(sinceBeginning)
 
 			dataLogger.Logf(ctx, "%.2f %+v %q %q",
-				sinceBeginning, ev.audiences, ev.eventName, ev.val)
+				sinceBeginning, ev.audiences, ev.sigName, ev.val)
 
 			for _, audienceName := range ev.audiences {
 				a, ok := audiences[audienceName]
@@ -104,9 +104,9 @@ func collect(
 					return fmt.Errorf("event received for non-existent audience %q: %+v", audienceName, ev)
 				}
 				a.hasData = true
-				a.signals[ev.eventName].hasData[ev.actorName] = true
+				a.signals[ev.sigName].hasData[ev.actorName] = true
 				fName := filepath.Join(*dataDir,
-					csvFileName(audienceName, ev.actorName, ev.eventName))
+					csvFileName(audienceName, ev.actorName, ev.sigName))
 
 				w, err := of.getWriter(fName)
 				if err != nil {

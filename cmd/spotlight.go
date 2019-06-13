@@ -121,7 +121,7 @@ func (a *actor) detectSignals(ctx context.Context, spotlightChan chan<- dataEven
 			typ:       rp.typ,
 			audiences: sink.audiences,
 			actorName: a.name,
-			eventName: rp.name,
+			sigName:   rp.name,
 		}
 
 		// Parse the timestamp.
@@ -153,7 +153,7 @@ func (a *actor) detectSignals(ctx context.Context, spotlightChan chan<- dataEven
 			if err != nil {
 				log.Warningf(ctx,
 					"signal %s: error parsing %q for delta: %+v",
-					ev.eventName, curValS, err)
+					ev.sigName, curValS, err)
 				continue
 			}
 			ev.val = fmt.Sprintf("%f", curVal-sink.lastVal)

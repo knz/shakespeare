@@ -16,25 +16,28 @@ import (
 type workerRegistry struct {
 	syncutil.Mutex
 	mu struct {
-		workers map[string]struct{}
+		numWorkers int
+		workers    map[string]int
 	}
 }
 
 func (r *workerRegistry) addWorker(name string) {
 	r.Lock()
 	defer r.Unlock()
-	r.mu.workers[name] = struct{}{}
+	r.mu.workers[name]++
+	r.mu.numWorkers++
 }
 
 func (r *workerRegistry) delWorker(name string) {
 	r.Lock()
 	defer r.Unlock()
-	delete(r.mu.workers, name)
+	r.mu.workers[name]--
+	r.mu.numWorkers--
 }
 
 var registry = func() *workerRegistry {
 	w := workerRegistry{}
-	w.mu.workers = make(map[string]struct{})
+	w.mu.workers = make(map[string]int)
 	return &w
 }()
 
@@ -42,15 +45,18 @@ func (r *workerRegistry) String() string {
 	r.Lock()
 	defer r.Unlock()
 	var buf bytes.Buffer
-	if len(r.mu.workers) == 0 {
+	if r.mu.numWorkers == 0 {
 		buf.WriteString("(no running worker)")
 	} else {
-		fmt.Fprintf(&buf, "%d running workers:\n", len(r.mu.workers))
+		fmt.Fprintf(&buf, "%d running workers:\n", r.mu.numWorkers)
 		comma := ""
-		for w := range r.mu.workers {
+		for w, cnt := range r.mu.workers {
+			if cnt == 0 {
+				continue
+			}
 			buf.WriteString(comma)
 			comma = "\n"
-			fmt.Fprint(&buf, "  ", w)
+			fmt.Fprintf(&buf, "%-6d %s", cnt, w)
 		}
 	}
 	return buf.String()
@@ -58,6 +64,7 @@ func (r *workerRegistry) String() string {
 
 func showRunning(stopper *stop.Stopper) string {
 	var buf bytes.Buffer
+	buf.WriteString("currently running:\n")
 	fmt.Fprintln(&buf, registry.String())
 	tasks := stopper.RunningTasks()
 	if len(tasks) == 0 {
@@ -70,11 +77,15 @@ func showRunning(stopper *stop.Stopper) string {
 
 func runWorker(ctx context.Context, stopper *stop.Stopper, w func(context.Context)) {
 	fullName := getTaskName(1, ctx)
-	log.Info(ctx, "adding worker")
+	if log.V(1) {
+		log.Info(ctx, "adding worker")
+	}
 	registry.addWorker(fullName)
 	stopper.RunWorker(ctx, func(ctx context.Context) {
 		w(ctx)
-		log.Info(ctx, "removing worker")
+		if log.V(1) {
+			log.Info(ctx, "removing worker")
+		}
 		registry.delWorker(fullName)
 	})
 }
@@ -90,9 +101,13 @@ func getTaskName(depth int, ctx context.Context) string {
 
 func runAsyncTask(ctx context.Context, stopper *stop.Stopper, w func(ctx context.Context)) error {
 	fullName := getTaskName(1, ctx)
-	log.Info(ctx, "adding task")
+	if log.V(1) {
+		log.Info(ctx, "adding task")
+	}
 	return stopper.RunAsyncTask(ctx, fullName, func(ctx context.Context) {
 		w(ctx)
-		log.Info(ctx, "removing task")
+		if log.V(1) {
+			log.Info(ctx, "removing task")
+		}
 	})
 }

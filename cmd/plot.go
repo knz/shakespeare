@@ -83,7 +83,7 @@ func (ap *app) plot(ctx context.Context) error {
 
 	// We'll write to two file named "plot.gp" and "runme.gp".
 	// The user will be responsible for running gnuplot on the latter.
-	fName := filepath.Join(*dataDir, "plot.gp")
+	fName := filepath.Join(ap.cfg.dataDir, "plot.gp")
 	f, err := os.Create(fName)
 	if err != nil {
 		return err
@@ -208,7 +208,7 @@ func (ap *app) plot(ctx context.Context) error {
 	}
 	fmt.Fprintf(f, "unset multiplot\n")
 
-	fName = filepath.Join(*dataDir, "runme.gp")
+	fName = filepath.Join(ap.cfg.dataDir, "runme.gp")
 	f2, err := os.Create(fName)
 	if err != nil {
 		return err

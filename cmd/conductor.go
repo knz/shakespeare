@@ -267,12 +267,11 @@ func (ap *app) runLines(
 		wg.Wait()
 	}()
 
-	for i, line := range lines {
+	for _, line := range lines {
 		a := line.actor
 		steps := line.steps
-		lineCtx := logtags.AddTag(ctx, "line", i)
+		lineCtx := logtags.AddTag(ctx, "actor", a.name)
 		lineCtx = logtags.AddTag(lineCtx, "role", a.role.name)
-		lineCtx = logtags.AddTag(lineCtx, "actor", a.name)
 		wg.Add(1)
 		if err := runAsyncTask(lineCtx, ap.stopper, func(ctx context.Context) {
 			defer wg.Done()
@@ -427,7 +426,7 @@ func (a *actor) runActorCommand(bctx context.Context, stopper *stop.Stopper, pCm
 
 func (a *actor) makeShCmd(pcmd cmd) exec.Cmd {
 	cmd := exec.Cmd{
-		Path: shellPath,
+		Path: a.shellPath,
 		Dir:  a.workDir,
 		// set -euxo pipefail:
 		//    -e fail commands on error
@@ -436,7 +435,7 @@ func (a *actor) makeShCmd(pcmd cmd) exec.Cmd {
 		//    -o pipefail   fail entire pipeline if one command fails
 		// trap: terminate all the process group when the shell exits.
 		Args: []string{
-			shellPath,
+			a.shellPath,
 			"-c",
 			`set -euo pipefail; export TMPDIR=$PWD HOME=$PWD/..; shpid=$$; trap "set +x; kill -TERM -$shpid 2>/dev/null || true" EXIT; set -x;` + "\n" + string(pcmd)},
 	}

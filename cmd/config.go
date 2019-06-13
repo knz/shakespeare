@@ -35,7 +35,7 @@ func printCfg() {
 		fmt.Println()
 		fmt.Printf("  # %s plays from working directory %s", a.name, a.workDir)
 		fmt.Println()
-		for sig, sink := range a.audiences {
+		for sig, sink := range a.sinks {
 			plural := "s"
 			if strings.HasSuffix(sig, "s") {
 				plural = ""
@@ -130,15 +130,16 @@ type actor struct {
 	role     *role
 	workDir  string
 	extraEnv string
-	// audiences is the list of audiences that are listening to this
+	// sinks is the set of sinks that are listening to this
 	// actor's signal(s). The map key is the signal name, the value
-	// is the list of audiences.
-	audiences map[string]*sink
+	// is the sink.
+	sinks map[string]*sink
 	// hasData indicates there were action events executed for this actor.
 	hasData bool
 }
 
 type sink struct {
+	// audiences refers to names of audience instances.
 	audiences []string
 	// lastVal is the last value received, for deltas.
 	lastVal float64

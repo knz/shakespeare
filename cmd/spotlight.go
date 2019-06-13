@@ -109,7 +109,7 @@ func (a *actor) spotlight(
 // signal is contains. Detected signals are sent to the spotlightChan.
 func (a *actor) detectSignals(ctx context.Context, spotlightChan chan<- dataEvent, line string) {
 	for _, rp := range a.role.resParsers {
-		sink, ok := a.audiences[rp.name]
+		sink, ok := a.sinks[rp.name]
 		if !ok || len(sink.audiences) == 0 {
 			// No audience for this signal: don't even bother collecting the data.
 			continue

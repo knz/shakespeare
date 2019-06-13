@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 )
 
-func plot(ctx context.Context) error {
+func plot(ctx context.Context, au *audition) error {
 	// plot describes one curve in a plot group.
 	type plot struct {
 		// title is the string spelled out in the legend for that curve.
@@ -120,7 +120,7 @@ func plot(ctx context.Context) error {
 		fmt.Fprintf(f, "set xtics out 5\n")
 		fmt.Fprintf(f, "set mxtics 5\n")
 	}
-	// Generate the action plot. we do this before generating the ambiance
+	// Generate the action plot. we do this before generating the mood
 	// overlays, since these are part of the "audience" observations.
 	numActiveActors := 0
 	for _, a := range actors {
@@ -160,8 +160,8 @@ func plot(ctx context.Context) error {
 	//
 	// fmt.Fprintln(f, "set jitter overlap 1 spread .25 vertical")
 
-	// Generate the ambiance overlays.
-	for i, amb := range ambiances {
+	// Generate the mood overlays.
+	for i, amb := range au.moodPeriods {
 		xstart := "graph 0"
 		if !math.IsInf(amb.startTime, 0) {
 			xstart = fmt.Sprintf("first %f", amb.startTime)
@@ -170,7 +170,7 @@ func plot(ctx context.Context) error {
 		if !math.IsInf(amb.endTime, 0) {
 			xend = fmt.Sprintf("first %f", amb.endTime)
 		}
-		fmt.Fprintf(f, "set object %d rectangle from %s, graph 0 to %s, graph 1 fs solid 0.3 fc \"%s\"\n", i+1, xstart, xend, amb.ambiance)
+		fmt.Fprintf(f, "set object %d rectangle from %s, graph 0 to %s, graph 1 fs solid 0.3 fc \"%s\"\n", i+1, xstart, xend, amb.mood)
 	}
 
 	// Plot the curves.
@@ -197,7 +197,7 @@ func plot(ctx context.Context) error {
 	}
 
 	// End the plot set.
-	for i := range ambiances {
+	for i := range au.moodPeriods {
 		fmt.Fprintf(f, "unset object %d\n", i+1)
 	}
 	fmt.Fprintf(f, "unset multiplot\n")

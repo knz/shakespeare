@@ -22,6 +22,7 @@ func parseCfg(rd *bufio.Reader) error {
 		{actorsRe, parseActors},
 		{scriptRe, parseScript},
 		{audienceRe, parseAudience},
+		{auditorsRe, parseAuditors},
 	}
 	for {
 		line, stop, skip, err := readLine(rd)
@@ -160,6 +161,15 @@ func (a *actor) addAudience(sigName, audienceName string) {
 		a.sinks[sigName] = s
 	}
 	s.audiences = append(s.audiences, audienceName)
+}
+
+func (a *actor) addAuditor(sigName, auditorName string) {
+	s, ok := a.sinks[sigName]
+	if !ok {
+		s = &sink{}
+		a.sinks[sigName] = s
+	}
+	s.auditors = append(s.auditors, auditorName)
 }
 
 func getSignal(r *role, signal string) (isEventSignal bool, ok bool) {
@@ -427,4 +437,49 @@ func readLine(rd *bufio.Reader) (line string, stop bool, skip bool, err error) {
 // Empty lines and comment lines are ignored.
 func ignoreLine(line string) bool {
 	return line == "" || strings.HasPrefix(line, "#")
+}
+
+var auditorsRe = compileRe(`^auditors$`)
+var auditorRe = compileRe(`^(?P<name>\S+)\s+expects\s+(?P<when>always|eventually|always eventually)\s*:\s*(?P<expr>.*)$`)
+
+func parseAuditors(line string) error {
+	if auditorRe.MatchString(line) {
+		aName := auditorRe.ReplaceAllString(line, "${name}")
+		aWhen := auditorRe.ReplaceAllString(line, "${when}")
+		aExpr := strings.TrimSpace(auditorRe.ReplaceAllString(line, "${expr}"))
+
+		if _, ok := auditors[aName]; ok {
+			return fmt.Errorf("duplicate auditor definition: %s", line)
+		}
+		thisAuditor := auditor{
+			name: aName,
+			expr: aExpr,
+		}
+		auditors[aName] = &thisAuditor
+
+		when, err := parseAuditWhen(aWhen)
+		if err != nil {
+			return fmt.Errorf("auditor %q: %s: while parsing: %s", aName, err, line)
+		}
+		thisAuditor.when = when
+
+		if err := thisAuditor.checkExpr(); err != nil {
+			return fmt.Errorf("auditor %q: %s: while parsing: %s", aName, err, line)
+		}
+	}
+
+	return nil
+}
+
+func parseAuditWhen(when string) (auditorWhen, error) {
+	switch when {
+	case "always":
+		return auditAlways, nil
+	case "eventually":
+		return auditEventually, nil
+	case "eventually always":
+		return auditEventuallyAlways, nil
+	default:
+		return 0, fmt.Errorf("unknown when syntax: %q", when)
+	}
 }

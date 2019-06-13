@@ -78,14 +78,22 @@ func main() {
 		cancel()
 	}()
 
+	// Create the audition.
+	au := newAudition()
+
 	// Run the script.
-	if err := conduct(ctx); err != nil {
+	if err := conduct(ctx, au); err != nil {
 		log.Errorf(ctx, "play error: %+v", err)
 		os.Exit(1)
 	}
 
+	if err := au.checkFinal(ctx); err != nil {
+		log.Errorf(ctx, "audit error: %+v", err)
+		os.Exit(1)
+	}
+
 	// Generate the plots.
-	if err := plot(ctx); err != nil {
+	if err := plot(ctx, au); err != nil {
 		log.Errorf(ctx, "plot error: %+v", err)
 		os.Exit(1)
 	}

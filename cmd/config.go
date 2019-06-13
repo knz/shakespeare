@@ -9,9 +9,55 @@ import (
 	"github.com/Knetic/govaluate"
 )
 
+type config struct {
+	// roles is the set of roles defined by the configuration.
+	// This is populated during parsing.
+	roles map[string]*role
+
+	// actors is the set of actors defined by the configuration.
+	// This is populated during parsing.
+	actors map[string]*actor
+
+	// actions is the set of actions defined by the configuration.
+	// This is populated during parsing.
+	actions map[byte][]*action
+
+	// stanzas defines the programmatic play scenario.
+	// This is populated during parsing, and transformed
+	// into steps during compile().
+	stanzas []stanza
+
+	// play is the list of actions to play.
+	// This is populated by compile().
+	play []scene
+
+	// tempo is the interval at which the stanzas are played.
+	// This is populated during parsing, and used during compile().
+	tempo time.Duration
+
+	// audiences is the set of observers for the play.
+	audiences map[string]*audience
+
+	// auditors is the set of auditors for the play.
+	auditors map[string]*auditor
+}
+
+// newConfig creates a config with defaults.
+func newConfig() *config {
+	return &config{
+		roles:     make(map[string]*role),
+		actors:    make(map[string]*actor),
+		actions:   make(map[byte][]*action),
+		stanzas:   nil,
+		tempo:     time.Second,
+		audiences: make(map[string]*audience),
+		auditors:  make(map[string]*auditor),
+	}
+}
+
 // printCfg prints the current configuration.
-func printCfg() {
-	for _, r := range roles {
+func (cfg *config) printCfg() {
+	for _, r := range cfg.roles {
 		fmt.Printf("role %s is\n", r.name)
 		if r.cleanupCmd != "" {
 			fmt.Printf("  cleanup %s\n", r.cleanupCmd)
@@ -29,7 +75,7 @@ func printCfg() {
 		fmt.Println()
 	}
 	fmt.Println("cast")
-	for _, a := range actors {
+	for _, a := range cfg.actors {
 		fmt.Printf("  %s plays %s", a.name, a.role.name)
 		if a.extraEnv != "" {
 			fmt.Printf("(%s)", a.extraEnv)
@@ -54,20 +100,20 @@ func printCfg() {
 	fmt.Println()
 
 	fmt.Println("script")
-	fmt.Printf("  tempo %s\n", tempo)
-	for _, aa := range actions {
+	fmt.Printf("  tempo %s\n", cfg.tempo)
+	for _, aa := range cfg.actions {
 		for _, a := range aa {
 			fmt.Printf("  action %s entails %s\n", a.name, a.String())
 		}
 	}
-	for _, stanza := range stanzas {
+	for _, stanza := range cfg.stanzas {
 		fmt.Printf("  prompt %-10s %s\n", stanza.actor.name, stanza.script)
 	}
 	fmt.Println("end")
 	fmt.Println()
 
 	fmt.Println("audience")
-	for _, a := range audiences {
+	for _, a := range cfg.audiences {
 		for sigName, source := range a.signals {
 			fmt.Printf("  %s watches %s %s\n", a.name, source.origin, sigName)
 		}
@@ -79,7 +125,7 @@ func printCfg() {
 	fmt.Println()
 
 	fmt.Println("auditors")
-	for _, a := range auditors {
+	for _, a := range cfg.auditors {
 		fmt.Printf("  %s expects %s: %s\n", a.name, a.when.String(), a.expr)
 	}
 	fmt.Println("end")
@@ -134,10 +180,6 @@ func (p *resultParser) String() string {
 	return "<???parser>"
 }
 
-// roles is the set of roles defined by the configuration.
-// This is populated during parsing.
-var roles = make(map[string]*role)
-
 // actor is an agent that can participate in a play.
 type actor struct {
 	name     string
@@ -160,10 +202,6 @@ type sink struct {
 	// lastVal is the last value received, for deltas.
 	lastVal float64
 }
-
-// actors is the set of actors defined by the configuration.
-// This is populated during parsing.
-var actors = make(map[string]*actor)
 
 // action is the description of a step that can be mentioned
 // in a play stanza.
@@ -194,24 +232,11 @@ const (
 	ambianceAction
 )
 
-// actions is the set of actions defined by the configuration.
-// This is populated during parsing.
-var actions = make(map[byte][]*action)
-
-// stanzas defines the programmatic play scenario.
-// This is populated during parsing, and transformed
-// into steps during compile().
-var stanzas []stanza
-
 // stanza describes a play line for one actor.
 type stanza struct {
 	actor  *actor
 	script string
 }
-
-// tempo is the interval at which the stanzas are played.
-// This is populated during parsing, and used during compile().
-var tempo = time.Second
 
 type audience struct {
 	name    string
@@ -227,8 +252,6 @@ type audienceSource struct {
 	hasData    map[string]bool
 	drawEvents bool
 }
-
-var audiences = make(map[string]*audience)
 
 type auditor struct {
 	name            string
@@ -265,8 +288,6 @@ func (w auditorWhen) String() string {
 	return wName[w]
 }
 
-var auditors = make(map[string]*auditor)
-
 type auditorState struct {
 	history    []auditorEvent
 	violations []auditorViolation
@@ -284,6 +305,7 @@ type auditorViolation struct {
 }
 
 type audition struct {
+	cfg *config
 	// epoch is the instant at which the collector started collecting events.
 	// audition instants are relative to this moment.
 	epoch         time.Time

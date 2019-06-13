@@ -7,24 +7,24 @@ import (
 
 // compile transforms a programmatic description
 // of a play (using stanzas) into an explicit list of steps.
-func compile() error {
+func (cfg *config) compile() error {
 	// Compute the maximum script length.
 	scriptLen := 0
-	for _, s := range stanzas {
+	for _, s := range cfg.stanzas {
 		if len(s.script) > scriptLen {
 			scriptLen = len(s.script)
 		}
 	}
 
 	// We know how long the play is going to be.
-	play = make([]scene, scriptLen+1)
+	cfg.play = make([]scene, scriptLen+1)
 
 	// Compile the script.
 	atTime := time.Duration(0)
 	for i := 0; i < scriptLen; i++ {
-		thisAct := &play[i]
+		thisAct := &cfg.play[i]
 		thisAct.waitUntil = atTime
-		for _, s := range stanzas {
+		for _, s := range cfg.stanzas {
 			script := s.script
 			if i >= len(script) {
 				continue
@@ -34,7 +34,7 @@ func compile() error {
 			curLine := &thisAct.concurrentLines[len(thisAct.concurrentLines)-1]
 
 			aChar := script[i]
-			acts := actions[aChar]
+			acts := cfg.actions[aChar]
 
 			for _, act := range acts {
 				switch act.typ {
@@ -51,18 +51,18 @@ func compile() error {
 				thisAct.concurrentLines = thisAct.concurrentLines[:len(thisAct.concurrentLines)-1]
 			}
 		}
-		atTime += tempo
+		atTime += cfg.tempo
 	}
-	play[len(play)-1].waitUntil = atTime
+	cfg.play[len(cfg.play)-1].waitUntil = atTime
 	return nil
 }
 
 // printSteps prints the generated steps.
-func printSteps() {
+func (cfg *config) printSteps() {
 	fmt.Println("")
 	fmt.Println("# play")
-	for i, s := range play {
-		if s.waitUntil != 0 && (i == len(play)-1 || len(s.concurrentLines) > 0) {
+	for i, s := range cfg.play {
+		if s.waitUntil != 0 && (i == len(cfg.play)-1 || len(s.concurrentLines) > 0) {
 			fmt.Printf("#  (wait until %s)\n", s.waitUntil)
 		}
 		comma := ""
@@ -108,7 +108,3 @@ const (
 	stepDo stepType = iota
 	stepAmbiance
 )
-
-// play is the list of actions to play.
-// This is populated by compile().
-var play []scene

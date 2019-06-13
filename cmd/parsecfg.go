@@ -154,10 +154,10 @@ func selectActors(target string) (*role, []*actor, error) {
 }
 
 func (a *actor) addAudience(sigName, audienceName string) {
-	s, ok := a.audiences[sigName]
+	s, ok := a.sinks[sigName]
 	if !ok {
 		s = &sink{}
-		a.audiences[sigName] = s
+		a.sinks[sigName] = s
 	}
 	s.audiences = append(s.audiences, audienceName)
 }
@@ -295,11 +295,11 @@ func parseActors(line string) error {
 		}
 
 		act := actor{
-			name:      actorName,
-			role:      r,
-			extraEnv:  extraEnv,
-			workDir:   filepath.Join(artifactsDir, actorName),
-			audiences: make(map[string]*sink),
+			name:     actorName,
+			role:     r,
+			extraEnv: extraEnv,
+			workDir:  filepath.Join(artifactsDir, actorName),
+			sinks:    make(map[string]*sink),
 		}
 		actors[actorName] = &act
 	} else {

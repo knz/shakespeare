@@ -10,6 +10,19 @@ import (
 )
 
 type config struct {
+	// The output directory for data files, artifacts and plot scripts.
+	dataDir string
+	// Whether to print out the parsed configuration upon init.
+	doPrint bool
+	// Whether to stop after parsing and compiling the configuration.
+	parseOnly bool
+	// Whether to silence logging.
+	quiet bool
+	// The artifacts sub-directory (always "artifacts" relative to datadir).
+	artifactsDir string
+	// The path to the unix shell used to execute script commands.
+	shellPath string
+
 	// roles is the set of roles defined by the configuration.
 	// This is populated during parsing.
 	roles map[string]*role
@@ -182,10 +195,11 @@ func (p *resultParser) String() string {
 
 // actor is an agent that can participate in a play.
 type actor struct {
-	name     string
-	role     *role
-	workDir  string
-	extraEnv string
+	name      string
+	role      *role
+	workDir   string
+	shellPath string
+	extraEnv  string
 	// sinks is the set of sinks that are listening to this
 	// actor's signal(s). The map key is the signal name, the value
 	// is the sink.

@@ -305,11 +305,12 @@ func (cfg *config) parseActors(line string) error {
 		}
 
 		act := actor{
-			name:     actorName,
-			role:     r,
-			extraEnv: extraEnv,
-			workDir:  filepath.Join(artifactsDir, actorName),
-			sinks:    make(map[string]*sink),
+			shellPath: cfg.shellPath,
+			name:      actorName,
+			role:      r,
+			extraEnv:  extraEnv,
+			workDir:   filepath.Join(cfg.artifactsDir, actorName),
+			sinks:     make(map[string]*sink),
 		}
 		cfg.actors[actorName] = &act
 	} else {

@@ -17,41 +17,33 @@ import (
 	"github.com/knz/shakespeare/cmd/log/logtags"
 	"github.com/knz/shakespeare/cmd/stop"
 	"github.com/knz/shakespeare/cmd/sysutil"
+	"github.com/spf13/pflag"
 	"golang.org/x/sys/unix"
 )
 
-var shellPath = os.Getenv("SHELL")
-
-var dataDir = flag.String("output-dir", ".", "output data directory")
-
-var doPrint = flag.Bool("print-cfg", false, "print out the parsed configuration")
-
-var parseOnly = flag.Bool("n", false, "do not execute anything, just check the configuration")
-
-var quiet = flag.Bool("q", false, "do not emit logs to stderr (equivalent to -logtostderr=NONE)")
-
-var artifactsDir string
-
 func main() {
-	flag.Parse()
-	artifactsDir = filepath.Join(*dataDir, "artifacts")
-	if *quiet {
-		// Disable logging to the screen.
-		flag.Lookup(logflags.LogToStderrName).Value.Set("NONE")
-	}
-
 	ctx := context.Background()
 
-	// Instantiate the app.
+	// Load the configuration.
 	cfg := newConfig()
+	if err := cfg.initArgs(ctx); err != nil {
+		log.Errorf(ctx, "arg error: %+v", err)
+		os.Exit(1)
+	}
 
-	// Read the configuration.
+	// Initialize the logging sub-system.
+	if err := cfg.setupLogging(ctx); err != nil {
+		log.Errorf(ctx, "init error: %+v", err)
+		os.Exit(1)
+	}
+
+	// Read the scenario.
 	rd := bufio.NewReader(os.Stdin)
 	if err := cfg.parseCfg(rd); err != nil {
 		log.Errorf(ctx, "parse error: %+v", err)
 		os.Exit(1)
 	}
-	if *doPrint {
+	if cfg.doPrint {
 		cfg.printCfg()
 	}
 
@@ -60,11 +52,11 @@ func main() {
 		log.Errorf(ctx, "compile error: %+v", err)
 		os.Exit(1)
 	}
-	if *doPrint {
+	if cfg.doPrint {
 		cfg.printSteps()
 	}
 
-	if *parseOnly {
+	if cfg.parseOnly {
 		// No execution: stop before anything gets actually executed.
 		return
 	}
@@ -139,20 +131,21 @@ func (ap *app) runConduct(bctx context.Context) error {
 	// process (reported to the shell).
 	var returnErr error
 
-	for {
+	exit := false
+	for !exit {
 		// Block until one of the signals above is received or the stopper
 		// is stopped externally (for example, via a debug action).
 		select {
 		case returnErr = <-errChan:
 			requestTermination()
-			goto end
+			exit = true
 
 		case <-infoCh:
 			log.Info(ctx, showRunning(ap.stopper))
 
 		case <-ap.stopper.ShouldStop():
 			requestTermination()
-			goto end
+			exit = true
 
 		case sig := <-signalCh:
 			log.Infof(shutdownCtx, "received signal '%s'", sig)
@@ -167,7 +160,7 @@ func (ap *app) runConduct(bctx context.Context) error {
 			}
 
 			requestTermination()
-			goto end
+			exit = true
 
 		case <-log.FatalChan():
 			ap.stopper.Stop(shutdownCtx)
@@ -176,7 +169,6 @@ func (ap *app) runConduct(bctx context.Context) error {
 			select {}
 		}
 	}
-end:
 
 	// At this point, a signal has been received to shut down the
 	// process, and a goroutine is busy telling the server to drain and
@@ -227,4 +219,70 @@ end:
 	}
 
 	return returnErr
+}
+
+func (cfg *config) initArgs(ctx context.Context) error {
+	cfg.shellPath = os.Getenv("SHELL")
+	pflag.StringVar(&cfg.dataDir, "output-dir", ".", "output data directory")
+	pflag.BoolVarP(&cfg.doPrint, "print-cfg", "p", false, "print out the parsed configuration")
+	pflag.BoolVarP(&cfg.parseOnly, "dry-run", "n", false, "do not execute anything, just check the configuration")
+	// pflag.BoolVarP(&cfg.quiet, "quiet", "q", false, "do not emit logs to stderr (equivalent to -logtostderr=NONE)")
+
+	// Load the go flag settings from the log package into pflag.
+	pflag.CommandLine.AddGoFlagSet(flag.CommandLine)
+
+	// We'll revisit this value in setupLogging().
+	pflag.Lookup(logflags.LogToStderrName).NoOptDefVal = log.Severity_DEFAULT.String()
+
+	// Parse the command-line.
+	pflag.Parse()
+
+	// Derive the artifacts directory.
+	cfg.artifactsDir = filepath.Join(cfg.dataDir, "artifacts")
+
+	// Ensure the output directory and artifacts dir exist.
+	if err := os.MkdirAll(cfg.artifactsDir, 0755); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (cfg *config) setupLogging(ctx context.Context) error {
+	dirFlag := pflag.Lookup(logflags.LogDirName)
+	if !log.DirSet() && !dirFlag.Changed {
+		// If the log directory was not specified with -log-dir, override it.
+		newDir := filepath.Join(cfg.dataDir, "logs")
+		if err := dirFlag.Value.Set(newDir); err != nil {
+			return err
+		}
+	}
+
+	ls := pflag.Lookup(logflags.LogToStderrName)
+	if logDir := dirFlag.Value.String(); logDir != "" {
+		if !ls.Changed {
+			// Unless the settings were overridden by the user, silence
+			// logging to stderr because the messages will go to a log file.
+			if err := ls.Value.Set(log.Severity_NONE.String()); err != nil {
+				return err
+			}
+		}
+		// Make sure the path exists.
+		if err := os.MkdirAll(logDir, 0755); err != nil {
+			return errors.Wrap(err, "unable to create log directory")
+		}
+		log.Infof(ctx, "logging to directory %s", logDir)
+		log.StartGCDaemon(ctx)
+	}
+
+	// if `--logtostderr` was not specified and no log directory was
+	// set, or `--logtostderr` was specified but without explicit level,
+	// then set stderr logging to INFO.
+	if (!ls.Changed && !log.DirSet()) ||
+		(ls.Changed && ls.Value.String() == log.Severity_DEFAULT.String()) {
+		if err := ls.Value.Set(log.Severity_INFO.String()); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }

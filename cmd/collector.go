@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
-	"os"
 	"path/filepath"
 	"time"
 
@@ -49,9 +48,6 @@ func (ap *app) collect(
 	actionChan <-chan actionEvent,
 	spotlightChan <-chan dataEvent,
 ) error {
-	if err := os.MkdirAll(*dataDir, os.ModePerm); err != nil {
-		return err
-	}
 	of := newOutputFiles()
 	defer func() {
 		of.CloseAll()
@@ -103,7 +99,7 @@ func (ap *app) collect(
 
 				dataLogger.Logf(ctx, "%.2f action %s:%s (%.4fs)", sinceBeginning, ev.actor, ev.action, ev.duration)
 
-				fName := filepath.Join(*dataDir, fmt.Sprintf("%s.csv", ev.actor))
+				fName := filepath.Join(ap.cfg.dataDir, fmt.Sprintf("%s.csv", ev.actor))
 				w, err := of.getWriter(fName)
 				if err != nil {
 					return fmt.Errorf("opening %q: %+v", fName, err)
@@ -128,7 +124,7 @@ func (ap *app) collect(
 				}
 				a.hasData = true
 				a.signals[ev.sigName].hasData[ev.actorName] = true
-				fName := filepath.Join(*dataDir,
+				fName := filepath.Join(ap.cfg.dataDir,
 					csvFileName(audienceName, ev.actorName, ev.sigName))
 
 				w, err := of.getWriter(fName)

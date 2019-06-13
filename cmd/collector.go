@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/knz/shakespeare/cmd/timeutil"
 )
 
 type dataEvent struct {
@@ -52,7 +52,8 @@ func collect(
 	t := timeutil.NewTimer()
 	t.Reset(time.Second)
 
-	epoch := time.Now().UTC()
+	epoch = timeutil.Now()
+
 	for {
 		select {
 		case <-ctx.Done():

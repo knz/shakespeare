@@ -5,6 +5,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/Knetic/govaluate"
 )
 
 // printCfg prints the current configuration.
@@ -40,8 +42,26 @@ func printCfg() {
 			if strings.HasSuffix(sig, "s") {
 				plural = ""
 			}
-			fmt.Printf("  # %s %s%s are watched by audience %+v\n", a.name, sig, plural, sink.audiences)
+			if len(sink.audiences) > 0 {
+				fmt.Printf("  # %s %s%s are watched by audience %+v\n", a.name, sig, plural, sink.audiences)
+			}
+			if len(sink.auditors) > 0 {
+				fmt.Printf("  # %s %s%s are checked by auditors %+v\n", a.name, sig, plural, sink.auditors)
+			}
 		}
+	}
+	fmt.Println("end")
+	fmt.Println()
+
+	fmt.Println("script")
+	fmt.Printf("  tempo %s\n", tempo)
+	for _, aa := range actions {
+		for _, a := range aa {
+			fmt.Printf("  action %s entails %s\n", a.name, a.String())
+		}
+	}
+	for _, stanza := range stanzas {
+		fmt.Printf("  prompt %-10s %s\n", stanza.actor.name, stanza.script)
 	}
 	fmt.Println("end")
 	fmt.Println()
@@ -56,17 +76,11 @@ func printCfg() {
 		}
 	}
 	fmt.Println("end")
-
 	fmt.Println()
-	fmt.Println("script")
-	fmt.Printf("  tempo %s\n", tempo)
-	for _, aa := range actions {
-		for _, a := range aa {
-			fmt.Printf("  action %s entails %s\n", a.name, a.String())
-		}
-	}
-	for _, stanza := range stanzas {
-		fmt.Printf("  prompt %-10s %s\n", stanza.actor.name, stanza.script)
+
+	fmt.Println("auditors")
+	for _, a := range auditors {
+		fmt.Printf("  %s expects %s: %s\n", a.name, a.when.String(), a.expr)
 	}
 	fmt.Println("end")
 }
@@ -141,6 +155,8 @@ type actor struct {
 type sink struct {
 	// audiences refers to names of audience instances.
 	audiences []string
+	// auditors refers to names of auditor instances.
+	auditors []string
 	// lastVal is the last value received, for deltas.
 	lastVal float64
 }
@@ -213,3 +229,68 @@ type audienceSource struct {
 }
 
 var audiences = make(map[string]*audience)
+
+type auditor struct {
+	name            string
+	when            auditorWhen
+	expr            string
+	compiledExp     *govaluate.EvaluableExpression
+	observedSignals map[exprVar]struct{}
+}
+
+type exprVar struct {
+	actorName string
+	sigName   string
+}
+
+func (e exprVar) Name() string {
+	return e.actorName + "." + e.sigName
+}
+
+type auditorWhen int
+
+const (
+	auditAlways auditorWhen = iota
+	auditEventually
+	auditEventuallyAlways
+)
+
+var wName = map[auditorWhen]string{
+	auditAlways:           "always",
+	auditEventually:       "eventually",
+	auditEventuallyAlways: "eventually always",
+}
+
+func (w auditorWhen) String() string {
+	return wName[w]
+}
+
+var auditors = make(map[string]*auditor)
+
+type auditorState struct {
+	history    []auditorEvent
+	violations []auditorViolation
+}
+
+type auditorEvent struct {
+	evTime float64
+	value  interface{}
+	err    error
+}
+
+type auditorViolation struct {
+	startTime float64
+	endTime   float64
+}
+
+type audition struct {
+	// epoch is the instant at which the collector started collecting events.
+	// audition instants are relative to this moment.
+	epoch         time.Time
+	curMood       string
+	curMoodStart  float64
+	moodPeriods   []moodPeriod
+	auditorStates map[string]*auditorState
+	curVals       map[string]interface{}
+	activations   map[exprVar]struct{}
+}

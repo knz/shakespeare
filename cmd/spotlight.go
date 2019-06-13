@@ -111,7 +111,7 @@ func (a *actor) spotlight(
 func (a *actor) detectSignals(ctx context.Context, spotlightChan chan<- dataEvent, line string) {
 	for _, rp := range a.role.resParsers {
 		sink, ok := a.sinks[rp.name]
-		if !ok || len(sink.audiences) == 0 {
+		if !ok || (len(sink.audiences) == 0 && len(sink.auditors) == 0) {
 			// No audience for this signal: don't even bother collecting the data.
 			continue
 		}
@@ -121,6 +121,7 @@ func (a *actor) detectSignals(ctx context.Context, spotlightChan chan<- dataEven
 		ev := dataEvent{
 			typ:       rp.typ,
 			audiences: sink.audiences,
+			auditors:  sink.auditors,
 			actorName: a.name,
 			sigName:   rp.name,
 		}

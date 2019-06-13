@@ -16,6 +16,7 @@ import (
 type dataEvent struct {
 	typ       parserType
 	audiences []string
+	auditors  []string
 	actorName string
 	sigName   string
 	ts        time.Time
@@ -23,6 +24,7 @@ type dataEvent struct {
 }
 
 type actionEvent struct {
+	typ       actEvtType
 	startTime time.Time
 	duration  float64
 	actor     string
@@ -31,12 +33,20 @@ type actionEvent struct {
 	output    string
 }
 
+type actEvtType int
+
+const (
+	actEvtExec actEvtType = iota
+	actEvtMood
+)
+
 func csvFileName(audienceName, actorName, sigName string) string {
 	return fmt.Sprintf("%s.%s.%s.csv", audienceName, actorName, sigName)
 }
 
 func collect(
 	ctx context.Context,
+	au *audition,
 	dataLogger *log.SecondaryLogger,
 	actionChan <-chan actionEvent,
 	spotlightChan <-chan dataEvent,
@@ -52,7 +62,7 @@ func collect(
 	t := timeutil.NewTimer()
 	t.Reset(time.Second)
 
-	epoch = timeutil.Now()
+	au.epoch = timeutil.Now()
 
 	for {
 		select {
@@ -66,34 +76,43 @@ func collect(
 			continue
 
 		case ev := <-actionChan:
-			sinceBeginning := ev.startTime.Sub(epoch).Seconds()
+			sinceBeginning := ev.startTime.Sub(au.epoch).Seconds()
 			expandTimeRange(sinceBeginning)
 
-			a, ok := actors[ev.actor]
-			if !ok {
-				return fmt.Errorf("event received for non-existent actor: %+v", ev)
+			switch ev.typ {
+			case actEvtMood:
+				dataLogger.Logf(ctx, "%.2f mood set: %s", sinceBeginning, ev.output)
+				if err := au.collectAndAuditMood(ctx, sinceBeginning, ev.output); err != nil {
+					return err
+				}
+
+			case actEvtExec:
+				a, ok := actors[ev.actor]
+				if !ok {
+					return fmt.Errorf("event received for non-existent actor: %+v", ev)
+				}
+				a.hasData = true
+
+				status := 0
+				if !ev.success {
+					status = 1
+				}
+
+				dataLogger.Logf(ctx, "%.2f action %s:%s (%.4fs)", sinceBeginning, ev.actor, ev.action, ev.duration)
+
+				fName := filepath.Join(*dataDir, fmt.Sprintf("%s.csv", ev.actor))
+				w, err := of.getWriter(fName)
+				if err != nil {
+					return fmt.Errorf("opening %q: %+v", fName, err)
+				}
+
+				fmt.Fprintf(w, "%.4f %.4f %s %d %q\n",
+					sinceBeginning, ev.duration, ev.action, status, ev.output)
 			}
-			a.hasData = true
-
-			status := 0
-			if !ev.success {
-				status = 1
-			}
-
-			dataLogger.Logf(ctx, "%.2f action %s:%s (%.4fs)", sinceBeginning, ev.actor, ev.action, ev.duration)
-
-			fName := filepath.Join(*dataDir, fmt.Sprintf("%s.csv", ev.actor))
-			w, err := of.getWriter(fName)
-			if err != nil {
-				return fmt.Errorf("opening %q: %+v", fName, err)
-			}
-
-			fmt.Fprintf(w, "%.4f %.4f %s %d %q\n",
-				sinceBeginning, ev.duration, ev.action, status, ev.output)
 			continue
 
 		case ev := <-spotlightChan:
-			sinceBeginning := ev.ts.Sub(epoch).Seconds()
+			sinceBeginning := ev.ts.Sub(au.epoch).Seconds()
 			expandTimeRange(sinceBeginning)
 
 			dataLogger.Logf(ctx, "%.2f %+v %q %q",
@@ -117,6 +136,12 @@ func collect(
 				shuffle := (.5 * rand.Float64()) - .25
 				fmt.Fprintf(w, "%.4f %s %.3f\n", sinceBeginning, ev.val, shuffle)
 			}
+
+			evVar := exprVar{actorName: ev.actorName, sigName: ev.sigName}
+			if err := au.checkEvent(ctx, sinceBeginning, evVar, ev.auditors, ev.typ, ev.val); err != nil {
+				return err
+			}
+
 			continue
 		}
 		break

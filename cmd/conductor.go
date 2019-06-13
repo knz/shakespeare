@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"html"
-	"math"
 	"os"
 	"os/exec"
 	"strings"
@@ -22,7 +21,7 @@ type status struct {
 }
 
 // conduct runs the play.
-func conduct(ctx context.Context) (err error) {
+func conduct(ctx context.Context, au *audition) (err error) {
 	// Prepare all the working directories.
 	for _, a := range actors {
 		if err := os.MkdirAll(a.workDir, os.ModePerm); err != nil {
@@ -61,7 +60,7 @@ func conduct(ctx context.Context) (err error) {
 	// Start the collector.
 	// The collector is running in the background.
 	var wgcol sync.WaitGroup
-	colDone := startCollector(ctx, &wgcol, dataLogger, actionChan, spotlightChan, errCh)
+	colDone := startCollector(ctx, &wgcol, au, dataLogger, actionChan, spotlightChan, errCh)
 
 	// Start the spotlights.
 	// The spotlights are running in the background until canceled
@@ -99,6 +98,7 @@ func runPrompter(ctx context.Context, actionChan chan<- actionEvent, errCh chan<
 func startCollector(
 	ctx context.Context,
 	wg *sync.WaitGroup,
+	au *audition,
 	dataLogger *log.SecondaryLogger,
 	actionChan <-chan actionEvent,
 	spotlightChan <-chan dataEvent,
@@ -109,7 +109,7 @@ func startCollector(
 	go func() {
 		colCtx = logtags.AddTag(colCtx, "collector", nil)
 		log.Info(colCtx, "<intrat>")
-		if err := collect(colCtx, dataLogger, actionChan, spotlightChan); err != nil && err != context.Canceled {
+		if err := collect(colCtx, au, dataLogger, actionChan, spotlightChan); err != nil && err != context.Canceled {
 			// We ignore cancellation errors here, so as to avoid reporting
 			// a general error when the collector is merely canceled at the
 			// end of the play.
@@ -199,31 +199,14 @@ func collectErrors(ctx context.Context, errCh <-chan status, prefix string) erro
 	return nil
 }
 
-var curAmbiance = "clear"
-var curAmbianceStart float64 = math.Inf(-1)
-
-type ambiancePeriod struct {
+type moodPeriod struct {
 	startTime float64
 	endTime   float64
-	ambiance  string
+	mood      string
 }
-
-var ambiances []ambiancePeriod
 
 func prompt(ctx context.Context, actionChan chan<- actionEvent) error {
 	startTime := timeutil.Now()
-
-	// At end:
-	defer func() {
-		// Close the mood chapter, if one was open.
-		if curAmbiance != "clear" {
-			ambiances = append(ambiances, ambiancePeriod{
-				startTime: curAmbianceStart,
-				endTime:   math.Inf(1),
-				ambiance:  curAmbiance,
-			})
-		}
-	}()
 
 	for i, scene := range play {
 		sceneCtx := logtags.AddTag(ctx, "act", i)
@@ -281,24 +264,12 @@ func (a *actor) runLine(
 	for stepNum, step := range steps {
 		stepCtx := logtags.AddTag(ctx, "step", stepNum+1)
 
-		now := timeutil.Now()
-		elapsed := now.Sub(startTime)
-
 		switch step.typ {
 		case stepAmbiance:
-			if step.action == curAmbiance {
-				continue
+			log.Infof(stepCtx, "(mood %s)", step.action)
+			if err := reportMoodEvt(ctx, step.action, actionChan); err != nil {
+				return err
 			}
-			log.Infof(stepCtx, "the mood changes to %s", step.action)
-			if curAmbiance != "clear" {
-				ambiances = append(ambiances, ambiancePeriod{
-					startTime: curAmbianceStart,
-					endTime:   elapsed.Seconds(),
-					ambiance:  curAmbiance,
-				})
-			}
-			curAmbianceStart = elapsed.Seconds()
-			curAmbiance = step.action
 
 		case stepDo:
 			log.Infof(stepCtx, "%s: %s!", a.name, step.action)
@@ -306,6 +277,21 @@ func (a *actor) runLine(
 				return err
 			}
 		}
+	}
+	return nil
+}
+
+func reportMoodEvt(ctx context.Context, mood string, actionChan chan<- actionEvent) error {
+	ev := actionEvent{
+		typ:       actEvtMood,
+		startTime: timeutil.Now(),
+		output:    mood,
+	}
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case actionChan <- ev:
+		// ok
 	}
 	return nil
 }
@@ -460,6 +446,7 @@ func (a *actor) reportAction(
 	dur := actEnd.Sub(actStart)
 	log.Infof(ctx, "%q done (%s)\n%s-- %s", action, dur, outdata, ps)
 	ev := actionEvent{
+		typ:       actEvtExec,
 		startTime: actStart,
 		duration:  dur.Seconds(),
 		actor:     a.name,

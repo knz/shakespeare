@@ -64,7 +64,12 @@ func (ap *app) collect(
 
 	for {
 		select {
+		case <-ap.stopper.ShouldStop():
+			log.Info(ctx, "interrupted")
+			return nil
+
 		case <-ctx.Done():
+			log.Info(ctx, "canceled")
 			return ctx.Err()
 
 		case <-t.C:

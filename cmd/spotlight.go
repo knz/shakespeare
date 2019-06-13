@@ -11,25 +11,31 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/errors"
 	"github.com/knz/shakespeare/cmd/log"
+	"github.com/knz/shakespeare/cmd/log/logtags"
+	"github.com/knz/shakespeare/cmd/stop"
 	"github.com/knz/shakespeare/cmd/timeutil"
 )
 
 // spotlight stats the monitoring (spotlight) thread for a given actor.
 // The collected events are sent to the given spotlightChan.
 func (a *actor) spotlight(
-	ctx context.Context, monLogger *log.SecondaryLogger, spotlightChan chan<- dataEvent,
+	ctx context.Context,
+	stopper *stop.Stopper,
+	monLogger *log.SecondaryLogger,
+	spotlightChan chan<- dataEvent,
 ) error {
 	// Start the spotlight command in the background.
 	cmd := a.makeShCmd(a.role.spotlightCmd)
 	log.Infof(ctx, "executing: %s", strings.Join(cmd.Args, " "))
 	outstream, err := cmd.StderrPipe()
 	if err != nil {
-		return fmt.Errorf("setting up: %+v", err)
+		return errors.Wrap(err, "setting up")
 	}
 	cmd.Stdout = cmd.Stderr
 	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("exec error: %+v", err)
+		return errors.Wrap(err, "exec")
 	}
 
 	defer func() {
@@ -54,7 +60,10 @@ func (a *actor) spotlight(
 		err  error
 	}
 	lines := make(chan res)
-	go func() {
+
+	readCtx := logtags.AddTag(ctx, "reader", nil)
+	runWorker(readCtx, stopper, func(ctx context.Context) {
+		defer func() { close(lines) }()
 		// The reader runs asynchronously, until there is no more data to
 		// read or the context is canceled.
 		for {
@@ -62,8 +71,11 @@ func (a *actor) spotlight(
 			line = strings.TrimSpace(line)
 			if line != "" {
 				select {
+				case <-stopper.ShouldStop():
+					log.Info(ctx, "interrupted")
+					return
 				case <-ctx.Done():
-					// Context canceled. don't even try going further.
+					log.Info(ctx, "canceled")
 					return
 				case lines <- res{line, nil}:
 					// ok
@@ -72,18 +84,19 @@ func (a *actor) spotlight(
 			if err != nil {
 				if err != io.EOF {
 					select {
+					case <-stopper.ShouldStop():
+						log.Info(ctx, "interrupted")
 					case <-ctx.Done():
-						// Context canceled. don't even try going further.
-						return
+						log.Info(ctx, "canceled")
 					case lines <- res{"", err}:
-						// ok
 					}
+				} else {
+					log.Info(ctx, "EOF")
 				}
-				close(lines)
 				return
 			}
 		}
-	}()
+	})
 
 	// Process the lines received from the actor.
 	for {
@@ -96,9 +109,15 @@ func (a *actor) spotlight(
 				return nil
 			}
 			monLogger.Logf(ctx, "clamors: %q", res.line)
-			a.detectSignals(ctx, spotlightChan, res.line)
+			sigCtx := logtags.AddTag(ctx, "signals", nil)
+			a.detectSignals(sigCtx, stopper, spotlightChan, res.line)
+
+		case <-stopper.ShouldStop():
+			log.Info(ctx, "interrupted")
+			return nil
 
 		case <-ctx.Done():
+			log.Info(ctx, "canceled")
 			return ctx.Err()
 		}
 	}
@@ -108,7 +127,9 @@ func (a *actor) spotlight(
 
 // detectSignals parses a line produced by the spotlight to detect any
 // signal is contains. Detected signals are sent to the spotlightChan.
-func (a *actor) detectSignals(ctx context.Context, spotlightChan chan<- dataEvent, line string) {
+func (a *actor) detectSignals(
+	ctx context.Context, stopper *stop.Stopper, spotlightChan chan<- dataEvent, line string,
+) {
 	for _, rp := range a.role.resParsers {
 		sink, ok := a.sinks[rp.name]
 		if !ok || (len(sink.audiences) == 0 && len(sink.auditors) == 0) {
@@ -163,7 +184,11 @@ func (a *actor) detectSignals(ctx context.Context, spotlightChan chan<- dataEven
 		}
 
 		select {
+		case <-stopper.ShouldStop():
+			log.Info(ctx, "interrupted")
+			return
 		case <-ctx.Done():
+			log.Info(ctx, "canceled")
 			return
 		case spotlightChan <- ev:
 			// ok

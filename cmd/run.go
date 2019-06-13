@@ -11,12 +11,12 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/cockroachdb/errors"
 	"github.com/knz/shakespeare/cmd/log"
 	"github.com/knz/shakespeare/cmd/log/logflags"
 	"github.com/knz/shakespeare/cmd/log/logtags"
 	"github.com/knz/shakespeare/cmd/stop"
 	"github.com/knz/shakespeare/cmd/sysutil"
-	"github.com/pkg/errors"
 	"golang.org/x/sys/unix"
 )
 
@@ -102,17 +102,36 @@ func (ap *app) runConduct(bctx context.Context) error {
 
 	ap.stopper = stop.NewStopper()
 	errChan := make(chan error, 1)
-	go func() {
-		defer log.Flush()
+	playCtx := logtags.AddTag(ctx, "play", nil)
+	runWorker(playCtx, ap.stopper, func(ctx context.Context) {
+		defer func() {
+			log.Flush()
+			close(errChan)
+		}()
 		if err := ap.conduct(ctx); err != nil {
 			errChan <- err
 		}
-		ap.stopper.Stop(ctx)
-		<-ap.stopper.IsStopped()
-	}()
+	})
 
 	// Log shutdown activity in a different context.
 	shutdownCtx := logtags.AddTag(ctx, "shutdown", nil)
+
+	requestTermination := func() {
+		// We start synchronizing log writes from here, because if a
+		// signal was received there is a non-zero chance the sender of
+		// this signal will follow up with SIGKILL if the shutdown is not
+		// timely, and we don't want logs to be lost.
+		log.SetSync(true)
+
+		log.Info(shutdownCtx, showRunning(ap.stopper))
+
+		// Start the draining process in a separate goroutine so that it
+		// runs concurrently with the timeout check below.
+		go func() {
+			drainCtx := logtags.AddTag(ctx, "drain", nil)
+			ap.stopper.Stop(drainCtx)
+		}()
+	}
 
 	// returnErr will be populated with the error to use to exit the
 	// process (reported to the shell).
@@ -121,26 +140,13 @@ func (ap *app) runConduct(bctx context.Context) error {
 	// Block until one of the signals above is received or the stopper
 	// is stopped externally (for example, via a debug action).
 	select {
-	case err := <-errChan:
-		// SetSync both flushes and ensures that subsequent log writes are flushed too.
-		log.SetSync(true)
-		return err
+	case returnErr = <-errChan:
+		requestTermination()
 
 	case <-ap.stopper.ShouldStop():
-		// Server is being stopped externally and our job is finished
-		// here since we don't know if it's a graceful shutdown or not.
-		<-ap.stopper.IsStopped()
-		// SetSync both flushes and ensures that subsequent log writes are flushed too.
-		log.SetSync(true)
-		return nil
+		requestTermination()
 
 	case sig := <-signalCh:
-		// We start synchronizing log writes from here, because if a
-		// signal was received there is a non-zero chance the sender of
-		// this signal will follow up with SIGKILL if the shutdown is not
-		// timely, and we don't want logs to be lost.
-		log.SetSync(true)
-
 		log.Infof(shutdownCtx, "received signal '%s'", sig)
 		if sig == os.Interrupt {
 			// Graceful shutdown after an interrupt should cause the process
@@ -152,14 +158,7 @@ func (ap *app) runConduct(bctx context.Context) error {
 			fmt.Fprintln(os.Stdout, msgDouble)
 		}
 
-		// Start the draining process in a separate goroutine so that it
-		// runs concurrently with the timeout check below.
-		go func() {
-			drainCtx := logtags.AddTag(ctx, "drain", nil)
-			ap.stopper.Stop(drainCtx)
-		}()
-
-		// Don't return: we're shutting down gracefully.
+		requestTermination()
 
 	case <-log.FatalChan():
 		ap.stopper.Stop(shutdownCtx)
@@ -183,7 +182,7 @@ func (ap *app) runConduct(bctx context.Context) error {
 		for {
 			select {
 			case <-ticker.C:
-				log.Infof(context.Background(), "%d running tasks", ap.stopper.NumTasks())
+				log.Info(shutdownCtx, showRunning(ap.stopper))
 			case <-ap.stopper.ShouldStop():
 				return
 			}

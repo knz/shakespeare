@@ -90,7 +90,7 @@ func NewSecondaryLogger(
 func (l *SecondaryLogger) Logf(ctx context.Context, format string, args ...interface{}) {
 	file, line, _ := caller.Lookup(1)
 	var buf strings.Builder
-	formatTags(ctx, &buf)
+	FormatTags(ctx, &buf)
 
 	// Add a counter. This is important for auditing.
 	counter := atomic.AddUint64(&l.msgCount, 1)

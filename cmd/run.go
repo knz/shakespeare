@@ -9,8 +9,8 @@ import (
 	"path/filepath"
 	"syscall"
 
-	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
+	"github.com/knz/shakespeare/cmd/log"
+	"github.com/knz/shakespeare/cmd/log/logflags"
 )
 
 var shellPath = os.Getenv("SHELL")

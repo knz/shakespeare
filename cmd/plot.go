@@ -6,9 +6,15 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+
+	"github.com/knz/shakespeare/cmd/log"
+	"github.com/knz/shakespeare/cmd/log/logtags"
 )
 
 func (ap *app) plot(ctx context.Context) error {
+	ctx = logtags.AddTag(ctx, "plotter", nil)
+	log.Info(ctx, "generating scripts")
+
 	// plot describes one curve in a plot group.
 	type plot struct {
 		// title is the string spelled out in the legend for that curve.
@@ -219,6 +225,8 @@ func (ap *app) plot(ctx context.Context) error {
 	fmt.Fprintf(f2, "set term svg mouse standalone size 600,%d dynamic font \",6\"\n", 200*(len(plots)+1))
 	fmt.Fprintf(f2, "set output 'plot.svg'\n")
 	fmt.Fprintf(f2, "load 'plot.gp'\n")
+
+	log.Info(ctx, "done")
 
 	return nil
 }

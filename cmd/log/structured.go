@@ -23,9 +23,9 @@ import (
 	"github.com/knz/shakespeare/cmd/log/logtags"
 )
 
-// formatTags appends the tags to a strings.Builder. If there are no tags,
+// FormatTags appends the tags to a strings.Builder. If there are no tags,
 // returns false.
-func formatTags(ctx context.Context, buf *strings.Builder) bool {
+func FormatTags(ctx context.Context, buf *strings.Builder) bool {
 	tags := logtags.FromContext(ctx)
 	if tags == nil {
 		return false
@@ -54,7 +54,7 @@ func formatTags(ctx context.Context, buf *strings.Builder) bool {
 // MakeMessage creates a structured log entry.
 func MakeMessage(ctx context.Context, format string, args []interface{}) string {
 	var buf strings.Builder
-	formatTags(ctx, &buf)
+	FormatTags(ctx, &buf)
 	if len(args) == 0 {
 		buf.WriteString(format)
 	} else if len(format) == 0 {

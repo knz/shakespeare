@@ -15,29 +15,24 @@ import (
 	"github.com/knz/shakespeare/cmd/timeutil"
 )
 
-type status struct {
-	who string
-	err error
-}
-
 // conduct runs the play.
-func conduct(ctx context.Context, au *audition) (err error) {
+func (ap *app) conduct(ctx context.Context) (err error) {
 	// Prepare all the working directories.
-	for _, a := range actors {
+	for _, a := range ap.cfg.actors {
 		if err := os.MkdirAll(a.workDir, os.ModePerm); err != nil {
 			return fmt.Errorf("mkdir %s: %+v", a.workDir, err)
 		}
 	}
 
 	// Initialize all the actors.
-	if err := runCleanup(ctx); err != nil {
+	if err := ap.runCleanup(ctx); err != nil {
 		return err
 	}
 
 	// Ensure the cleanup actions are run at the end
 	// even during early return.
 	defer func() {
-		if cleanupErr := runCleanup(ctx); cleanupErr != nil {
+		if cleanupErr := ap.runCleanup(ctx); cleanupErr != nil {
 			// Error during cleanup. runCleanup already
 			// printed out the details via log.Errorf.
 			if err == nil {
@@ -53,24 +48,24 @@ func conduct(ctx context.Context, au *audition) (err error) {
 	dataLogger := log.NewSecondaryLogger(ctx, nil, "collector", true /*enableGc*/, false /*forceSyncWrite*/)
 	defer func() { log.Flush() }()
 
-	errCh := make(chan status, len(actors)+2)
-	spotlightChan := make(chan dataEvent, len(actors))
-	actionChan := make(chan actionEvent, len(actors))
+	errCh := make(chan status, len(ap.cfg.actors)+2)
+	spotlightChan := make(chan dataEvent, len(ap.cfg.actors))
+	actionChan := make(chan actionEvent, len(ap.cfg.actors))
 
 	// Start the collector.
 	// The collector is running in the background.
 	var wgcol sync.WaitGroup
-	colDone := startCollector(ctx, &wgcol, au, dataLogger, actionChan, spotlightChan, errCh)
+	colDone := ap.startCollector(ctx, &wgcol, dataLogger, actionChan, spotlightChan, errCh)
 
 	// Start the spotlights.
 	// The spotlights are running in the background until canceled
 	// via allSpotsDone().
 	var wgspot sync.WaitGroup
-	allSpotsDone := startSpotlights(ctx, &wgspot, monLogger, spotlightChan, errCh)
+	allSpotsDone := ap.startSpotlights(ctx, &wgspot, monLogger, spotlightChan, errCh)
 
 	// Run the prompter.
 	// The play steps will thus run in the main thread.
-	runPrompter(ctx, actionChan, errCh)
+	ap.runPrompter(ctx, actionChan, errCh)
 
 	// Stop all the spotlights and wait for them to turn off.
 	allSpotsDone()
@@ -85,20 +80,21 @@ func conduct(ctx context.Context, au *audition) (err error) {
 }
 
 // runPrompter runs the prompter until completion.
-func runPrompter(ctx context.Context, actionChan chan<- actionEvent, errCh chan<- status) {
+func (ap *app) runPrompter(
+	ctx context.Context, actionChan chan<- actionEvent, errCh chan<- status,
+) {
 	dirCtx := logtags.AddTag(ctx, "prompter", nil)
 	log.Info(dirCtx, "<intrat>")
-	if err := prompt(dirCtx, actionChan); err != nil {
+	if err := ap.prompt(dirCtx, actionChan); err != nil {
 		errCh <- status{who: "prompter", err: err}
 	}
 	log.Info(dirCtx, "<exit>")
 }
 
 // startCollector starts the collector in the background.
-func startCollector(
+func (ap *app) startCollector(
 	ctx context.Context,
 	wg *sync.WaitGroup,
-	au *audition,
 	dataLogger *log.SecondaryLogger,
 	actionChan <-chan actionEvent,
 	spotlightChan <-chan dataEvent,
@@ -109,7 +105,7 @@ func startCollector(
 	go func() {
 		colCtx = logtags.AddTag(colCtx, "collector", nil)
 		log.Info(colCtx, "<intrat>")
-		if err := collect(colCtx, au, dataLogger, actionChan, spotlightChan); err != nil && err != context.Canceled {
+		if err := ap.collect(colCtx, dataLogger, actionChan, spotlightChan); err != nil && err != context.Canceled {
 			// We ignore cancellation errors here, so as to avoid reporting
 			// a general error when the collector is merely canceled at the
 			// end of the play.
@@ -122,7 +118,7 @@ func startCollector(
 }
 
 // startSpotlights starts all the spotlights in the background.
-func startSpotlights(
+func (ap *app) startSpotlights(
 	ctx context.Context,
 	wg *sync.WaitGroup,
 	monLogger *log.SecondaryLogger,
@@ -130,7 +126,7 @@ func startSpotlights(
 	errCh chan<- status,
 ) (cancelFunc func()) {
 	allSpotsCtx, allSpotsDone := context.WithCancel(ctx)
-	for actName, thisActor := range actors {
+	for actName, thisActor := range ap.cfg.actors {
 		if thisActor.role.spotlightCmd == "" {
 			// No spotlight defined, don't start anything.
 			continue
@@ -154,14 +150,16 @@ func startSpotlights(
 	return allSpotsDone
 }
 
-func runCleanup(ctx context.Context) error {
-	return runForAllActors(ctx, "cleanup", func(a *actor) cmd { return a.role.cleanupCmd })
+func (ap *app) runCleanup(ctx context.Context) error {
+	return ap.runForAllActors(ctx, "cleanup", func(a *actor) cmd { return a.role.cleanupCmd })
 }
 
-func runForAllActors(ctx context.Context, prefix string, getCommand func(a *actor) cmd) error {
-	errCh := make(chan status, len(actors))
+func (ap *app) runForAllActors(
+	ctx context.Context, prefix string, getCommand func(a *actor) cmd,
+) error {
+	errCh := make(chan status, len(ap.cfg.actors))
 	var wg sync.WaitGroup
-	for actName, thisActor := range actors {
+	for actName, thisActor := range ap.cfg.actors {
 		pCmd := getCommand(thisActor)
 		if pCmd == "" {
 			// No command to run. Nothing to do.
@@ -205,10 +203,10 @@ type moodPeriod struct {
 	mood      string
 }
 
-func prompt(ctx context.Context, actionChan chan<- actionEvent) error {
+func (ap *app) prompt(ctx context.Context, actionChan chan<- actionEvent) error {
 	startTime := timeutil.Now()
 
-	for i, scene := range play {
+	for i, scene := range ap.cfg.play {
 		sceneCtx := logtags.AddTag(ctx, "act", i)
 
 		now := timeutil.Now()
@@ -461,4 +459,9 @@ func (a *actor) reportAction(
 		// ok
 	}
 	return nil
+}
+
+type status struct {
+	who string
+	err error
 }

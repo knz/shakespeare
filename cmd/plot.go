@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 )
 
-func plot(ctx context.Context, au *audition) error {
+func (ap *app) plot(ctx context.Context) error {
 	// plot describes one curve in a plot group.
 	type plot struct {
 		// title is the string spelled out in the legend for that curve.
@@ -34,7 +34,7 @@ func plot(ctx context.Context, au *audition) error {
 	var plots []plotgroup
 
 	// Analyze the collected data, and prepare the plot specifications.
-	for _, a := range audiences {
+	for _, a := range ap.cfg.audiences {
 		if !a.hasData {
 			// No data for this audience, nothign to do.
 			continue
@@ -98,22 +98,22 @@ func plot(ctx context.Context, au *audition) error {
 
 	// Ensure the x axis always start at zero, even if no
 	// event was received until later on the time line.
-	if minTime > 0 {
-		minTime = 0
+	if ap.minTime > 0 {
+		ap.minTime = 0
 	}
 	// Sanity check.
-	if maxTime < 0 {
-		maxTime = 1
+	if ap.maxTime < 0 {
+		ap.maxTime = 1
 	}
 	// Give some breathing room to action labels.
-	minTime -= 1.0
-	maxTime += 1.0
+	ap.minTime -= 1.0
+	ap.maxTime += 1.0
 
 	// We force the x range to be the same for all the plots.
 	// If we did not do that, each plot may get a different x range
 	// (adjusted automatically based on the data collected for that plot).
-	fmt.Fprintf(f, "set xrange [%f:%f]\n", minTime, maxTime)
-	if maxTime < 10 {
+	fmt.Fprintf(f, "set xrange [%f:%f]\n", ap.minTime, ap.maxTime)
+	if ap.maxTime < 10 {
 		fmt.Fprintf(f, "set xtics out 1\n")
 		fmt.Fprintf(f, "set mxtics 2\n")
 	} else {
@@ -123,7 +123,7 @@ func plot(ctx context.Context, au *audition) error {
 	// Generate the action plot. we do this before generating the mood
 	// overlays, since these are part of the "audience" observations.
 	numActiveActors := 0
-	for _, a := range actors {
+	for _, a := range ap.cfg.actors {
 		if a.hasData {
 			numActiveActors++
 		}
@@ -135,7 +135,7 @@ func plot(ctx context.Context, au *audition) error {
 	fmt.Fprintf(f, "set grid ytics\n")
 	fmt.Fprintf(f, "plot \\\n")
 	plotNum := 1
-	for actorName, a := range actors {
+	for actorName, a := range ap.cfg.actors {
 		if !a.hasData {
 			continue
 		}
@@ -161,7 +161,7 @@ func plot(ctx context.Context, au *audition) error {
 	// fmt.Fprintln(f, "set jitter overlap 1 spread .25 vertical")
 
 	// Generate the mood overlays.
-	for i, amb := range au.moodPeriods {
+	for i, amb := range ap.au.moodPeriods {
 		xstart := "graph 0"
 		if !math.IsInf(amb.startTime, 0) {
 			xstart = fmt.Sprintf("first %f", amb.startTime)
@@ -197,7 +197,7 @@ func plot(ctx context.Context, au *audition) error {
 	}
 
 	// End the plot set.
-	for i := range au.moodPeriods {
+	for i := range ap.au.moodPeriods {
 		fmt.Fprintf(f, "unset object %d\n", i+1)
 	}
 	fmt.Fprintf(f, "unset multiplot\n")
@@ -221,18 +221,4 @@ func plot(ctx context.Context, au *audition) error {
 	fmt.Fprintf(f2, "load 'plot.gp'\n")
 
 	return nil
-}
-
-// minTime and maxTime are used to compute the x range of plots.
-var minTime = math.Inf(1)
-var maxTime = math.Inf(-1)
-
-// expandTimeRange should be called for each processed event time stamp.
-func expandTimeRange(instant float64) {
-	if instant > maxTime {
-		maxTime = instant
-	}
-	if instant < minTime {
-		minTime = instant
-	}
 }

@@ -14,15 +14,15 @@ import (
 )
 
 // parseCfg parses a configuration from the given buffered input.
-func parseCfg(rd *bufio.Reader) error {
+func (cfg *config) parseCfg(rd *bufio.Reader) error {
 	topLevelParsers := []struct {
 		headerRe *regexp.Regexp
 		parseFn  func(line string) error
 	}{
-		{actorsRe, parseActors},
-		{scriptRe, parseScript},
-		{audienceRe, parseAudience},
-		{auditorsRe, parseAuditors},
+		{actorsRe, cfg.parseActors},
+		{scriptRe, cfg.parseScript},
+		{audienceRe, cfg.parseAudience},
+		{auditorsRe, cfg.parseAuditors},
 	}
 	for {
 		line, stop, skip, err := readLine(rd)
@@ -36,7 +36,7 @@ func parseCfg(rd *bufio.Reader) error {
 			// The "role" syntax is special because the role name
 			// is listed in the heading line.
 			roleName := roleRe.ReplaceAllString(line, "${rolename}")
-			if err := parseRole(rd, roleName); err != nil {
+			if err := cfg.parseRole(rd, roleName); err != nil {
 				return err
 			}
 		} else {
@@ -84,13 +84,13 @@ func parseSection(rd *bufio.Reader, lineParser func(line string) error) error {
 	}
 }
 
-func parseAudience(line string) error {
+func (cfg *config) parseAudience(line string) error {
 	if watchRe.MatchString(line) {
 		aName := watchRe.ReplaceAllString(line, "${name}")
 		target := watchRe.ReplaceAllString(line, "${target}")
 		signal := watchRe.ReplaceAllString(line, "${signal}")
 
-		r, foundActors, err := selectActors(target)
+		r, foundActors, err := cfg.selectActors(target)
 		if err != nil {
 			return fmt.Errorf("%s: %s", err, line)
 		}
@@ -98,15 +98,15 @@ func parseAudience(line string) error {
 			log.Warningf(context.TODO(), "there is no actor playing role %q for audience %q to watch", r.name, aName)
 			return nil
 		}
-		isEventSignal, ok := getSignal(r, signal)
+		isEventSignal, ok := r.getSignal(signal)
 		if !ok {
 			return fmt.Errorf("unknown signal %q for role %s: %s", signal, r.name, line)
 		}
 
-		a, ok := audiences[aName]
+		a, ok := cfg.audiences[aName]
 		if !ok {
 			a = &audience{name: aName, signals: make(map[string]*audienceSource)}
-			audiences[aName] = a
+			cfg.audiences[aName] = a
 		}
 		aSrc := &audienceSource{
 			origin:     target,
@@ -121,25 +121,25 @@ func parseAudience(line string) error {
 	} else if measuresRe.MatchString(line) {
 		aName := measuresRe.ReplaceAllString(line, "${name}")
 		ylabel := strings.TrimSpace(measuresRe.ReplaceAllString(line, "${ylabel}"))
-		a, ok := audiences[aName]
+		a, ok := cfg.audiences[aName]
 		if !ok {
 			a = &audience{name: aName, signals: make(map[string]*audienceSource)}
-			audiences[aName] = a
+			cfg.audiences[aName] = a
 		}
 		a.ylabel = ylabel
 	}
 	return nil
 }
 
-func selectActors(target string) (*role, []*actor, error) {
+func (cfg *config) selectActors(target string) (*role, []*actor, error) {
 	if strings.HasPrefix(target, "every ") {
 		roleName := strings.TrimPrefix(target, "every ")
-		r, ok := roles[roleName]
+		r, ok := cfg.roles[roleName]
 		if !ok {
 			return nil, nil, fmt.Errorf("unknown role %q", roleName)
 		}
 		var res []*actor
-		for _, a := range actors {
+		for _, a := range cfg.actors {
 			if a.role != r {
 				continue
 			}
@@ -147,7 +147,7 @@ func selectActors(target string) (*role, []*actor, error) {
 		}
 		return r, res, nil
 	}
-	act, ok := actors[target]
+	act, ok := cfg.actors[target]
 	if !ok {
 		return nil, nil, fmt.Errorf("unknown actor %q")
 	}
@@ -172,7 +172,7 @@ func (a *actor) addAuditor(sigName, auditorName string) {
 	s.auditors = append(s.auditors, auditorName)
 }
 
-func getSignal(r *role, signal string) (isEventSignal bool, ok bool) {
+func (r *role) getSignal(signal string) (isEventSignal bool, ok bool) {
 	for _, rp := range r.resParsers {
 		if rp.name == signal {
 			return rp.typ == parseEvent, true
@@ -187,14 +187,14 @@ var spotlightDefRe = compileRe(`^spotlight\s+(?P<cmd>.*)$`)
 var cleanupDefRe = compileRe(`^cleanup\s+(?P<cmd>.*)$`)
 var parseDefRe = compileRe(`^signal\s+(?P<name>\S+)\s+(?P<type>\S+)\s+at\s+(?P<re>.*)$`)
 
-func parseRole(rd *bufio.Reader, roleName string) error {
-	if _, ok := roles[roleName]; ok {
+func (cfg *config) parseRole(rd *bufio.Reader, roleName string) error {
+	if _, ok := cfg.roles[roleName]; ok {
 		return fmt.Errorf("duplicate role definition: %s", roleName)
 	}
 
 	parserNames := make(map[string]struct{})
 	thisRole := role{name: roleName, actionCmds: make(map[string]cmd)}
-	roles[roleName] = &thisRole
+	cfg.roles[roleName] = &thisRole
 
 	return parseSection(rd, func(line string) error {
 		if actionDefRe.MatchString(line) {
@@ -283,19 +283,19 @@ func hasSubexp(re *regexp.Regexp, n string) bool {
 var actorsRe = compileRe(`^cast$`)
 var actorDefRe = compileRe(`^(?P<actorname>\S+)\s+plays\s+(?P<rolename>\w+)\s*(?P<extraenv>\(.*\)|)\s*$`)
 
-func parseActors(line string) error {
+func (cfg *config) parseActors(line string) error {
 	if actorDefRe.MatchString(line) {
 		roleName := actorDefRe.ReplaceAllString(line, "${rolename}")
 		actorName := actorDefRe.ReplaceAllString(line, "${actorname}")
 		extraEnv := actorDefRe.ReplaceAllString(line, "${extraenv}")
 
-		r, ok := roles[roleName]
+		r, ok := cfg.roles[roleName]
 		if !ok {
 			return fmt.Errorf("unknown role: %s", roleName)
 		}
 
 		actorName = strings.TrimSpace(actorName)
-		if _, ok := actors[actorName]; ok {
+		if _, ok := cfg.actors[actorName]; ok {
 			return fmt.Errorf("duplicate actor definition: %s", actorName)
 		}
 
@@ -311,7 +311,7 @@ func parseActors(line string) error {
 			workDir:  filepath.Join(artifactsDir, actorName),
 			sinks:    make(map[string]*sink),
 		}
-		actors[actorName] = &act
+		cfg.actors[actorName] = &act
 	} else {
 		return fmt.Errorf("unknown syntax: %s", line)
 	}
@@ -326,7 +326,7 @@ var nopRe = compileRe(`^nop$`)
 var ambianceRe = compileRe(`^mood\s+(?P<mood>.*)$`)
 var stanzaRe = compileRe(`^prompt\s+(?P<target>every\s+\S+|\S+)\s+(?P<stanza>.*)$`)
 
-func parseScript(line string) error {
+func (cfg *config) parseScript(line string) error {
 	if actionRe.MatchString(line) {
 		actShorthand := actionRe.ReplaceAllString(line, "${char}")
 		actChar := actShorthand[0]
@@ -336,7 +336,7 @@ func parseScript(line string) error {
 			actAction := strings.TrimSpace(c)
 
 			a := action{name: actShorthand}
-			actions[actChar] = append(actions[actChar], &a)
+			cfg.actions[actChar] = append(cfg.actions[actChar], &a)
 
 			if nopRe.MatchString(actAction) {
 				// action . nop
@@ -361,12 +361,12 @@ func parseScript(line string) error {
 		if err != nil {
 			return fmt.Errorf("parsing tempo for %q: %+v", line, err)
 		}
-		tempo = dur
+		cfg.tempo = dur
 	} else if stanzaRe.MatchString(line) {
 		script := stanzaRe.ReplaceAllString(line, "${stanza}")
 		target := stanzaRe.ReplaceAllString(line, "${target}")
 
-		r, foundActors, err := selectActors(target)
+		r, foundActors, err := cfg.selectActors(target)
 		if err != nil {
 			return fmt.Errorf("%s: %s", err, line)
 		}
@@ -376,7 +376,7 @@ func parseScript(line string) error {
 		}
 
 		for i := 0; i < len(script); i++ {
-			actionSteps, ok := actions[script[i]]
+			actionSteps, ok := cfg.actions[script[i]]
 			if !ok {
 				return fmt.Errorf("action '%c' not defined: %s", script[i], line)
 			}
@@ -390,7 +390,7 @@ func parseScript(line string) error {
 			}
 		}
 		for _, actor := range foundActors {
-			stanzas = append(stanzas, stanza{
+			cfg.stanzas = append(cfg.stanzas, stanza{
 				actor:  actor,
 				script: script,
 			})
@@ -442,20 +442,20 @@ func ignoreLine(line string) bool {
 var auditorsRe = compileRe(`^auditors$`)
 var auditorRe = compileRe(`^(?P<name>\S+)\s+expects\s+(?P<when>always|eventually|always eventually)\s*:\s*(?P<expr>.*)$`)
 
-func parseAuditors(line string) error {
+func (cfg *config) parseAuditors(line string) error {
 	if auditorRe.MatchString(line) {
 		aName := auditorRe.ReplaceAllString(line, "${name}")
 		aWhen := auditorRe.ReplaceAllString(line, "${when}")
 		aExpr := strings.TrimSpace(auditorRe.ReplaceAllString(line, "${expr}"))
 
-		if _, ok := auditors[aName]; ok {
+		if _, ok := cfg.auditors[aName]; ok {
 			return fmt.Errorf("duplicate auditor definition: %s", line)
 		}
 		thisAuditor := auditor{
 			name: aName,
 			expr: aExpr,
 		}
-		auditors[aName] = &thisAuditor
+		cfg.auditors[aName] = &thisAuditor
 
 		when, err := parseAuditWhen(aWhen)
 		if err != nil {
@@ -463,7 +463,7 @@ func parseAuditors(line string) error {
 		}
 		thisAuditor.when = when
 
-		if err := thisAuditor.checkExpr(); err != nil {
+		if err := thisAuditor.checkExpr(cfg); err != nil {
 			return fmt.Errorf("auditor %q: %s: while parsing: %s", aName, err, line)
 		}
 	}

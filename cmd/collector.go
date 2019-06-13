@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"math/rand"
@@ -44,9 +43,8 @@ func csvFileName(audienceName, actorName, sigName string) string {
 	return fmt.Sprintf("%s.%s.%s.csv", audienceName, actorName, sigName)
 }
 
-func collect(
+func (ap *app) collect(
 	ctx context.Context,
-	au *audition,
 	dataLogger *log.SecondaryLogger,
 	actionChan <-chan actionEvent,
 	spotlightChan <-chan dataEvent,
@@ -62,7 +60,7 @@ func collect(
 	t := timeutil.NewTimer()
 	t.Reset(time.Second)
 
-	au.epoch = timeutil.Now()
+	ap.au.epoch = timeutil.Now()
 
 	for {
 		select {
@@ -76,18 +74,18 @@ func collect(
 			continue
 
 		case ev := <-actionChan:
-			sinceBeginning := ev.startTime.Sub(au.epoch).Seconds()
-			expandTimeRange(sinceBeginning)
+			sinceBeginning := ev.startTime.Sub(ap.au.epoch).Seconds()
+			ap.expandTimeRange(sinceBeginning)
 
 			switch ev.typ {
 			case actEvtMood:
 				dataLogger.Logf(ctx, "%.2f mood set: %s", sinceBeginning, ev.output)
-				if err := au.collectAndAuditMood(ctx, sinceBeginning, ev.output); err != nil {
+				if err := ap.au.collectAndAuditMood(ctx, sinceBeginning, ev.output); err != nil {
 					return err
 				}
 
 			case actEvtExec:
-				a, ok := actors[ev.actor]
+				a, ok := ap.cfg.actors[ev.actor]
 				if !ok {
 					return fmt.Errorf("event received for non-existent actor: %+v", ev)
 				}
@@ -112,14 +110,14 @@ func collect(
 			continue
 
 		case ev := <-spotlightChan:
-			sinceBeginning := ev.ts.Sub(au.epoch).Seconds()
-			expandTimeRange(sinceBeginning)
+			sinceBeginning := ev.ts.Sub(ap.au.epoch).Seconds()
+			ap.expandTimeRange(sinceBeginning)
 
 			dataLogger.Logf(ctx, "%.2f %+v %q %q",
 				sinceBeginning, ev.audiences, ev.sigName, ev.val)
 
 			for _, audienceName := range ev.audiences {
-				a, ok := audiences[audienceName]
+				a, ok := ap.cfg.audiences[audienceName]
 				if !ok {
 					return fmt.Errorf("event received for non-existent audience %q: %+v", audienceName, ev)
 				}
@@ -138,7 +136,7 @@ func collect(
 			}
 
 			evVar := exprVar{actorName: ev.actorName, sigName: ev.sigName}
-			if err := au.checkEvent(ctx, sinceBeginning, evVar, ev.auditors, ev.typ, ev.val); err != nil {
+			if err := ap.au.checkEvent(ctx, sinceBeginning, evVar, ev.auditors, ev.typ, ev.val); err != nil {
 				return err
 			}
 
@@ -147,45 +145,4 @@ func collect(
 		break
 	}
 	return nil
-}
-
-// outputFiles manages a collection of open files and associated
-// buffered writers.
-type outputFiles struct {
-	files   map[string]*os.File
-	writers map[string]*bufio.Writer
-}
-
-func newOutputFiles() *outputFiles {
-	of := &outputFiles{}
-	of.files = make(map[string]*os.File)
-	of.writers = make(map[string]*bufio.Writer)
-	return of
-}
-
-func (o *outputFiles) CloseAll() {
-	for fName, f := range o.files {
-		_ = o.writers[fName].Flush()
-		_ = f.Close()
-	}
-}
-
-func (o *outputFiles) Flush() {
-	for _, w := range o.writers {
-		_ = w.Flush()
-	}
-}
-
-func (o *outputFiles) getWriter(fName string) (*bufio.Writer, error) {
-	w, ok := o.writers[fName]
-	if !ok {
-		f, err := os.OpenFile(fName, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
-		if err != nil {
-			return nil, err
-		}
-		o.files[fName] = f
-		w = bufio.NewWriter(f)
-		o.writers[fName] = w
-	}
-	return w, nil
 }

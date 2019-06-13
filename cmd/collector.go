@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/knz/shakespeare/cmd/log"
 	"github.com/knz/shakespeare/cmd/timeutil"
 )
 

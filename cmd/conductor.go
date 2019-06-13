@@ -11,8 +11,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
+	"github.com/knz/shakespeare/cmd/log"
+	"github.com/knz/shakespeare/cmd/log/logtags"
 	"github.com/knz/shakespeare/cmd/timeutil"
 )
 

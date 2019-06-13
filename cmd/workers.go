@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"path/filepath"
 	"strings"
 
+	"github.com/knz/shakespeare/cmd/caller"
 	"github.com/knz/shakespeare/cmd/log"
 	"github.com/knz/shakespeare/cmd/stop"
 	"github.com/knz/shakespeare/cmd/syncutil"
@@ -40,22 +42,34 @@ func (r *workerRegistry) String() string {
 	r.Lock()
 	defer r.Unlock()
 	var buf bytes.Buffer
-	buf.WriteString("running workers:\n")
-	for w := range r.mu.workers {
-		fmt.Fprintln(&buf, "  ", w)
+	if len(r.mu.workers) == 0 {
+		buf.WriteString("(no running worker)")
+	} else {
+		fmt.Fprintf(&buf, "%d running workers:\n", len(r.mu.workers))
+		comma := ""
+		for w := range r.mu.workers {
+			buf.WriteString(comma)
+			comma = "\n"
+			fmt.Fprint(&buf, "  ", w)
+		}
 	}
 	return buf.String()
 }
 
 func showRunning(stopper *stop.Stopper) string {
 	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "%s\nrunning tasks:\n%s",
-		registry.String(), stopper.RunningTasks())
+	fmt.Fprintln(&buf, registry.String())
+	tasks := stopper.RunningTasks()
+	if len(tasks) == 0 {
+		fmt.Fprint(&buf, "(no running task)")
+	} else {
+		fmt.Fprintf(&buf, "%d running tasks:\n%s", len(tasks), tasks.String())
+	}
 	return buf.String()
 }
 
 func runWorker(ctx context.Context, stopper *stop.Stopper, w func(context.Context)) {
-	fullName := getTaskName(ctx)
+	fullName := getTaskName(1, ctx)
 	log.Info(ctx, "adding worker")
 	registry.addWorker(fullName)
 	stopper.RunWorker(ctx, func(ctx context.Context) {
@@ -65,14 +79,17 @@ func runWorker(ctx context.Context, stopper *stop.Stopper, w func(context.Contex
 	})
 }
 
-func getTaskName(ctx context.Context) string {
+func getTaskName(depth int, ctx context.Context) string {
 	var buf strings.Builder
+	f, l, _ := caller.Lookup(depth + 1)
+	f = filepath.Base(f)
+	fmt.Fprintf(&buf, "%s:%d ", f, l)
 	log.FormatTags(ctx, &buf)
 	return buf.String()
 }
 
 func runAsyncTask(ctx context.Context, stopper *stop.Stopper, w func(ctx context.Context)) error {
-	fullName := getTaskName(ctx)
+	fullName := getTaskName(1, ctx)
 	log.Info(ctx, "adding task")
 	return stopper.RunAsyncTask(ctx, fullName, func(ctx context.Context) {
 		w(ctx)

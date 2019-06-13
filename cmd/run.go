@@ -94,6 +94,8 @@ func (ap *app) runConduct(bctx context.Context) error {
 	// Set up the signal handlers.
 	signalCh := make(chan os.Signal, 1)
 	signal.Notify(signalCh, os.Interrupt, syscall.SIGHUP, syscall.SIGTERM)
+	infoCh := make(chan os.Signal, 1)
+	signal.Notify(infoCh, syscall.SIGUSR1)
 
 	// Set up a cancellable context for the entire start command.
 	// The context will be canceled at the end.
@@ -137,35 +139,44 @@ func (ap *app) runConduct(bctx context.Context) error {
 	// process (reported to the shell).
 	var returnErr error
 
-	// Block until one of the signals above is received or the stopper
-	// is stopped externally (for example, via a debug action).
-	select {
-	case returnErr = <-errChan:
-		requestTermination()
+	for {
+		// Block until one of the signals above is received or the stopper
+		// is stopped externally (for example, via a debug action).
+		select {
+		case returnErr = <-errChan:
+			requestTermination()
+			goto end
 
-	case <-ap.stopper.ShouldStop():
-		requestTermination()
+		case <-infoCh:
+			log.Info(ctx, showRunning(ap.stopper))
 
-	case sig := <-signalCh:
-		log.Infof(shutdownCtx, "received signal '%s'", sig)
-		if sig == os.Interrupt {
-			// Graceful shutdown after an interrupt should cause the process
-			// to terminate with a non-zero exit code; however SIGTERM is
-			// "legitimate" and should be acknowledged with a success exit
-			// code. So we keep the error state here for later.
-			returnErr = errors.New("interrupted")
-			msgDouble := "Note: a second interrupt will skip graceful shutdown and terminate forcefully"
-			fmt.Fprintln(os.Stdout, msgDouble)
+		case <-ap.stopper.ShouldStop():
+			requestTermination()
+			goto end
+
+		case sig := <-signalCh:
+			log.Infof(shutdownCtx, "received signal '%s'", sig)
+			if sig == os.Interrupt {
+				// Graceful shutdown after an interrupt should cause the process
+				// to terminate with a non-zero exit code; however SIGTERM is
+				// "legitimate" and should be acknowledged with a success exit
+				// code. So we keep the error state here for later.
+				returnErr = errors.New("interrupted")
+				msgDouble := "Note: a second interrupt will skip graceful shutdown and terminate forcefully"
+				fmt.Fprintln(os.Stdout, msgDouble)
+			}
+
+			requestTermination()
+			goto end
+
+		case <-log.FatalChan():
+			ap.stopper.Stop(shutdownCtx)
+			// The logging goroutine is now responsible for killing this
+			// process, so just block this goroutine.
+			select {}
 		}
-
-		requestTermination()
-
-	case <-log.FatalChan():
-		ap.stopper.Stop(shutdownCtx)
-		// The logging goroutine is now responsible for killing this
-		// process, so just block this goroutine.
-		select {}
 	}
+end:
 
 	// At this point, a signal has been received to shut down the
 	// process, and a goroutine is busy telling the server to drain and

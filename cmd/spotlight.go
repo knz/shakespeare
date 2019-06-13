@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/knz/shakespeare/cmd/timeutil"
 )
 
 // spotlight stats the monitoring (spotlight) thread for a given actor.
@@ -128,7 +129,7 @@ func (a *actor) detectSignals(ctx context.Context, spotlightChan chan<- dataEven
 		if rp.reGroup == "" {
 			// If the reGroup is empty, that means we're OK with
 			// the auto-generated "now" timestamp.
-			ev.ts = time.Now().UTC()
+			ev.ts = timeutil.Now()
 		} else {
 			var err error
 			logTime := rp.re.ReplaceAllString(line, "${"+rp.reGroup+"}")

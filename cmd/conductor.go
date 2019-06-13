@@ -13,6 +13,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
+	"github.com/knz/shakespeare/cmd/timeutil"
 )
 
 type status struct {
@@ -210,7 +211,7 @@ type ambiancePeriod struct {
 var ambiances []ambiancePeriod
 
 func prompt(ctx context.Context, actionChan chan<- actionEvent) error {
-	startTime := time.Now().UTC()
+	startTime := timeutil.Now()
 
 	// At end:
 	defer func() {
@@ -227,7 +228,7 @@ func prompt(ctx context.Context, actionChan chan<- actionEvent) error {
 	for i, scene := range play {
 		sceneCtx := logtags.AddTag(ctx, "act", i)
 
-		now := time.Now().UTC()
+		now := timeutil.Now()
 		elapsed := now.Sub(startTime)
 		toWait := scene.waitUntil - elapsed
 		if toWait > 0 {
@@ -280,7 +281,7 @@ func (a *actor) runLine(
 	for stepNum, step := range steps {
 		stepCtx := logtags.AddTag(ctx, "step", stepNum+1)
 
-		now := time.Now().UTC()
+		now := timeutil.Now()
 		elapsed := now.Sub(startTime)
 
 		switch step.typ {
@@ -332,9 +333,9 @@ func (a *actor) runAction(ctx context.Context, action string, actionChan chan<- 
 		}
 	}()
 
-	actStart := time.Now().UTC()
+	actStart := timeutil.Now()
 	outdata, err := cmd.CombinedOutput()
-	actEnd := time.Now().UTC()
+	actEnd := timeutil.Now()
 
 	if _, ok := err.(*exec.ExitError); err != nil && !ok {
 		return err
@@ -347,7 +348,7 @@ func (a *actor) runAction(ctx context.Context, action string, actionChan chan<- 
 
 func (a *actor) runActorCommand(bctx context.Context, pCmd cmd) error {
 	// If the command does not complete within 10 seconds, we'll terminate it.
-	ctx, cancel := context.WithDeadline(bctx, time.Now().Add(10*time.Second))
+	ctx, cancel := context.WithDeadline(bctx, timeutil.Now().Add(10*time.Second))
 	defer cancel()
 	cmd := a.makeShCmd(pCmd)
 	log.Infof(ctx, "running: %s", strings.Join(cmd.Args, " "))
@@ -430,9 +431,9 @@ func (a *actor) run(
 			}
 			cmd := a.makeShCmd(aCmd)
 			log.Infof(ctx, "executing %q: %s", ev, strings.Join(cmd.Args, " "))
-			actStart := time.Now()
+			actStart := timeutil.Now()
 			outdata, err := cmd.CombinedOutput()
-			actEnd := time.Now()
+			actEnd := timeutil.Now()
 			if _, ok := err.(*exec.ExitError); err != nil && !ok {
 				log.Errorf(ctx, "exec error: %+v", err)
 				continue

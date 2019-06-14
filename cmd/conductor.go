@@ -49,6 +49,10 @@ func (ap *app) conduct(ctx context.Context) (err error) {
 	dataLogger := log.NewSecondaryLogger(ctx, nil, "collector", true /*enableGc*/, false /*forceSyncWrite*/)
 	defer func() { log.Flush() }()
 
+	// Start the audition. This initializes the epoch, and thus needs to
+	// happen before the collector and the auditors start.
+	ap.au.start(ctx)
+
 	errCh := make(chan error, len(ap.cfg.actors)+2)
 	defer func() {
 		close(errCh)

@@ -79,6 +79,10 @@ func newAudition(cfg *config) *audition {
 	return au
 }
 
+func (au *audition) start(ctx context.Context) {
+	au.epoch = timeutil.Now()
+}
+
 func (au *audition) checkFinal(ctx context.Context) error {
 	// Close the mood chapter, if one was open.
 	now := timeutil.Now()

@@ -56,8 +56,6 @@ func (ap *app) collect(
 	t := timeutil.NewTimer()
 	t.Reset(time.Second)
 
-	ap.au.epoch = timeutil.Now()
-
 	for {
 		select {
 		case <-ap.stopper.ShouldStop():

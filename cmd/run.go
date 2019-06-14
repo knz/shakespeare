@@ -63,6 +63,7 @@ func main() {
 
 	// Create the app.
 	ap := newApp(cfg)
+	ap.intro()
 
 	// Run the script.
 	if err := ap.runConduct(ctx); err != nil {
@@ -174,19 +175,23 @@ func (ap *app) runConduct(bctx context.Context) error {
 	// process, and a goroutine is busy telling the server to drain and
 	// stop. From this point on, we just have to wait.
 
-	const msgDrain = "initiating graceful shutdown"
+	const msgDrain = "the play is terminating"
 	log.Info(shutdownCtx, msgDrain)
-	fmt.Fprintln(os.Stdout, msgDrain)
+	if !ap.cfg.quiet {
+		fmt.Println(msgDrain)
+	}
 
-	// Notify the user every 5 second of the shutdown progress.
+	// Notify the user every 2 second of the shutdown progress.
 	go func() {
-		ticker := time.NewTicker(5 * time.Second)
+		ticker := time.NewTicker(2 * time.Second)
 		defer ticker.Stop()
 		for {
 			select {
 			case <-ticker.C:
 				log.Info(shutdownCtx, showRunning(ap.stopper))
-			case <-ap.stopper.ShouldStop():
+			case <-ctx.Done():
+				return
+			case <-ap.stopper.IsStopped():
 				return
 			}
 		}
@@ -213,9 +218,11 @@ func (ap *app) runConduct(bctx context.Context) error {
 		return errors.Errorf("time limit reached, initiating hard shutdown")
 
 	case <-ap.stopper.IsStopped():
-		const msgDone = "process drained and shutdown completed"
+		const msgDone = "the stage has been cleared"
 		log.Infof(shutdownCtx, msgDone)
-		fmt.Fprintln(os.Stdout, msgDone)
+		if !ap.cfg.quiet {
+			fmt.Fprintln(os.Stdout, msgDone)
+		}
 	}
 
 	return returnErr

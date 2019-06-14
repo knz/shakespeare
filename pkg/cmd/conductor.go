@@ -144,7 +144,7 @@ func (ap *app) startSpotlights(
 		runWorker(spotCtx, ap.stopper, func(ctx context.Context) {
 			defer wg.Done()
 			log.Info(spotCtx, "<shining>")
-			if err := a.spotlight(ctx, ap.stopper, monLogger, spotlightChan); err != nil && err != context.Canceled {
+			if err := ap.spotlight(ctx, a, monLogger, spotlightChan); err != nil && err != context.Canceled {
 				// We ignore cancellation errors here, so as to avoid reporting
 				// a general error when a spotlight is merely canceled at the
 				// end of the play.

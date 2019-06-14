@@ -14,17 +14,13 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/knz/shakespeare/pkg/crdb/log"
 	"github.com/knz/shakespeare/pkg/crdb/log/logtags"
-	"github.com/knz/shakespeare/pkg/crdb/stop"
 	"github.com/knz/shakespeare/pkg/crdb/timeutil"
 )
 
 // spotlight stats the monitoring (spotlight) thread for a given actor.
 // The collected events are sent to the given spotlightChan.
-func (a *actor) spotlight(
-	ctx context.Context,
-	stopper *stop.Stopper,
-	monLogger *log.SecondaryLogger,
-	spotlightChan chan<- dataEvent,
+func (ap *app) spotlight(
+	ctx context.Context, a *actor, monLogger *log.SecondaryLogger, spotlightChan chan<- dataEvent,
 ) error {
 	// Start the spotlight command in the background.
 	cmd := a.makeShCmd(a.role.spotlightCmd)
@@ -62,7 +58,7 @@ func (a *actor) spotlight(
 	lines := make(chan res)
 
 	readCtx := logtags.AddTag(ctx, "reader", nil)
-	runWorker(readCtx, stopper, func(ctx context.Context) {
+	runWorker(readCtx, ap.stopper, func(ctx context.Context) {
 		defer func() { close(lines) }()
 		// The reader runs asynchronously, until there is no more data to
 		// read or the context is canceled.
@@ -71,7 +67,7 @@ func (a *actor) spotlight(
 			line = strings.TrimSpace(line)
 			if line != "" {
 				select {
-				case <-stopper.ShouldStop():
+				case <-ap.stopper.ShouldStop():
 					log.Info(ctx, "interrupted")
 					return
 				case <-ctx.Done():
@@ -84,7 +80,7 @@ func (a *actor) spotlight(
 			if err != nil {
 				if err != io.EOF {
 					select {
-					case <-stopper.ShouldStop():
+					case <-ap.stopper.ShouldStop():
 						log.Info(ctx, "interrupted")
 					case <-ctx.Done():
 						log.Info(ctx, "canceled")
@@ -110,9 +106,9 @@ func (a *actor) spotlight(
 			}
 			monLogger.Logf(ctx, "clamors: %q", res.line)
 			sigCtx := logtags.AddTag(ctx, "signals", nil)
-			a.detectSignals(sigCtx, stopper, spotlightChan, res.line)
+			ap.detectSignals(sigCtx, a, spotlightChan, res.line)
 
-		case <-stopper.ShouldStop():
+		case <-ap.stopper.ShouldStop():
 			log.Info(ctx, "interrupted")
 			return nil
 
@@ -127,8 +123,8 @@ func (a *actor) spotlight(
 
 // detectSignals parses a line produced by the spotlight to detect any
 // signal is contains. Detected signals are sent to the spotlightChan.
-func (a *actor) detectSignals(
-	ctx context.Context, stopper *stop.Stopper, spotlightChan chan<- dataEvent, line string,
+func (ap *app) detectSignals(
+	ctx context.Context, a *actor, spotlightChan chan<- dataEvent, line string,
 ) {
 	for _, rp := range a.role.resParsers {
 		sink, ok := a.sinks[rp.name]
@@ -183,8 +179,10 @@ func (a *actor) detectSignals(
 			sink.lastVal = curVal
 		}
 
+		ap.witness(ctx, "(%s's %s:) %s", ev.actorName, ev.sigName, ev.val)
+
 		select {
-		case <-stopper.ShouldStop():
+		case <-ap.stopper.ShouldStop():
 			log.Info(ctx, "interrupted")
 			return
 		case <-ctx.Done():

@@ -1,10 +1,13 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"time"
 
+	"github.com/knz/shakespeare/cmd/log"
+	"github.com/knz/shakespeare/cmd/log/logtags"
 	"github.com/knz/shakespeare/cmd/stop"
 )
 
@@ -42,7 +45,10 @@ func (ap *app) expandTimeRange(instant float64) {
 	}
 }
 
-func (ap *app) report(format string, args ...interface{}) {
+var narratorCtx = logtags.AddTag(context.Background(), "narrator", nil)
+
+func (ap *app) narrate(format string, args ...interface{}) {
+	log.Infof(narratorCtx, format, args...)
 	if ap.cfg.quiet {
 		return
 	}
@@ -55,7 +61,7 @@ func (ap *app) intro() {
 	for _, a := range ap.cfg.actors {
 		playedRoles[a.role.name] = struct{}{}
 	}
-	ap.report("welcome a cast of %d actors, playing %d roles",
+	ap.narrate("welcome a cast of %d actors, playing %d roles",
 		len(ap.cfg.actors), len(playedRoles))
-	ap.report("the play is starting; expected duration: %s", ap.cfg.tempo*time.Duration(len(ap.cfg.play)))
+	ap.narrate("the play is starting; expected duration: %s", ap.cfg.tempo*time.Duration(len(ap.cfg.play)))
 }

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"html"
 	"os/exec"
 	"sync"
@@ -16,28 +17,23 @@ import (
 
 // prompt directs the actors to perform actions in accordance with the script.
 func (ap *app) prompt(ctx context.Context, actionChan chan<- actionEvent) error {
-	lastReport := timeutil.Now()
-	for i, scene := range ap.cfg.play {
-		sceneCtx := logtags.AddTag(ctx, "scene", i)
+	// surpriseDur is the duration of a scene beyond which the prompter
+	// will express surprise.
+	surpriseDur := 2 * ap.cfg.tempo.Seconds()
 
-		now := timeutil.Now()
-		if now.Sub(lastReport) >= time.Second {
-			ap.report("... now playing: scene %d ...", i)
-			lastReport = now
-		}
+	// Play.
+	for sceneNum, scene := range ap.cfg.play {
+		sceneCtx := logtags.AddTag(ctx, "scene", sceneNum)
 
 		// log.Info(sceneCtx, showRunning(ap.stopper))
 
 		// Determine the amount of time to wait before the start of the
 		// next scene.
-		elapsed := now.Sub(ap.au.epoch)
+		elapsed := timeutil.Now().Sub(ap.au.epoch)
 		toWait := scene.waitUntil - elapsed
 		if toWait > 0 {
-			log.Infof(sceneCtx, "waiting for %.2fs", toWait.Seconds())
+			log.Infof(sceneCtx, "at %.4fs, waiting for %.4fs", elapsed.Seconds(), toWait.Seconds())
 		} else {
-			if toWait < 0 {
-				log.Infof(sceneCtx, "running behind schedule: %s", toWait)
-			}
 		}
 
 		// Now wait for that time. Note: we have to fire a timer in any
@@ -46,18 +42,40 @@ func (ap *app) prompt(ctx context.Context, actionChan chan<- actionEvent) error 
 		tm := time.After(toWait)
 		select {
 		case <-ap.stopper.ShouldStop():
-			log.Info(ctx, "interrupted")
+			log.Info(sceneCtx, "interrupted")
 			return nil
 		case <-ctx.Done():
-			log.Info(ctx, "canceled")
+			log.Info(sceneCtx, "canceled")
 			return ctx.Err()
 		case <-tm:
 			// Wait.
 		}
 
+		if scene.isEmpty() {
+			// Nothing to do further in this scene.
+			continue
+		}
+
+		extraMsg := ""
+		if toWait < 0 {
+			extraMsg = fmt.Sprintf(", running %.4fs behind schedule", toWait.Seconds())
+		}
+
+		sceneTime := timeutil.Now()
+		elapsed = sceneTime.Sub(ap.au.epoch)
+		ap.narrate("scene %d (~%ds in%s):", sceneNum, int(elapsed.Seconds()), extraMsg)
+
 		// Now run the scene.
 		if err := ap.runScene(sceneCtx, scene.concurrentLines, actionChan); err != nil {
 			return err
+		}
+
+		if ap.cfg.tempo != 0 {
+			sceneDur := timeutil.Now().Sub(sceneTime).Seconds()
+			if sceneDur >= surpriseDur {
+				ap.narrate("woah! scene %d lasted %.1fx longer than expected!",
+					sceneNum, sceneDur/ap.cfg.tempo.Seconds())
+			}
 		}
 	}
 
@@ -96,7 +114,7 @@ func (ap *app) runScene(
 		// point, the task won't even start.
 		if err := runAsyncTask(lineCtx, ap.stopper, func(ctx context.Context) {
 			defer wg.Done()
-			if err := a.runLine(ctx, ap.stopper, ap.au.epoch, steps, actionChan); err != nil {
+			if err := ap.runLine(ctx, a, steps, actionChan); err != nil {
 				errCh <- errors.Wrapf(err, "%s %s", a.role.name, a.name)
 			}
 		}); err != nil {
@@ -116,35 +134,31 @@ func (ap *app) runScene(
 }
 
 // runLine runs a script scene for just one actor.
-func (a *actor) runLine(
-	ctx context.Context,
-	stopper *stop.Stopper,
-	startTime time.Time,
-	steps []step,
-	actionChan chan<- actionEvent,
+func (ap *app) runLine(
+	ctx context.Context, a *actor, steps []step, actionChan chan<- actionEvent,
 ) error {
 	for stepNum, step := range steps {
 		stepCtx := logtags.AddTag(ctx, "step", stepNum+1)
 
 		switch step.typ {
 		case stepAmbiance:
-			log.Infof(stepCtx, "(mood %s)", step.action)
+			ap.narrate("    (mood %s)", step.action)
 			ev := actionEvent{
 				typ:       actEvtMood,
 				startTime: timeutil.Now(),
 				output:    step.action,
 			}
-			if err := a.reportActionEvent(ctx, stopper, actionChan, ev); err != nil {
+			if err := a.reportActionEvent(ctx, ap.stopper, actionChan, ev); err != nil {
 				return err
 			}
 
 		case stepDo:
-			log.Infof(stepCtx, "%s: %s!", a.name, step.action)
-			ev, err := a.runAction(stepCtx, stopper, step.action, actionChan)
+			ap.narrate("    %s: %s!", a.name, step.action)
+			ev, err := a.runAction(stepCtx, ap.stopper, step.action, actionChan)
 			if err != nil {
 				return err
 			}
-			if err := a.reportActionEvent(ctx, stopper, actionChan, ev); err != nil {
+			if err := a.reportActionEvent(ctx, ap.stopper, actionChan, ev); err != nil {
 				return err
 			}
 		}

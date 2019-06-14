@@ -149,7 +149,7 @@ func (cfg *config) selectActors(target string) (*role, []*actor, error) {
 	}
 	act, ok := cfg.actors[target]
 	if !ok {
-		return nil, nil, fmt.Errorf("unknown actor %q")
+		return nil, nil, fmt.Errorf("unknown actor %q", target)
 	}
 	return act.role, []*actor{act}, nil
 }

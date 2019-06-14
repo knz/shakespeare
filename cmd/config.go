@@ -318,6 +318,12 @@ type auditorViolation struct {
 	endTime   float64
 }
 
+type moodPeriod struct {
+	startTime float64
+	endTime   float64
+	mood      string
+}
+
 type audition struct {
 	cfg *config
 	// epoch is the instant at which the collector started collecting events.

@@ -15,6 +15,22 @@ func (ap *app) plot(ctx context.Context) error {
 	ctx = logtags.AddTag(ctx, "plotter", nil)
 	log.Info(ctx, "generating scripts")
 
+	// Ensure the x axis always start at zero, even if no
+	// event was received until later on the time line.
+	if ap.minTime > 0 {
+		ap.minTime = 0
+	}
+	// Sanity check.
+	if ap.maxTime < 0 {
+		ap.maxTime = 1
+	}
+	ap.report("the timeline extends from %s, from %.2fs to %.2fs",
+		ap.au.epoch, ap.minTime, ap.maxTime)
+
+	// Give some breathing room to action labels.
+	ap.minTime -= 1.0
+	ap.maxTime += 1.0
+
 	// plot describes one curve in a plot group.
 	type plot struct {
 		// title is the string spelled out in the legend for that curve.
@@ -42,7 +58,7 @@ func (ap *app) plot(ctx context.Context) error {
 	// Analyze the collected data, and prepare the plot specifications.
 	for _, a := range ap.cfg.audiences {
 		if !a.hasData {
-			// No data for this audience, nothign to do.
+			// No data for this audience, nothing to do.
 			continue
 		}
 		// This audience has at least one plot. Prepare the group.
@@ -62,6 +78,8 @@ func (ap *app) plot(ctx context.Context) error {
 					fName: fName,
 					title: fmt.Sprintf("%s %s", actName, sigName),
 				}
+				ap.report("observer %s found data for %s's %s: %s",
+					a.name, actName, sigName, filepath.Join(ap.cfg.dataDir, fName))
 
 				if as.drawEvents {
 					// Indicate the value used in the title.
@@ -91,6 +109,8 @@ func (ap *app) plot(ctx context.Context) error {
 	defer func() {
 		_ = f.Close()
 	}()
+	ap.report("per-plot script: %s", fName)
+
 	fmt.Fprintf(f, "# auto-generated file.\n# See 'runme.gp' to actually generate plots.\n")
 
 	// Common plot definitions.
@@ -101,19 +121,6 @@ func (ap *app) plot(ctx context.Context) error {
 
 	// We want multiple plots sharing the same objects (overlays).
 	fmt.Fprintf(f, "set multiplot layout %d,1\n", len(plots)+1)
-
-	// Ensure the x axis always start at zero, even if no
-	// event was received until later on the time line.
-	if ap.minTime > 0 {
-		ap.minTime = 0
-	}
-	// Sanity check.
-	if ap.maxTime < 0 {
-		ap.maxTime = 1
-	}
-	// Give some breathing room to action labels.
-	ap.minTime -= 1.0
-	ap.maxTime += 1.0
 
 	// We force the x range to be the same for all the plots.
 	// If we did not do that, each plot may get a different x range
@@ -216,6 +223,7 @@ func (ap *app) plot(ctx context.Context) error {
 	defer func() {
 		_ = f2.Close()
 	}()
+	ap.report("plot-all script: %s", fName)
 
 	// We'll generate PDF.
 	fmt.Fprintf(f2, "# auto-generated file.\n# Run 'gnuplot runme.gp' to actually generate plots.\n")

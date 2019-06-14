@@ -48,8 +48,8 @@ type config struct {
 	// This is populated during parsing, and used during compile().
 	tempo time.Duration
 
-	// audiences is the set of observers for the play.
-	audiences map[string]*audience
+	// observers is the set of observers (the audience) for the play.
+	observers map[string]*observer
 
 	// auditors is the set of auditors for the play.
 	auditors map[string]*auditor
@@ -63,7 +63,7 @@ func newConfig() *config {
 		actions:   make(map[byte][]*action),
 		stanzas:   nil,
 		tempo:     time.Second,
-		audiences: make(map[string]*audience),
+		observers: make(map[string]*observer),
 		auditors:  make(map[string]*auditor),
 	}
 }
@@ -101,8 +101,8 @@ func (cfg *config) printCfg() {
 			if strings.HasSuffix(sig, "s") {
 				plural = ""
 			}
-			if len(sink.audiences) > 0 {
-				fmt.Printf("  # %s %s%s are watched by audience %+v\n", a.name, sig, plural, sink.audiences)
+			if len(sink.observers) > 0 {
+				fmt.Printf("  # %s %s%s are watched by audience %+v\n", a.name, sig, plural, sink.observers)
 			}
 			if len(sink.auditors) > 0 {
 				fmt.Printf("  # %s %s%s are checked by auditors %+v\n", a.name, sig, plural, sink.auditors)
@@ -126,7 +126,7 @@ func (cfg *config) printCfg() {
 	fmt.Println()
 
 	fmt.Println("audience")
-	for _, a := range cfg.audiences {
+	for _, a := range cfg.observers {
 		for sigName, source := range a.signals {
 			fmt.Printf("  %s watches %s %s\n", a.name, source.origin, sigName)
 		}
@@ -209,8 +209,8 @@ type actor struct {
 }
 
 type sink struct {
-	// audiences refers to names of audience instances.
-	audiences []string
+	// observers refers to names of audience instances.
+	observers []string
 	// auditors refers to names of auditor instances.
 	auditors []string
 	// lastVal is the last value received, for deltas.
@@ -252,7 +252,7 @@ type stanza struct {
 	script string
 }
 
-type audience struct {
+type observer struct {
 	name    string
 	signals map[string]*audienceSource
 	ylabel  string

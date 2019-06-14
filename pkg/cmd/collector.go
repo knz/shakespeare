@@ -11,9 +11,9 @@ import (
 	"github.com/knz/shakespeare/pkg/crdb/timeutil"
 )
 
-type dataEvent struct {
+type observation struct {
 	typ       parserType
-	audiences []string
+	observers []string
 	auditors  []string
 	actorName string
 	sigName   string
@@ -21,7 +21,7 @@ type dataEvent struct {
 	val       string
 }
 
-type actionEvent struct {
+type performedAction struct {
 	typ       actEvtType
 	startTime time.Time
 	duration  float64
@@ -45,8 +45,8 @@ func csvFileName(audienceName, actorName, sigName string) string {
 func (ap *app) collect(
 	ctx context.Context,
 	dataLogger *log.SecondaryLogger,
-	actionChan <-chan actionEvent,
-	spotlightChan <-chan dataEvent,
+	actionChan <-chan performedAction,
+	collectorChan <-chan observation,
 ) error {
 	of := newOutputFiles()
 	defer func() {
@@ -79,9 +79,6 @@ func (ap *app) collect(
 			switch ev.typ {
 			case actEvtMood:
 				dataLogger.Logf(ctx, "%.2f mood set: %s", sinceBeginning, ev.output)
-				if err := ap.au.collectAndAuditMood(ctx, sinceBeginning, ev.output); err != nil {
-					return err
-				}
 
 			case actEvtExec:
 				a, ok := ap.cfg.actors[ev.actor]
@@ -108,22 +105,22 @@ func (ap *app) collect(
 			}
 			continue
 
-		case ev := <-spotlightChan:
+		case ev := <-collectorChan:
 			sinceBeginning := ev.ts.Sub(ap.au.epoch).Seconds()
 			ap.expandTimeRange(sinceBeginning)
 
 			dataLogger.Logf(ctx, "%.2f %+v %q %q",
-				sinceBeginning, ev.audiences, ev.sigName, ev.val)
+				sinceBeginning, ev.observers, ev.sigName, ev.val)
 
-			for _, audienceName := range ev.audiences {
-				a, ok := ap.cfg.audiences[audienceName]
+			for _, obsName := range ev.observers {
+				a, ok := ap.cfg.observers[obsName]
 				if !ok {
-					return fmt.Errorf("event received for non-existent audience %q: %+v", audienceName, ev)
+					return fmt.Errorf("event received for non-existent audience %q: %+v", obsName, ev)
 				}
 				a.hasData = true
 				a.signals[ev.sigName].hasData[ev.actorName] = true
 				fName := filepath.Join(ap.cfg.dataDir,
-					csvFileName(audienceName, ev.actorName, ev.sigName))
+					csvFileName(obsName, ev.actorName, ev.sigName))
 
 				w, err := of.getWriter(fName)
 				if err != nil {
@@ -132,11 +129,6 @@ func (ap *app) collect(
 				// shuffle is a random value between [-.25, +.25] used to randomize event plots.
 				shuffle := (.5 * rand.Float64()) - .25
 				fmt.Fprintf(w, "%.4f %s %.3f\n", sinceBeginning, ev.val, shuffle)
-			}
-
-			evVar := exprVar{actorName: ev.actorName, sigName: ev.sigName}
-			if err := ap.au.checkEvent(ctx, sinceBeginning, evVar, ev.auditors, ev.typ, ev.val); err != nil {
-				return err
 			}
 
 			continue

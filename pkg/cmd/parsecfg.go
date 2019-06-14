@@ -103,10 +103,10 @@ func (cfg *config) parseAudience(line string) error {
 			return fmt.Errorf("unknown signal %q for role %s: %s", signal, r.name, line)
 		}
 
-		a, ok := cfg.audiences[aName]
+		a, ok := cfg.observers[aName]
 		if !ok {
-			a = &audience{name: aName, signals: make(map[string]*audienceSource)}
-			cfg.audiences[aName] = a
+			a = &observer{name: aName, signals: make(map[string]*audienceSource)}
+			cfg.observers[aName] = a
 		}
 		aSrc := &audienceSource{
 			origin:     target,
@@ -121,10 +121,10 @@ func (cfg *config) parseAudience(line string) error {
 	} else if measuresRe.MatchString(line) {
 		aName := measuresRe.ReplaceAllString(line, "${name}")
 		ylabel := strings.TrimSpace(measuresRe.ReplaceAllString(line, "${ylabel}"))
-		a, ok := cfg.audiences[aName]
+		a, ok := cfg.observers[aName]
 		if !ok {
-			a = &audience{name: aName, signals: make(map[string]*audienceSource)}
-			cfg.audiences[aName] = a
+			a = &observer{name: aName, signals: make(map[string]*audienceSource)}
+			cfg.observers[aName] = a
 		}
 		a.ylabel = ylabel
 	}
@@ -160,7 +160,7 @@ func (a *actor) addAudience(sigName, audienceName string) {
 		s = &sink{}
 		a.sinks[sigName] = s
 	}
-	s.audiences = append(s.audiences, audienceName)
+	s.observers = append(s.observers, audienceName)
 }
 
 func (a *actor) addAuditor(sigName, auditorName string) {

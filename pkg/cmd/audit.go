@@ -6,11 +6,54 @@ import (
 	"math"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/Knetic/govaluate"
+	"github.com/cockroachdb/errors"
 	"github.com/knz/shakespeare/pkg/crdb/log"
 	"github.com/knz/shakespeare/pkg/crdb/timeutil"
 )
+
+type moodChange struct {
+	ts      time.Time
+	newMood string
+}
+
+type auditableEvent struct {
+	observation
+}
+
+func (ap *app) audit(
+	ctx context.Context, auChan <-chan auditableEvent, moodChan <-chan moodChange,
+) error {
+	for {
+		select {
+		case <-ap.stopper.ShouldStop():
+			log.Info(ctx, "interrupted")
+			return nil
+
+		case <-ctx.Done():
+			log.Info(ctx, "canceled")
+			return ctx.Err()
+
+		case ev := <-moodChan:
+			sinceBeginning := ev.ts.Sub(ap.au.epoch).Seconds()
+			if err := ap.au.collectAndAuditMood(ctx, sinceBeginning, ev.newMood); err != nil {
+				return err
+			}
+
+		case ev := <-auChan:
+			sinceBeginning := ev.ts.Sub(ap.au.epoch).Seconds()
+
+			evVar := exprVar{actorName: ev.actorName, sigName: ev.sigName}
+			if err := ap.au.checkEvent(ctx, sinceBeginning, evVar, ev.auditors, ev.typ, ev.val); err != nil {
+				return err
+			}
+
+		}
+	}
+	return nil
+}
 
 func (a *auditor) checkExpr(cfg *config) error {
 	compiledExp, err := govaluate.NewEvaluableExpression(a.expr)
@@ -135,7 +178,7 @@ func (au *audition) checkEvent(
 		// scalar or delta
 		fVal, err := strconv.ParseFloat(val, 64)
 		if err != nil {
-			ev.err = fmt.Errorf("event for signal %s encounted invalid value %q: %v", varName, val, err)
+			ev.err = errors.Newf("event for signal %s encounted invalid value %q: %v", varName, val, err)
 		} else {
 			au.curVals[varName] = fVal
 		}
@@ -144,7 +187,7 @@ func (au *audition) checkEvent(
 	for _, auditorName := range auditNames {
 		a, ok := au.cfg.auditors[auditorName]
 		if !ok {
-			return fmt.Errorf("event for signal %s triggers non-existent auditor %q", varName, auditorName)
+			return errors.Newf("event for signal %s triggers non-existent auditor %q", varName, auditorName)
 		}
 		as := au.auditorStates[a.name]
 

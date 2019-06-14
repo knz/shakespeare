@@ -22,7 +22,8 @@ func (ap *app) prompt(ctx context.Context, actionChan chan<- actionEvent) error 
 	surpriseDur := 2 * ap.cfg.tempo.Seconds()
 
 	// Play.
-	for sceneNum, scene := range ap.cfg.play {
+	for i, scene := range ap.cfg.play {
+		sceneNum := i + 1
 		sceneCtx := logtags.AddTag(ctx, "scene", sceneNum)
 
 		// log.Info(sceneCtx, showRunning(ap.stopper))

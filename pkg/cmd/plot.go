@@ -56,7 +56,7 @@ func (ap *app) plot(ctx context.Context) error {
 	var plots []plotgroup
 
 	// Analyze the collected data, and prepare the plot specifications.
-	for _, a := range ap.cfg.audiences {
+	for _, a := range ap.cfg.observers {
 		if !a.hasData {
 			// No data for this audience, nothing to do.
 			continue

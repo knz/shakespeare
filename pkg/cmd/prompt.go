@@ -16,7 +16,9 @@ import (
 )
 
 // prompt directs the actors to perform actions in accordance with the script.
-func (ap *app) prompt(ctx context.Context, actionChan chan<- actionEvent) error {
+func (ap *app) prompt(
+	ctx context.Context, actionChan chan<- performedAction, moodCh chan<- moodChange,
+) error {
 	// surpriseDur is the duration of a scene beyond which the prompter
 	// will express surprise.
 	surpriseDur := 2 * ap.cfg.tempo.Seconds()
@@ -67,7 +69,7 @@ func (ap *app) prompt(ctx context.Context, actionChan chan<- actionEvent) error 
 		ap.narrate("scene %d (~%ds in%s):", sceneNum, int(elapsed.Seconds()), extraMsg)
 
 		// Now run the scene.
-		if err := ap.runScene(sceneCtx, scene.concurrentLines, actionChan); err != nil {
+		if err := ap.runScene(sceneCtx, scene.concurrentLines, actionChan, moodCh); err != nil {
 			return err
 		}
 
@@ -86,7 +88,10 @@ func (ap *app) prompt(ctx context.Context, actionChan chan<- actionEvent) error 
 // runScene runs one scene.
 // A scene is the concurrent execution of each actor's lines.
 func (ap *app) runScene(
-	ctx context.Context, lines []scriptLine, actionChan chan<- actionEvent,
+	ctx context.Context,
+	lines []scriptLine,
+	actionChan chan<- performedAction,
+	moodCh chan<- moodChange,
 ) (err error) {
 	// errCh collects the errors from the concurrent actors.
 	errCh := make(chan error, len(lines))
@@ -115,7 +120,7 @@ func (ap *app) runScene(
 		// point, the task won't even start.
 		if err := runAsyncTask(lineCtx, ap.stopper, func(ctx context.Context) {
 			defer wg.Done()
-			if err := ap.runLine(ctx, a, steps, actionChan); err != nil {
+			if err := ap.runLine(ctx, a, steps, actionChan, moodCh); err != nil {
 				errCh <- errors.Wrapf(err, "%s %s", a.role.name, a.name)
 			}
 		}); err != nil {
@@ -136,7 +141,11 @@ func (ap *app) runScene(
 
 // runLine runs a script scene for just one actor.
 func (ap *app) runLine(
-	ctx context.Context, a *actor, steps []step, actionChan chan<- actionEvent,
+	ctx context.Context,
+	a *actor,
+	steps []step,
+	actionChan chan<- performedAction,
+	moodCh chan<- moodChange,
 ) error {
 	for stepNum, step := range steps {
 		stepCtx := logtags.AddTag(ctx, "step", stepNum+1)
@@ -144,9 +153,14 @@ func (ap *app) runLine(
 		switch step.typ {
 		case stepAmbiance:
 			ap.narrate("    (mood %s)", step.action)
-			ev := actionEvent{
+			ts := timeutil.Now()
+			if err := a.reportMoodEvent(ctx, ap.stopper, moodCh,
+				moodChange{ts: ts, newMood: step.action}); err != nil {
+				return err
+			}
+			ev := performedAction{
 				typ:       actEvtMood,
-				startTime: timeutil.Now(),
+				startTime: ts,
 				output:    step.action,
 			}
 			if err := a.reportActionEvent(ctx, ap.stopper, actionChan, ev); err != nil {
@@ -168,7 +182,7 @@ func (ap *app) runLine(
 }
 
 func (a *actor) reportActionEvent(
-	ctx context.Context, stopper *stop.Stopper, actionChan chan<- actionEvent, ev actionEvent,
+	ctx context.Context, stopper *stop.Stopper, actionChan chan<- performedAction, ev performedAction,
 ) error {
 	select {
 	case <-stopper.ShouldStop():
@@ -183,12 +197,28 @@ func (a *actor) reportActionEvent(
 	return nil
 }
 
+func (a *actor) reportMoodEvent(
+	ctx context.Context, stopper *stop.Stopper, moodCh chan<- moodChange, chg moodChange,
+) error {
+	select {
+	case <-stopper.ShouldStop():
+		log.Info(ctx, "interrupted")
+		return nil
+	case <-ctx.Done():
+		log.Info(ctx, "canceled")
+		return ctx.Err()
+	case moodCh <- chg:
+		// ok
+	}
+	return nil
+}
+
 func (a *actor) runAction(
-	ctx context.Context, stopper *stop.Stopper, action string, actionChan chan<- actionEvent,
-) (actionEvent, error) {
+	ctx context.Context, stopper *stop.Stopper, action string, actionChan chan<- performedAction,
+) (performedAction, error) {
 	aCmd, ok := a.role.actionCmds[action]
 	if !ok {
-		return actionEvent{}, errors.Errorf("unknown action: %q", action)
+		return performedAction{}, errors.Errorf("unknown action: %q", action)
 	}
 	ctx = logtags.AddTag(ctx, "action", action)
 
@@ -200,10 +230,10 @@ func (a *actor) runAction(
 	log.Infof(ctx, "%q done (%s)\n%s-- %s", action, dur, outdata, ps)
 
 	if _, ok := err.(*exec.ExitError); err != nil && !ok {
-		return actionEvent{}, err
+		return performedAction{}, err
 	}
 
-	ev := actionEvent{
+	ev := performedAction{
 		typ:       actEvtExec,
 		startTime: actStart,
 		duration:  dur.Seconds(),

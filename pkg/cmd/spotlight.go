@@ -18,9 +18,13 @@ import (
 )
 
 // spotlight stats the monitoring (spotlight) thread for a given actor.
-// The collected events are sent to the given spotlightChan.
+// The collected events are sent to the given collectorChan.
 func (ap *app) spotlight(
-	ctx context.Context, a *actor, monLogger *log.SecondaryLogger, spotlightChan chan<- dataEvent,
+	ctx context.Context,
+	a *actor,
+	monLogger *log.SecondaryLogger,
+	collectorChan chan<- observation,
+	auChan chan<- auditableEvent,
 ) error {
 	// Start the spotlight command in the background.
 	cmd := a.makeShCmd(a.role.spotlightCmd)
@@ -106,7 +110,7 @@ func (ap *app) spotlight(
 			}
 			monLogger.Logf(ctx, "clamors: %q", res.line)
 			sigCtx := logtags.AddTag(ctx, "signals", nil)
-			ap.detectSignals(sigCtx, a, spotlightChan, res.line)
+			ap.detectSignals(sigCtx, a, collectorChan, auChan, res.line)
 
 		case <-ap.stopper.ShouldStop():
 			log.Info(ctx, "interrupted")
@@ -122,22 +126,26 @@ func (ap *app) spotlight(
 }
 
 // detectSignals parses a line produced by the spotlight to detect any
-// signal is contains. Detected signals are sent to the spotlightChan.
+// signal is contains. Detected signals are sent to the collectorChan.
 func (ap *app) detectSignals(
-	ctx context.Context, a *actor, spotlightChan chan<- dataEvent, line string,
+	ctx context.Context,
+	a *actor,
+	collectorChan chan<- observation,
+	auChan chan<- auditableEvent,
+	line string,
 ) {
 	for _, rp := range a.role.resParsers {
 		sink, ok := a.sinks[rp.name]
-		if !ok || (len(sink.audiences) == 0 && len(sink.auditors) == 0) {
+		if !ok || (len(sink.observers) == 0 && len(sink.auditors) == 0) {
 			// No audience for this signal: don't even bother collecting the data.
 			continue
 		}
 		if !rp.re.MatchString(line) {
 			continue
 		}
-		ev := dataEvent{
+		ev := observation{
 			typ:       rp.typ,
-			audiences: sink.audiences,
+			observers: sink.observers,
 			auditors:  sink.auditors,
 			actorName: a.name,
 			sigName:   rp.name,
@@ -181,6 +189,7 @@ func (ap *app) detectSignals(
 
 		ap.witness(ctx, "(%s's %s:) %s", ev.actorName, ev.sigName, ev.val)
 
+		// Emit to the observers.
 		select {
 		case <-ap.stopper.ShouldStop():
 			log.Info(ctx, "interrupted")
@@ -188,7 +197,18 @@ func (ap *app) detectSignals(
 		case <-ctx.Done():
 			log.Info(ctx, "canceled")
 			return
-		case spotlightChan <- ev:
+		case collectorChan <- ev:
+			// ok
+		}
+		// Emit to the audition.
+		select {
+		case <-ap.stopper.ShouldStop():
+			log.Info(ctx, "interrupted")
+			return
+		case <-ctx.Done():
+			log.Info(ctx, "canceled")
+			return
+		case auChan <- auditableEvent{ev}:
 			// ok
 		}
 	}

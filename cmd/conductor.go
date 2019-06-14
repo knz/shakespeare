@@ -67,7 +67,7 @@ func (ap *app) conduct(ctx context.Context) (err error) {
 	var wgcol sync.WaitGroup
 	colDone := ap.startCollector(ctx, &wgcol, dataLogger, actionChan, spotlightChan, errCh)
 	defer func() {
-		log.Info(ctx, "cancelling collector")
+		log.Info(ctx, "requesting the collector to exit")
 		colDone()
 		wgcol.Wait()
 	}()
@@ -78,7 +78,7 @@ func (ap *app) conduct(ctx context.Context) (err error) {
 	var wgspot sync.WaitGroup
 	allSpotsDone := ap.startSpotlights(ctx, &wgspot, monLogger, spotlightChan, errCh)
 	defer func() {
-		log.Info(ctx, "cancelling spotlights")
+		log.Info(ctx, "requesting spotlights to turn off")
 		allSpotsDone()
 		wgspot.Wait()
 	}()

@@ -236,7 +236,7 @@ func (cfg *config) initArgs(ctx context.Context) error {
 	pflag.StringVar(&cfg.dataDir, "output-dir", ".", "output data directory")
 	pflag.BoolVarP(&cfg.doPrint, "print-cfg", "p", false, "print out the parsed configuration")
 	pflag.BoolVarP(&cfg.parseOnly, "dry-run", "n", false, "do not execute anything, just check the configuration")
-	// pflag.BoolVarP(&cfg.quiet, "quiet", "q", false, "do not emit logs to stderr (equivalent to -logtostderr=NONE)")
+	pflag.BoolVarP(&cfg.quiet, "quiet", "q", false, "do not emit progress messages")
 
 	// Load the go flag settings from the log package into pflag.
 	pflag.CommandLine.AddGoFlagSet(flag.CommandLine)

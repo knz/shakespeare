@@ -90,6 +90,10 @@ type scene struct {
 	concurrentLines []scriptLine
 }
 
+func (s *scene) isEmpty() bool {
+	return len(s.concurrentLines) == 0
+}
+
 // scriptLine describes what one actor should play during one scene.
 type scriptLine struct {
 	actor *actor

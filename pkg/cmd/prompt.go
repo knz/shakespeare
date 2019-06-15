@@ -17,7 +17,7 @@ import (
 
 // prompt directs the actors to perform actions in accordance with the script.
 func (ap *app) prompt(
-	ctx context.Context, actionChan chan<- performedAction, moodCh chan<- moodChange,
+	ctx context.Context, actionChan chan<- actionReport, moodCh chan<- moodChange,
 ) error {
 	// surpriseDur is the duration of a scene beyond which the prompter
 	// will express surprise.
@@ -90,7 +90,7 @@ func (ap *app) prompt(
 func (ap *app) runScene(
 	ctx context.Context,
 	lines []scriptLine,
-	actionChan chan<- performedAction,
+	actionChan chan<- actionReport,
 	moodCh chan<- moodChange,
 ) (err error) {
 	// errCh collects the errors from the concurrent actors.
@@ -144,7 +144,7 @@ func (ap *app) runLine(
 	ctx context.Context,
 	a *actor,
 	steps []step,
-	actionChan chan<- performedAction,
+	actionChan chan<- actionReport,
 	moodCh chan<- moodChange,
 ) error {
 	for stepNum, step := range steps {
@@ -158,8 +158,8 @@ func (ap *app) runLine(
 				moodChange{ts: ts, newMood: step.action}); err != nil {
 				return err
 			}
-			ev := performedAction{
-				typ:       actEvtMood,
+			ev := actionReport{
+				typ:       reportMoodChange,
 				startTime: ts,
 				output:    step.action,
 			}
@@ -182,7 +182,7 @@ func (ap *app) runLine(
 }
 
 func (a *actor) reportActionEvent(
-	ctx context.Context, stopper *stop.Stopper, actionChan chan<- performedAction, ev performedAction,
+	ctx context.Context, stopper *stop.Stopper, actionChan chan<- actionReport, ev actionReport,
 ) error {
 	select {
 	case <-stopper.ShouldStop():
@@ -214,11 +214,11 @@ func (a *actor) reportMoodEvent(
 }
 
 func (a *actor) runAction(
-	ctx context.Context, stopper *stop.Stopper, action string, actionChan chan<- performedAction,
-) (performedAction, error) {
+	ctx context.Context, stopper *stop.Stopper, action string, actionChan chan<- actionReport,
+) (actionReport, error) {
 	aCmd, ok := a.role.actionCmds[action]
 	if !ok {
-		return performedAction{}, errors.Errorf("unknown action: %q", action)
+		return actionReport{}, errors.Errorf("unknown action: %q", action)
 	}
 	ctx = logtags.AddTag(ctx, "action", action)
 
@@ -230,11 +230,11 @@ func (a *actor) runAction(
 	log.Infof(ctx, "%q done (%s)\n%s-- %s", action, dur, outdata, ps)
 
 	if _, ok := err.(*exec.ExitError); err != nil && !ok {
-		return performedAction{}, err
+		return actionReport{}, err
 	}
 
-	ev := performedAction{
-		typ:       actEvtExec,
+	ev := actionReport{
+		typ:       reportActionExec,
 		startTime: actStart,
 		duration:  dur.Seconds(),
 		actor:     a.name,

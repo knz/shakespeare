@@ -48,23 +48,25 @@ type config struct {
 	// This is populated during parsing, and used during compile().
 	tempo time.Duration
 
-	// observers is the set of observers (the audience) for the play.
-	observers map[string]*observer
+	// audience is the set of observers/auditors for the play.
+	audience map[string]*audienceMember
+}
 
-	// auditors is the set of auditors for the play.
-	auditors map[string]*auditor
+type audienceMember struct {
+	name     string
+	observer observer
+	auditor  auditor
 }
 
 // newConfig creates a config with defaults.
 func newConfig() *config {
 	return &config{
-		roles:     make(map[string]*role),
-		actors:    make(map[string]*actor),
-		actions:   make(map[byte][]*action),
-		stanzas:   nil,
-		tempo:     time.Second,
-		observers: make(map[string]*observer),
-		auditors:  make(map[string]*auditor),
+		roles:    make(map[string]*role),
+		actors:   make(map[string]*actor),
+		actions:  make(map[byte][]*action),
+		stanzas:  nil,
+		tempo:    time.Second,
+		audience: make(map[string]*audienceMember),
 	}
 }
 
@@ -126,22 +128,19 @@ func (cfg *config) printCfg() {
 	fmt.Println()
 
 	fmt.Println("audience")
-	for _, a := range cfg.observers {
-		for sigName, source := range a.signals {
+	for _, a := range cfg.audience {
+		for sigName, source := range a.observer.signals {
 			fmt.Printf("  %s watches %s %s\n", a.name, source.origin, sigName)
 		}
-		if a.ylabel != "" {
-			fmt.Printf("  %s measures %s\n", a.name, a.ylabel)
+		if a.observer.ylabel != "" {
+			fmt.Printf("  %s measures %s\n", a.name, a.observer.ylabel)
+		}
+		if a.auditor.when != auditNone {
+			fmt.Printf("  %s expects %s: %s\n", a.name, a.auditor.when.String(), a.auditor.expr)
 		}
 	}
 	fmt.Println("end")
 	fmt.Println()
-
-	fmt.Println("auditors")
-	for _, a := range cfg.auditors {
-		fmt.Printf("  %s expects %s: %s\n", a.name, a.when.String(), a.expr)
-	}
-	fmt.Println("end")
 }
 
 // cmd is the type of a command that can be executed as
@@ -253,7 +252,6 @@ type stanza struct {
 }
 
 type observer struct {
-	name    string
 	signals map[string]*audienceSource
 	ylabel  string
 	// hasData indicates whether data was received for this audience.
@@ -268,7 +266,6 @@ type audienceSource struct {
 }
 
 type auditor struct {
-	name            string
 	when            auditorWhen
 	expr            string
 	compiledExp     *govaluate.EvaluableExpression
@@ -287,12 +284,14 @@ func (e exprVar) Name() string {
 type auditorWhen int
 
 const (
-	auditAlways auditorWhen = iota
+	auditNone auditorWhen = iota
+	auditAlways
 	auditEventually
 	auditEventuallyAlways
 )
 
 var wName = map[auditorWhen]string{
+	auditNone:             "???",
 	auditAlways:           "always",
 	auditEventually:       "eventually",
 	auditEventuallyAlways: "eventually always",
@@ -303,6 +302,7 @@ func (w auditorWhen) String() string {
 }
 
 type auditorState struct {
+	hasData    bool
 	history    []auditorEvent
 	violations []auditorViolation
 }
@@ -335,4 +335,116 @@ type audition struct {
 	auditorStates map[string]*auditorState
 	curVals       map[string]interface{}
 	activations   map[exprVar]struct{}
+}
+
+// selectActors selects the actors (and the role) matching
+// the target definition.
+// - every <rolename>  -> every actor playing <rolename>
+// - <actorname>       -> that specific actor
+func (cfg *config) selectActors(target string) (*role, []*actor, error) {
+	if strings.HasPrefix(target, "every ") {
+		roleName := strings.TrimPrefix(target, "every ")
+		r, ok := cfg.roles[roleName]
+		if !ok {
+			return nil, nil, fmt.Errorf("unknown role %q", roleName)
+		}
+		var res []*actor
+		for _, a := range cfg.actors {
+			if a.role != r {
+				continue
+			}
+			res = append(res, a)
+		}
+		return r, res, nil
+	}
+	act, ok := cfg.actors[target]
+	if !ok {
+		return nil, nil, fmt.Errorf("unknown actor %q", target)
+	}
+	return act.role, []*actor{act}, nil
+}
+
+func (cfg *config) addOrGetAudienceMember(name string) *audienceMember {
+	a, ok := cfg.audience[name]
+	if !ok {
+		a = &audienceMember{
+			name: name,
+			observer: observer{
+				signals: make(map[string]*audienceSource),
+			},
+		}
+		cfg.audience[name] = a
+	}
+	return a
+}
+
+// getSignal retrieves a role's signal.
+func (r *role) getSignal(signal string) (isEventSignal bool, ok bool) {
+	for _, rp := range r.resParsers {
+		if rp.name == signal {
+			return rp.typ == parseEvent, true
+		}
+	}
+	return false, false
+}
+
+// addAuditor registers an auditor to an actor's signal sink.
+// The auditor will receive data change events from that actor's signal.
+// addAuditor entails addObserver.
+func (a *actor) addAuditor(sigName, auditorName string) {
+	a.addObserver(sigName, auditorName)
+
+	s, ok := a.sinks[sigName]
+	if !ok {
+		s = &sink{}
+		a.sinks[sigName] = s
+	}
+	found := false
+	for _, ad := range s.auditors {
+		if ad == auditorName {
+			found = true
+			break
+		}
+	}
+	if !found {
+		s.auditors = append(s.auditors, auditorName)
+	}
+}
+
+// addObserver registers an observer to an actor's signal sink.
+// The observer will receive plottable events from that actor's signal.
+func (a *actor) addObserver(sigName, observerName string) {
+	s, ok := a.sinks[sigName]
+	if !ok {
+		s = &sink{}
+		a.sinks[sigName] = s
+	}
+	found := false
+	for _, ad := range s.observers {
+		if ad == observerName {
+			found = true
+			break
+		}
+	}
+	if !found {
+		s.observers = append(s.observers, observerName)
+	}
+}
+
+// addOrUpdateSignalSource adds a signal source to an observer. It is
+// possible for an observer to "merge" signals from multiple actors
+// together into a single sink. ?????
+func (a *audienceMember) addOrUpdateSignalSource(r *role, signal, target string) error {
+	isEventSignal, ok := r.getSignal(signal)
+	if !ok {
+		return fmt.Errorf("unknown signal %q for role %s", signal, r.name)
+	}
+
+	aSrc := &audienceSource{
+		origin:     target,
+		hasData:    make(map[string]bool),
+		drawEvents: isEventSignal,
+	}
+	a.observer.signals[signal] = aSrc
+	return nil
 }

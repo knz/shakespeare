@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/cockroachdb/errors"
 	"github.com/knz/shakespeare/pkg/crdb/log"
 	"github.com/knz/shakespeare/pkg/crdb/timeutil"
 )
@@ -21,31 +22,41 @@ type observation struct {
 	val       string
 }
 
-type performedAction struct {
-	typ       actEvtType
+type actionReport struct {
+	typ       actReportType
 	startTime time.Time
-	duration  float64
-	actor     string
-	action    string
-	success   bool
-	output    string
+	// duration is the duration of the command for regular action
+	// reports.
+	duration float64
+	// actor is the observed actor for regular action reports,
+	// or the auditor name for violation reports.
+	actor string
+	// action is the executed action for regular action reports,
+	// unused otherwise.
+	action  string
+	success bool
+	// output represents
+	// - for regular action reports, the stdout/stderr of the command
+	// - for mood changes, the new mood
+	output string
 }
 
-type actEvtType int
+type actReportType int
 
 const (
-	actEvtExec actEvtType = iota
-	actEvtMood
+	reportActionExec actReportType = iota
+	reportMoodChange
+	reportAuditViolation
 )
 
-func csvFileName(audienceName, actorName, sigName string) string {
-	return fmt.Sprintf("%s.%s.%s.csv", audienceName, actorName, sigName)
+func csvFileName(observerName, actorName, sigName string) string {
+	return fmt.Sprintf("%s.%s.%s.csv", observerName, actorName, sigName)
 }
 
 func (ap *app) collect(
 	ctx context.Context,
 	dataLogger *log.SecondaryLogger,
-	actionChan <-chan performedAction,
+	actionChan <-chan actionReport,
 	collectorChan <-chan observation,
 ) error {
 	of := newOutputFiles()
@@ -77,13 +88,38 @@ func (ap *app) collect(
 			ap.expandTimeRange(sinceBeginning)
 
 			switch ev.typ {
-			case actEvtMood:
+			case reportMoodChange:
 				dataLogger.Logf(ctx, "%.2f mood set: %s", sinceBeginning, ev.output)
 
-			case actEvtExec:
+			case reportAuditViolation:
+				a, ok := ap.au.auditorStates[ev.actor]
+				if !ok {
+					return errors.Newf("event received for non-existent auditor: %+v", ev)
+				}
+				a.hasData = true
+
+				status := 0
+				if !ev.success {
+					status = 1
+				}
+
+				dataLogger.Logf(ctx, "%.2f audit check by %s: %v (%q)", sinceBeginning, ev.actor, ev.success, ev.output)
+				fName := filepath.Join(ap.cfg.dataDir, fmt.Sprintf("audit-%s.csv", ev.actor))
+				w, err := of.getWriter(fName)
+				if err != nil {
+					return errors.Wrapf(err, "opening %q", fName)
+				}
+
+				if ev.output != "" {
+					fmt.Fprintf(w, "%.4f %d %q\n", sinceBeginning, status, ev.output)
+				} else {
+					fmt.Fprintf(w, "%.4f %d\n", sinceBeginning, status)
+				}
+
+			case reportActionExec:
 				a, ok := ap.cfg.actors[ev.actor]
 				if !ok {
-					return fmt.Errorf("event received for non-existent actor: %+v", ev)
+					return errors.Newf("event received for non-existent actor: %+v", ev)
 				}
 				a.hasData = true
 
@@ -97,7 +133,7 @@ func (ap *app) collect(
 				fName := filepath.Join(ap.cfg.dataDir, fmt.Sprintf("%s.csv", ev.actor))
 				w, err := of.getWriter(fName)
 				if err != nil {
-					return fmt.Errorf("opening %q: %+v", fName, err)
+					return errors.Wrapf(err, "opening %q", fName)
 				}
 
 				fmt.Fprintf(w, "%.4f %.4f %s %d %q\n",
@@ -113,18 +149,18 @@ func (ap *app) collect(
 				sinceBeginning, ev.observers, ev.sigName, ev.val)
 
 			for _, obsName := range ev.observers {
-				a, ok := ap.cfg.observers[obsName]
+				a, ok := ap.cfg.audience[obsName]
 				if !ok {
-					return fmt.Errorf("event received for non-existent audience %q: %+v", obsName, ev)
+					return errors.Newf("event received for non-existent audience %q: %+v", obsName, ev)
 				}
-				a.hasData = true
-				a.signals[ev.sigName].hasData[ev.actorName] = true
+				a.observer.hasData = true
+				a.observer.signals[ev.sigName].hasData[ev.actorName] = true
 				fName := filepath.Join(ap.cfg.dataDir,
 					csvFileName(obsName, ev.actorName, ev.sigName))
 
 				w, err := of.getWriter(fName)
 				if err != nil {
-					return fmt.Errorf("opening %q: %+v", fName, err)
+					return errors.Wrapf(err, "opening %q: %+v", fName)
 				}
 				// shuffle is a random value between [-.25, +.25] used to randomize event plots.
 				shuffle := (.5 * rand.Float64()) - .25

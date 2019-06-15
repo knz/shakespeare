@@ -56,13 +56,13 @@ func (ap *app) conduct(ctx context.Context) (err error) {
 
 	collectorChan := make(chan observation, len(ap.cfg.actors))
 	auChan := make(chan auditableEvent, len(ap.cfg.actors))
-	actionChan := make(chan performedAction, len(ap.cfg.actors))
+	actionChan := make(chan actionReport, len(ap.cfg.actors))
 	moodCh := make(chan moodChange, 1)
 
 	// Start the audition.
 	// The audition is running in the background.
 	var wgau sync.WaitGroup
-	auDone := ap.startAudition(ctx, &wgau, auChan, moodCh, errCh)
+	auDone := ap.startAudition(ctx, &wgau, auChan, actionChan, moodCh, errCh)
 	defer func() {
 		log.Info(ctx, "requesting the audition to stop")
 		auDone()
@@ -100,10 +100,7 @@ func (ap *app) conduct(ctx context.Context) (err error) {
 
 // runPrompter runs the prompter until completion.
 func (ap *app) runPrompter(
-	ctx context.Context,
-	actionChan chan<- performedAction,
-	moodCh chan<- moodChange,
-	errCh chan<- error,
+	ctx context.Context, actionChan chan<- actionReport, moodCh chan<- moodChange, errCh chan<- error,
 ) {
 	dirCtx := logtags.AddTag(ctx, "prompter", nil)
 	log.Info(dirCtx, "<intrat>")
@@ -118,6 +115,7 @@ func (ap *app) startAudition(
 	ctx context.Context,
 	wg *sync.WaitGroup,
 	auChan <-chan auditableEvent,
+	actionCh chan<- actionReport,
 	moodCh <-chan moodChange,
 	errCh chan<- error,
 ) (cancelFunc func()) {
@@ -127,7 +125,7 @@ func (ap *app) startAudition(
 	runWorker(auCtx, ap.stopper, func(ctx context.Context) {
 		defer wg.Done()
 		log.Info(ctx, "<begins>")
-		if err := ap.audit(ctx, auChan, moodCh); err != nil && err != context.Canceled {
+		if err := ap.audit(ctx, auChan, actionCh, moodCh); err != nil && err != context.Canceled {
 			// We ignore cancellation errors here, so as to avoid reporting
 			// a general error when the audition is merely canceled at the
 			// end of the play.
@@ -143,7 +141,7 @@ func (ap *app) startCollector(
 	ctx context.Context,
 	wg *sync.WaitGroup,
 	dataLogger *log.SecondaryLogger,
-	actionChan <-chan performedAction,
+	actionChan <-chan actionReport,
 	collectorChan <-chan observation,
 	errCh chan<- error,
 ) (cancelFunc func()) {

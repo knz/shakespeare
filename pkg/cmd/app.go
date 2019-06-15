@@ -70,7 +70,29 @@ func (ap *app) witness(ctx context.Context, format string, args ...interface{}) 
 		if len(s) > 2*width/3-3 {
 			s = s[:2*width/3-3] + "..."
 		}
-		fmt.Printf("%*s%s\n", width/3, " ", s)
+		fmt.Printf("%*s%s\n", width/3-1, " ", s)
+		/*		pad := width - len(s) - 2
+				if pad < 0 {
+					pad = 0
+				}
+				fmt.Printf("%*s%s\n", pad, " ", s)*/
+	}
+}
+
+func (ap *app) woops(ctx context.Context, format string, args ...interface{}) {
+	log.Infof(ctx, format, args...)
+	if ap.cfg.quiet {
+		return
+	}
+	s := fmt.Sprintf(format, args...)
+	width, _, err := terminal.GetSize(1 /*stdout*/)
+	if width == 0 || err != nil {
+		fmt.Println(s)
+	} else {
+		if len(s) > width/3-3 {
+			s = s[:width/3-3] + "..."
+		}
+		fmt.Printf("%*s%s\n", 2*width/3-1, " ", s)
 		/*		pad := width - len(s) - 2
 				if pad < 0 {
 					pad = 0

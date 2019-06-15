@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/errors"
 	"github.com/knz/shakespeare/pkg/crdb/log"
 )
 
@@ -22,7 +23,6 @@ func (cfg *config) parseCfg(rd *bufio.Reader) error {
 		{actorsRe, cfg.parseActors},
 		{scriptRe, cfg.parseScript},
 		{audienceRe, cfg.parseAudience},
-		{auditorsRe, cfg.parseAuditors},
 	}
 	for {
 		line, stop, skip, err := readLine(rd)
@@ -61,10 +61,6 @@ func compileRe(re string) *regexp.Regexp {
 	return regexp.MustCompile(fmt.Sprintf("(?s:%s)", re))
 }
 
-var audienceRe = compileRe(`^audience$`)
-var watchRe = compileRe(`^(?P<name>\S+)\s+watches\s+(?P<target>every\s+\S+|\S+)\s+(?P<signal>\S+)\s*$`)
-var measuresRe = compileRe(`^(?P<name>\S+)\s+measures\s+(?P<ylabel>.*)$`)
-
 // parseSection applies the given lineParser to every line inside a section,
 // and stops at the "end" keyword.
 func parseSection(rd *bufio.Reader, lineParser func(line string) error) error {
@@ -84,6 +80,11 @@ func parseSection(rd *bufio.Reader, lineParser func(line string) error) error {
 	}
 }
 
+var audienceRe = compileRe(`^audience$`)
+var watchRe = compileRe(`^(?P<name>\S+)\s+watches\s+(?P<target>every\s+\S+|\S+)\s+(?P<signal>\S+)\s*$`)
+var measuresRe = compileRe(`^(?P<name>\S+)\s+measures\s+(?P<ylabel>.*)$`)
+var auditorRe = compileRe(`^(?P<name>\S+)\s+expects\s+(?P<when>always|eventually|always eventually)\s*:\s*(?P<expr>.*)$`)
+
 func (cfg *config) parseAudience(line string) error {
 	if watchRe.MatchString(line) {
 		aName := watchRe.ReplaceAllString(line, "${name}")
@@ -98,87 +99,47 @@ func (cfg *config) parseAudience(line string) error {
 			log.Warningf(context.TODO(), "there is no actor playing role %q for audience %q to watch", r.name, aName)
 			return nil
 		}
-		isEventSignal, ok := r.getSignal(signal)
-		if !ok {
-			return fmt.Errorf("unknown signal %q for role %s: %s", signal, r.name, line)
-		}
+		a := cfg.addOrGetAudienceMember(aName)
 
-		a, ok := cfg.observers[aName]
-		if !ok {
-			a = &observer{name: aName, signals: make(map[string]*audienceSource)}
-			cfg.observers[aName] = a
+		if err := a.addOrUpdateSignalSource(r, signal, target); err != nil {
+			return errors.Wrapf(err, "while parsing: %s", line)
 		}
-		aSrc := &audienceSource{
-			origin:     target,
-			hasData:    make(map[string]bool),
-			drawEvents: isEventSignal,
-		}
-		a.signals[signal] = aSrc
 
 		for _, actor := range foundActors {
-			actor.addAudience(signal, aName)
+			actor.addObserver(signal, aName)
 		}
 	} else if measuresRe.MatchString(line) {
 		aName := measuresRe.ReplaceAllString(line, "${name}")
 		ylabel := strings.TrimSpace(measuresRe.ReplaceAllString(line, "${ylabel}"))
-		a, ok := cfg.observers[aName]
-		if !ok {
-			a = &observer{name: aName, signals: make(map[string]*audienceSource)}
-			cfg.observers[aName] = a
+		a := cfg.addOrGetAudienceMember(aName)
+		a.observer.ylabel = ylabel
+	} else if auditorRe.MatchString(line) {
+		aName := auditorRe.ReplaceAllString(line, "${name}")
+		aWhen := auditorRe.ReplaceAllString(line, "${when}")
+		aExpr := strings.TrimSpace(auditorRe.ReplaceAllString(line, "${expr}"))
+
+		a := cfg.addOrGetAudienceMember(aName)
+		if a.auditor.when != auditNone {
+			return fmt.Errorf("duplicate auditor definition: %s", line)
 		}
-		a.ylabel = ylabel
+		a.auditor.expr = aExpr
+
+		when, err := parseAuditWhen(aWhen)
+		if err != nil {
+			return errors.Wrapf(
+				errors.Wrapf(err, "auditor %q", aName),
+				"while parsing: %s", line)
+		}
+		a.auditor.when = when
+
+		if err := a.checkExpr(cfg); err != nil {
+			return errors.Wrapf(
+				errors.Wrapf(err, "auditor %q", aName),
+				"while parsing: %s", line)
+		}
 	}
+
 	return nil
-}
-
-func (cfg *config) selectActors(target string) (*role, []*actor, error) {
-	if strings.HasPrefix(target, "every ") {
-		roleName := strings.TrimPrefix(target, "every ")
-		r, ok := cfg.roles[roleName]
-		if !ok {
-			return nil, nil, fmt.Errorf("unknown role %q", roleName)
-		}
-		var res []*actor
-		for _, a := range cfg.actors {
-			if a.role != r {
-				continue
-			}
-			res = append(res, a)
-		}
-		return r, res, nil
-	}
-	act, ok := cfg.actors[target]
-	if !ok {
-		return nil, nil, fmt.Errorf("unknown actor %q", target)
-	}
-	return act.role, []*actor{act}, nil
-}
-
-func (a *actor) addAudience(sigName, audienceName string) {
-	s, ok := a.sinks[sigName]
-	if !ok {
-		s = &sink{}
-		a.sinks[sigName] = s
-	}
-	s.observers = append(s.observers, audienceName)
-}
-
-func (a *actor) addAuditor(sigName, auditorName string) {
-	s, ok := a.sinks[sigName]
-	if !ok {
-		s = &sink{}
-		a.sinks[sigName] = s
-	}
-	s.auditors = append(s.auditors, auditorName)
-}
-
-func (r *role) getSignal(signal string) (isEventSignal bool, ok bool) {
-	for _, rp := range r.resParsers {
-		if rp.name == signal {
-			return rp.typ == parseEvent, true
-		}
-	}
-	return false, false
 }
 
 var roleRe = compileRe(`^role\s+(?P<rolename>\w+)\s+is$`)
@@ -438,38 +399,6 @@ func readLine(rd *bufio.Reader) (line string, stop bool, skip bool, err error) {
 // Empty lines and comment lines are ignored.
 func ignoreLine(line string) bool {
 	return line == "" || strings.HasPrefix(line, "#")
-}
-
-var auditorsRe = compileRe(`^auditors$`)
-var auditorRe = compileRe(`^(?P<name>\S+)\s+expects\s+(?P<when>always|eventually|always eventually)\s*:\s*(?P<expr>.*)$`)
-
-func (cfg *config) parseAuditors(line string) error {
-	if auditorRe.MatchString(line) {
-		aName := auditorRe.ReplaceAllString(line, "${name}")
-		aWhen := auditorRe.ReplaceAllString(line, "${when}")
-		aExpr := strings.TrimSpace(auditorRe.ReplaceAllString(line, "${expr}"))
-
-		if _, ok := cfg.auditors[aName]; ok {
-			return fmt.Errorf("duplicate auditor definition: %s", line)
-		}
-		thisAuditor := auditor{
-			name: aName,
-			expr: aExpr,
-		}
-		cfg.auditors[aName] = &thisAuditor
-
-		when, err := parseAuditWhen(aWhen)
-		if err != nil {
-			return fmt.Errorf("auditor %q: %s: while parsing: %s", aName, err, line)
-		}
-		thisAuditor.when = when
-
-		if err := thisAuditor.checkExpr(cfg); err != nil {
-			return fmt.Errorf("auditor %q: %s: while parsing: %s", aName, err, line)
-		}
-	}
-
-	return nil
 }
 
 func parseAuditWhen(when string) (auditorWhen, error) {

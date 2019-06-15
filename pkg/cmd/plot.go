@@ -52,24 +52,39 @@ func (ap *app) plot(ctx context.Context) error {
 		// This is used to extend the y range to include all the event lines.
 		numEvents int
 	}
-	// plots is the list of all audience graphs.
-	var plots []plotgroup
+	// plotGroups is the list of all audience graphs.
+	var plotGroups []plotgroup
 
 	// Analyze the collected data, and prepare the plot specifications.
-	for _, a := range ap.cfg.observers {
-		if !a.hasData {
+	for _, a := range ap.cfg.audience {
+		if !a.observer.hasData {
 			// No data for this audience, nothing to do.
 			continue
 		}
 		// This audience has at least one plot. Prepare the group.
 		group := plotgroup{
-			ylabel: a.ylabel,
-			title:  fmt.Sprintf("audience %s", a.name),
+			ylabel: a.observer.ylabel,
+			title:  fmt.Sprintf("observer %s", a.name),
+		}
+
+		// Find the timeserie(s) to plot for the auditor.
+		if as, ok := ap.au.auditorStates[a.name]; ok && as.hasData {
+			fName := fmt.Sprintf("audit-%s.csv", a.name)
+
+			ap.narrate("observer %s found audit data: %s",
+				a.name, filepath.Join(ap.cfg.dataDir, fName))
+
+			pl := plot{fName: fName}
+
+			pl.opts = "using 1:(.87):($2==1?'😿':'') with labels font ',14'  axes x1y2"
+			group.plots = append(group.plots, pl)
+			pl.opts = fmt.Sprintf("using 1:($2==0?NaN:.8):($2==0?NaN:'%s violation') with labels hypertext point pt 17 axes x1y2", a.name)
+			group.plots = append(group.plots, pl)
 		}
 
 		// Find the timeseries to plot for the audience.
 		sigNum := 1
-		for sigName, as := range a.signals {
+		for sigName, as := range a.observer.signals {
 			// Only look at the actors watched by the audience where
 			// there was actual data received.
 			for actName := range as.hasData {
@@ -96,7 +111,7 @@ func (ap *app) plot(ctx context.Context) error {
 				group.plots = append(group.plots, pl)
 			}
 		}
-		plots = append(plots, group)
+		plotGroups = append(plotGroups, group)
 	}
 
 	// We'll write to two file named "plot.gp" and "runme.gp".
@@ -120,7 +135,7 @@ func (ap *app) plot(ctx context.Context) error {
 	fmt.Fprintf(f, "set termoption noenhanced\n")
 
 	// We want multiple plots sharing the same objects (overlays).
-	fmt.Fprintf(f, "set multiplot layout %d,1\n", len(plots)+1)
+	fmt.Fprintf(f, "set multiplot layout %d,1\n", len(plotGroups)+1)
 
 	// We force the x range to be the same for all the plots.
 	// If we did not do that, each plot may get a different x range
@@ -145,6 +160,7 @@ func (ap *app) plot(ctx context.Context) error {
 	fmt.Fprintf(f, "set yrange [0:%d]\n", numActiveActors+1)
 	fmt.Fprintf(f, "set ytics 1\n")
 	fmt.Fprintf(f, "set ylabel ''\n")
+	fmt.Fprintf(f, "set y2range [0:1]\n")
 	fmt.Fprintf(f, "set grid ytics\n")
 	fmt.Fprintf(f, "plot \\\n")
 	plotNum := 1
@@ -187,10 +203,10 @@ func (ap *app) plot(ctx context.Context) error {
 	}
 
 	// Plot the curves.
-	for _, p := range plots {
-		fmt.Fprintf(f, "set title %q\n", p.title)
-		if p.numEvents > 0 {
-			fmt.Fprintf(f, "set yrange [%d:%d]\n", 0, p.numEvents+1)
+	for _, pg := range plotGroups {
+		fmt.Fprintf(f, "set title %q\n", pg.title)
+		if pg.numEvents > 0 {
+			fmt.Fprintf(f, "set yrange [%d:%d]\n", 0, pg.numEvents+1)
 			fmt.Fprintf(f, "set grid ytics\n")
 			fmt.Fprintf(f, "set ytics 1\n")
 		} else {
@@ -198,11 +214,11 @@ func (ap *app) plot(ctx context.Context) error {
 			fmt.Fprintf(f, "set grid noytics\n")
 			fmt.Fprintf(f, "set ytics auto\n")
 		}
-		fmt.Fprintf(f, "set ylabel %q\n", p.ylabel)
+		fmt.Fprintf(f, "set ylabel %q\n", pg.ylabel)
 		fmt.Fprintln(f, `plot \`)
-		for i, pl := range p.plots {
+		for i, pl := range pg.plots {
 			fmt.Fprintf(f, "   '%s' %s t %q", pl.fName, pl.opts, pl.title)
-			if i < len(p.plots)-1 {
+			if i < len(pg.plots)-1 {
 				fmt.Fprint(f, `, \`)
 			}
 			fmt.Fprintln(f)
@@ -227,10 +243,10 @@ func (ap *app) plot(ctx context.Context) error {
 
 	// We'll generate PDF.
 	fmt.Fprintf(f2, "# auto-generated file.\n# Run 'gnuplot runme.gp' to actually generate plots.\n")
-	fmt.Fprintf(f2, "set term pdf color size 7,%d font \",6\"\n", 2*(len(plots)+1))
+	fmt.Fprintf(f2, "set term pdf color size 7,%d font \",6\"\n", 2*(len(plotGroups)+1))
 	fmt.Fprintf(f2, "set output 'plot.pdf'\n")
 	fmt.Fprintf(f2, "load 'plot.gp'\n")
-	fmt.Fprintf(f2, "set term svg mouse standalone size 600,%d dynamic font \",6\"\n", 200*(len(plots)+1))
+	fmt.Fprintf(f2, "set term svg mouse standalone size 600,%d dynamic font \",6\"\n", 200*(len(plotGroups)+1))
 	fmt.Fprintf(f2, "set output 'plot.svg'\n")
 	fmt.Fprintf(f2, "load 'plot.gp'\n")
 

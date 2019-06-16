@@ -67,23 +67,34 @@ func Run() error {
 	ap.intro()
 
 	// Run the script.
-	if err := ap.runConduct(ctx); err != nil {
-		log.Errorf(ctx, "play error: %+v", err)
-		return err
+	err := ap.runConduct(ctx)
+	if err != nil {
+		log.Errorf(ctx, "play error: %v", err)
+		// We'll exit with the error later below.
 	}
 
-	if err := ap.au.checkFinal(ctx); err != nil {
-		log.Errorf(ctx, "audit error: %+v", err)
-		return err
+	finalErr := ap.au.checkFinal(ctx)
+	if finalErr != nil {
+		log.Errorf(ctx, "audit error: %v", finalErr)
 	}
+	err = combineErrs(err, finalErr)
 
 	// Generate the plots.
-	if err := ap.plot(ctx); err != nil {
-		log.Errorf(ctx, "plot error: %+v", err)
+	plotErr := ap.plot(ctx)
+	if plotErr != nil {
+		log.Errorf(ctx, "plot error: %v", plotErr)
+	}
+	return combineErrs(err, plotErr)
+}
+
+func combineErrs(err, otherErr error) error {
+	if otherErr == nil {
 		return err
 	}
-
-	return nil
+	if err == nil {
+		return otherErr
+	}
+	return errors.WithSecondaryError(err, otherErr)
 }
 
 func (ap *app) runConduct(bctx context.Context) error {

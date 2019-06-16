@@ -116,6 +116,19 @@ func (ap *app) collect(
 					fmt.Fprintf(w, "%.4f %d\n", sinceBeginning, status)
 				}
 
+				if !ev.success {
+					ap.au.violations = append(ap.au.violations,
+						auditViolation{
+							ts:          sinceBeginning,
+							auditorName: ev.actor,
+							output:      ev.output,
+						})
+					if ap.cfg.earlyExit {
+						return errors.Mark(
+							errors.Newf("😿  %s", ev.actor), errAuditViolation)
+					}
+				}
+
 			case reportActionExec:
 				a, ok := ap.cfg.actors[ev.actor]
 				if !ok {
@@ -173,3 +186,5 @@ func (ap *app) collect(
 	}
 	return nil
 }
+
+var errAuditViolation = errors.New("audit violation")

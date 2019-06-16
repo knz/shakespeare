@@ -33,12 +33,12 @@ func (ap *app) audit(
 	for {
 		select {
 		case <-ap.stopper.ShouldStop():
-			log.Info(ctx, "interrupted")
+			log.Info(ctx, "terminated")
 			return nil
 
 		case <-ctx.Done():
-			log.Info(ctx, "canceled")
-			return ctx.Err()
+			log.Info(ctx, "interrupted")
+			return errors.WithStack(ctx.Err())
 
 		case ev := <-moodChan:
 			sinceBeginning := ev.ts.Sub(ap.au.epoch).Seconds()
@@ -211,13 +211,19 @@ func (ap *app) checkEvent(
 			ap.woops(ctx, "😿  %s: %v", auditorName, err)
 		}
 
+		// Here the point where we could suspend (not terminate!)
+		// the program if there is a violation.
+		// Note: we terminate the program in the collector,
+		// to ensure that the violation is also saved
+		// to the output (eg csv) files.
+
 		// Send the report.
 		select {
 		case <-ctx.Done():
-			log.Infof(ctx, "interrupted")
-			return ctx.Err()
+			log.Info(ctx, "interrupted")
+			return errors.WithStack(ctx.Err())
 		case <-ap.stopper.ShouldStop():
-			log.Infof(ctx, "terminated")
+			log.Info(ctx, "terminated")
 			return nil
 		case actionCh <- ev:
 			// ok

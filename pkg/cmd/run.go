@@ -237,6 +237,7 @@ func (cfg *config) initArgs(ctx context.Context) error {
 	pflag.BoolVarP(&cfg.doPrint, "print-cfg", "p", false, "print out the parsed configuration")
 	pflag.BoolVarP(&cfg.parseOnly, "dry-run", "n", false, "do not execute anything, just check the configuration")
 	pflag.BoolVarP(&cfg.quiet, "quiet", "q", false, "do not emit progress messages")
+	pflag.BoolVarP(&cfg.earlyExit, "stop-at-first-violation", "S", false, "terminate the play as soon as an auditor is dissatisfied")
 
 	// Load the go flag settings from the log package into pflag.
 	pflag.CommandLine.AddGoFlagSet(flag.CommandLine)

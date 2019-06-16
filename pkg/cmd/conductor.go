@@ -48,10 +48,12 @@ func (ap *app) conduct(ctx context.Context) (err error) {
 	// happen before the collector and the auditors start.
 	ap.au.start(ctx)
 
-	errCh := make(chan error, len(ap.cfg.actors)+3 /* +3 for audition, collector, prompter */)
+	// errCh collects errors.
+	errCh := make(chan error, len(ap.cfg.actors)+2 /* +2 for audition, collector */)
+	// closers contains the functions that terminate the workers.
+	var closers []func()
 	defer func() {
-		close(errCh)
-		err = collectErrors(ctx, errCh, "play")
+		err = collectErrors(ctx, closers, errCh, "play")
 	}()
 
 	collectorChan := make(chan observation, len(ap.cfg.actors))
@@ -60,39 +62,39 @@ func (ap *app) conduct(ctx context.Context) (err error) {
 	moodCh := make(chan moodChange, 1)
 
 	// Start the audition.
-	// The audition is running in the background.
 	var wgau sync.WaitGroup
 	auDone := ap.startAudition(ctx, &wgau, auChan, actionChan, moodCh, errCh)
-	defer func() {
+	closers = append(closers, func() {
 		log.Info(ctx, "requesting the audition to stop")
 		auDone()
 		wgau.Wait()
-	}()
+	})
 
 	// Start the collector.
-	// The collector is running in the background.
 	var wgcol sync.WaitGroup
 	colDone := ap.startCollector(ctx, &wgcol, dataLogger, actionChan, collectorChan, errCh)
-	defer func() {
+	closers = append(closers, func() {
 		log.Info(ctx, "requesting the collector to exit")
 		colDone()
 		wgcol.Wait()
-	}()
+	})
 
 	// Start the spotlights.
-	// The spotlights are running in the background until canceled
-	// via allSpotsDone().
 	var wgspot sync.WaitGroup
 	allSpotsDone := ap.startSpotlights(ctx, &wgspot, monLogger, collectorChan, auChan, errCh)
-	defer func() {
+	closers = append(closers, func() {
 		log.Info(ctx, "requesting spotlights to turn off")
 		allSpotsDone()
 		wgspot.Wait()
-	}()
+	})
 
-	// Run the prompter.
-	// The play steps will thus run in the main thread.
-	ap.runPrompter(ctx, actionChan, moodCh, errCh)
+	// Start the prompter.
+	var wgPrompt sync.WaitGroup
+	promptDone := ap.runPrompter(ctx, &wgPrompt, actionChan, moodCh, errCh)
+	closers = append(closers, func() {
+		promptDone()
+		wgPrompt.Wait()
+	})
 
 	// errors are collected by the defer above.
 	return nil
@@ -100,14 +102,22 @@ func (ap *app) conduct(ctx context.Context) (err error) {
 
 // runPrompter runs the prompter until completion.
 func (ap *app) runPrompter(
-	ctx context.Context, actionChan chan<- actionReport, moodCh chan<- moodChange, errCh chan<- error,
-) {
-	dirCtx := logtags.AddTag(ctx, "prompter", nil)
-	log.Info(dirCtx, "<intrat>")
-	if err := ap.prompt(dirCtx, actionChan, moodCh); err != nil {
-		errCh <- errors.Wrap(err, "prompter")
-	}
-	log.Info(dirCtx, "<exit>")
+	ctx context.Context,
+	wg *sync.WaitGroup,
+	actionChan chan<- actionReport,
+	moodCh chan<- moodChange,
+	errCh chan<- error,
+) func() {
+	promptCtx, promptDone := context.WithCancel(ctx)
+	promptCtx = logtags.AddTag(promptCtx, "prompter", nil)
+	wg.Add(1)
+	runWorker(promptCtx, ap.stopper, func(ctx context.Context) {
+		defer wg.Done()
+		log.Info(ctx, "<intrat>")
+		errCh <- errors.Wrap(ap.prompt(ctx, actionChan, moodCh), "prompt")
+		log.Info(ctx, "<exit>")
+	})
+	return promptDone
 }
 
 // startAudition starts the audition in the background.
@@ -125,12 +135,12 @@ func (ap *app) startAudition(
 	runWorker(auCtx, ap.stopper, func(ctx context.Context) {
 		defer wg.Done()
 		log.Info(ctx, "<begins>")
-		if err := ap.audit(ctx, auChan, actionCh, moodCh); err != nil && err != context.Canceled {
-			// We ignore cancellation errors here, so as to avoid reporting
-			// a general error when the audition is merely canceled at the
-			// end of the play.
-			errCh <- errors.Wrap(err, "audition")
+		err := errors.Wrap(ap.audit(ctx, auChan, actionCh, moodCh), "audition")
+		if errors.Is(err, context.Canceled) {
+			// It's ok if the audition is canceled.
+			err = nil
 		}
+		errCh <- err
 		log.Info(ctx, "<ends>")
 	})
 	return auDone
@@ -151,12 +161,12 @@ func (ap *app) startCollector(
 	runWorker(colCtx, ap.stopper, func(ctx context.Context) {
 		defer wg.Done()
 		log.Info(ctx, "<intrat>")
-		if err := ap.collect(ctx, dataLogger, actionChan, collectorChan); err != nil && err != context.Canceled {
-			// We ignore cancellation errors here, so as to avoid reporting
-			// a general error when the collector is merely canceled at the
-			// end of the play.
-			errCh <- errors.Wrap(err, "collector")
+		err := errors.Wrap(ap.collect(ctx, dataLogger, actionChan, collectorChan), "collector")
+		if errors.Is(err, context.Canceled) {
+			// It's ok if the collector is canceled.
+			err = nil
 		}
+		errCh <- err
 		log.Info(ctx, "<exit>")
 	})
 	return colDone
@@ -185,12 +195,14 @@ func (ap *app) startSpotlights(
 		runWorker(spotCtx, ap.stopper, func(ctx context.Context) {
 			defer wg.Done()
 			log.Info(spotCtx, "<shining>")
-			if err := ap.spotlight(ctx, a, monLogger, collectorChan, auChan); err != nil && err != context.Canceled {
-				// We ignore cancellation errors here, so as to avoid reporting
-				// a general error when a spotlight is merely canceled at the
-				// end of the play.
-				errCh <- errors.Wrapf(err, "%s [%s]", a.role.name, a.name)
+			err := errors.Wrapf(
+				ap.spotlight(ctx, a, monLogger, collectorChan, auChan),
+				"%s [%s]", a.role.name, a.name)
+			if errors.Is(err, context.Canceled) {
+				// It's ok if a sportlight is canceled.
+				err = nil
 			}
+			errCh <- err
 			log.Info(ctx, "<off>")
 		})
 	}
@@ -203,9 +215,19 @@ func (ap *app) runCleanup(ctx context.Context) error {
 
 func (ap *app) runForAllActors(
 	ctx context.Context, prefix string, getCommand func(a *actor) cmd,
-) error {
+) (err error) {
+	// errCh collects the errors from the concurrent actors.
 	errCh := make(chan error, len(ap.cfg.actors))
+
+	defer func() {
+		// At the end of the scene, make runScene() return the collected
+		// errors.
+		err = collectErrors(ctx, nil, errCh, prefix)
+	}()
+
 	var wg sync.WaitGroup
+	defer func() { wg.Wait() }()
+
 	for actName, thisActor := range ap.cfg.actors {
 		pCmd := getCommand(thisActor)
 		if pCmd == "" {
@@ -221,24 +243,45 @@ func (ap *app) runForAllActors(
 			defer wg.Done()
 			// Start one actor.
 			log.Info(ctx, "<start>")
-			if _, _, err := a.runActorCommand(ctx, ap.stopper, 10*time.Second, false /*interruptible*/, pCmd); err != nil {
-				errCh <- errors.Wrapf(err, "%s %s", a.role.name, a.name)
-			}
+			_, _, err := a.runActorCommand(ctx, ap.stopper, 10*time.Second, false /*interruptible*/, pCmd)
+			errCh <- errors.Wrapf(err, "%s %s", a.role.name, a.name)
 			log.Info(ctx, "<done>")
 		})
 	}
-	wg.Wait()
 
-	close(errCh)
-	return collectErrors(ctx, errCh, prefix)
+	// errors are collected by the defer above.
+	return nil
 }
 
-func collectErrors(ctx context.Context, errCh <-chan error, prefix string) error {
+func collectErrors(
+	ctx context.Context, closers []func(), errCh chan error, prefix string,
+) (err error) {
+	// Wait on at least one error return.
+	select {
+	case err = <-errCh:
+	}
+	if err != nil {
+		log.Errorf(ctx, "complaint during %s: %+v", prefix, err)
+	}
+	// Signal all to terminate.
+	for _, closer := range closers {
+		closer()
+	}
+	// At this point all have terminate. Ensure the loop below
+	// terminates in all cases.
+	close(errCh)
+
 	numErr := 0
-	err := errors.New("collected errors")
 	for stErr := range errCh {
+		if stErr == nil {
+			continue
+		}
 		log.Errorf(ctx, "complaint during %s: %+v", prefix, stErr)
-		err = errors.WithSecondaryError(err, stErr)
+		if err == nil {
+			err = stErr
+		} else {
+			err = errors.WithSecondaryError(err, stErr)
+		}
 		numErr++
 	}
 	if numErr > 0 {

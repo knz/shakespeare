@@ -58,9 +58,9 @@ func (a *actor) runActorCommand(
 		case <-complete:
 			return
 		case <-stopRequested:
-			log.Info(ctx, "interrupted")
+			log.Info(ctx, "terminated")
 		case <-ctx.Done():
-			log.Info(ctx, "canceled")
+			log.Info(ctx, "interrupted")
 		}
 		proc := cmd.Process
 		if proc != nil {
@@ -73,7 +73,7 @@ func (a *actor) runActorCommand(
 	// Run the command and collect its output.
 	outdataB, err := cmd.CombinedOutput()
 	outdata = string(outdataB)
-	log.Infof(ctx, "done\n%s\n-- %s", outdata, cmd.ProcessState)
+	log.Infof(ctx, "done\n%s\n-- %s (%v)", outdata, cmd.ProcessState, err)
 	return outdata, cmd.ProcessState, err
 }
 

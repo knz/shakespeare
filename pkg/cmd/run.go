@@ -233,7 +233,7 @@ func (ap *app) runConduct(bctx context.Context) error {
 
 func (cfg *config) initArgs(ctx context.Context) error {
 	cfg.shellPath = os.Getenv("SHELL")
-	pflag.StringVar(&cfg.dataDir, "output-dir", ".", "output data directory")
+	pflag.StringVarP(&cfg.dataDir, "output-dir", "o", ".", "output data directory")
 	pflag.BoolVarP(&cfg.doPrint, "print-cfg", "p", false, "print out the parsed configuration")
 	pflag.BoolVarP(&cfg.parseOnly, "dry-run", "n", false, "do not execute anything, just check the configuration")
 	pflag.BoolVarP(&cfg.quiet, "quiet", "q", false, "do not emit progress messages")

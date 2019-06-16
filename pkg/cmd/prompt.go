@@ -36,7 +36,6 @@ func (ap *app) prompt(
 		toWait := scene.waitUntil - elapsed
 		if toWait > 0 {
 			log.Infof(sceneCtx, "at %.4fs, waiting for %.4fs", elapsed.Seconds(), toWait.Seconds())
-		} else {
 		}
 
 		// Now wait for that time. Note: we have to fire a timer in any
@@ -45,11 +44,11 @@ func (ap *app) prompt(
 		tm := time.After(toWait)
 		select {
 		case <-ap.stopper.ShouldStop():
-			log.Info(sceneCtx, "interrupted")
+			log.Info(sceneCtx, "terminated")
 			return nil
 		case <-ctx.Done():
-			log.Info(sceneCtx, "canceled")
-			return ctx.Err()
+			log.Info(sceneCtx, "interrupted")
+			return errors.WithStack(ctx.Err())
 		case <-tm:
 			// Wait.
 		}
@@ -69,16 +68,20 @@ func (ap *app) prompt(
 		ap.narrate("scene %d (~%ds in%s):", sceneNum, int(elapsed.Seconds()), extraMsg)
 
 		// Now run the scene.
-		if err := ap.runScene(sceneCtx, scene.concurrentLines, actionChan, moodCh); err != nil {
-			return err
-		}
+		err := ap.runScene(sceneCtx, scene.concurrentLines, actionChan, moodCh)
 
+		// In any case, make a statement about the duration.
 		if ap.cfg.tempo != 0 {
 			sceneDur := timeutil.Now().Sub(sceneTime).Seconds()
 			if sceneDur >= surpriseDur {
 				ap.narrate("woah! scene %d lasted %.1fx longer than expected!",
 					sceneNum, sceneDur/ap.cfg.tempo.Seconds())
 			}
+		}
+
+		// If there was an error, return it.
+		if err != nil {
+			return err
 		}
 	}
 
@@ -88,25 +91,20 @@ func (ap *app) prompt(
 // runScene runs one scene.
 // A scene is the concurrent execution of each actor's lines.
 func (ap *app) runScene(
-	ctx context.Context,
-	lines []scriptLine,
-	actionChan chan<- actionReport,
-	moodCh chan<- moodChange,
+	ctx context.Context, lines []scriptLine, actionChan chan<- actionReport, moodCh chan<- moodChange,
 ) (err error) {
 	// errCh collects the errors from the concurrent actors.
 	errCh := make(chan error, len(lines))
+
 	defer func() {
 		// At the end of the scene, make runScene() return the collected
 		// errors.
-		close(errCh)
-		err = collectErrors(ctx, errCh, "prompt")
+		err = collectErrors(ctx, nil, errCh, "prompt")
 	}()
 
 	// There is a barrier at the end of the scene.
 	var wg sync.WaitGroup
-	defer func() {
-		wg.Wait()
-	}()
+	defer func() { wg.Wait() }()
 
 	for _, line := range lines {
 		// Start the scene for this actor.
@@ -120,18 +118,13 @@ func (ap *app) runScene(
 		// point, the task won't even start.
 		if err := runAsyncTask(lineCtx, ap.stopper, func(ctx context.Context) {
 			defer wg.Done()
-			if err := ap.runLine(ctx, a, steps, actionChan, moodCh); err != nil {
-				errCh <- errors.Wrapf(err, "%s %s", a.role.name, a.name)
-			}
+			errCh <- ap.runLine(ctx, a, steps, actionChan, moodCh)
 		}); err != nil {
 			// runAsyncTask() returns err when the task hasn't
 			// started. However, we still need to wait on the sync group, so
 			// we have to signal the task was given up.
 			wg.Done()
-			if err != stop.ErrUnavailable {
-				// that should never happen, but just in case report it.
-				errCh <- errors.Wrap(err, "stopper")
-			}
+			errCh <- errors.Wrap(err, "stopper")
 		}
 	}
 
@@ -186,11 +179,11 @@ func (a *actor) reportActionEvent(
 ) error {
 	select {
 	case <-stopper.ShouldStop():
-		log.Info(ctx, "interrupted")
+		log.Info(ctx, "terminated")
 		return nil
 	case <-ctx.Done():
-		log.Info(ctx, "canceled")
-		return ctx.Err()
+		log.Info(ctx, "interrupted")
+		return errors.WithStack(ctx.Err())
 	case actionChan <- ev:
 		// ok
 	}
@@ -202,11 +195,11 @@ func (a *actor) reportMoodEvent(
 ) error {
 	select {
 	case <-stopper.ShouldStop():
-		log.Info(ctx, "interrupted")
+		log.Info(ctx, "terminated")
 		return nil
 	case <-ctx.Done():
-		log.Info(ctx, "canceled")
-		return ctx.Err()
+		log.Info(ctx, "interrupted")
+		return errors.WithStack(ctx.Err())
 	case moodCh <- chg:
 		// ok
 	}
@@ -227,7 +220,7 @@ func (a *actor) runAction(
 	actEnd := timeutil.Now()
 
 	dur := actEnd.Sub(actStart)
-	log.Infof(ctx, "%q done (%s)\n%s-- %s", action, dur, outdata, ps)
+	log.Infof(ctx, "%q done (%s)\n%s-- %s (%v)", action, dur, outdata, ps, err)
 
 	if _, ok := err.(*exec.ExitError); err != nil && !ok {
 		return actionReport{}, err

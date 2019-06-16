@@ -16,6 +16,8 @@ type config struct {
 	doPrint bool
 	// Whether to stop after parsing and compiling the configuration.
 	parseOnly bool
+	// Whether to stop upon the first audit violation.
+	earlyExit bool
 	// Whether to silence logging.
 	quiet bool
 	// The artifacts sub-directory (always "artifacts" relative to datadir).
@@ -302,20 +304,14 @@ func (w auditorWhen) String() string {
 }
 
 type auditorState struct {
-	hasData    bool
-	history    []auditorEvent
-	violations []auditorViolation
+	hasData bool
+	history []auditorEvent
 }
 
 type auditorEvent struct {
 	evTime float64
 	value  interface{}
 	err    error
-}
-
-type auditorViolation struct {
-	startTime float64
-	endTime   float64
 }
 
 type moodPeriod struct {
@@ -335,6 +331,13 @@ type audition struct {
 	auditorStates map[string]*auditorState
 	curVals       map[string]interface{}
 	activations   map[exprVar]struct{}
+	violations    []auditViolation
+}
+
+type auditViolation struct {
+	ts          float64
+	auditorName string
+	output      string
 }
 
 // selectActors selects the actors (and the role) matching

@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"html"
@@ -231,4 +232,27 @@ func (ap *app) checkEvent(
 	}
 
 	return nil
+}
+
+var errAuditViolation = errors.New("audit violation")
+
+func (ap *app) checkAuditViolations() error {
+	if len(ap.au.violations) == 0 {
+		// No violation, nothing to do.
+		return nil
+	}
+
+	var buf bytes.Buffer
+	fmt.Fprintf(&buf, "%d audit violations:\n", len(ap.au.violations))
+	comma := ""
+	for _, v := range ap.au.violations {
+		buf.WriteString(comma)
+		comma = "\n"
+		fmt.Fprintf(&buf, "😿  %s (at ~%.2fs", v.auditorName, v.ts)
+		if v.output != "" {
+			fmt.Fprintf(&buf, ", %s", v.output)
+		}
+		buf.WriteByte(')')
+	}
+	return errors.Mark(errors.New(buf.String()), errAuditViolation)
 }

@@ -58,7 +58,12 @@ func (ap *app) collect(
 	dataLogger *log.SecondaryLogger,
 	actionChan <-chan actionReport,
 	collectorChan <-chan observation,
-) error {
+) (err error) {
+	defer func() {
+		auditErr := ap.checkAuditViolations()
+		err = combineErrs(err, auditErr)
+	}()
+
 	of := newOutputFiles()
 	defer func() {
 		of.CloseAll()
@@ -75,7 +80,7 @@ func (ap *app) collect(
 
 		case <-ctx.Done():
 			log.Info(ctx, "canceled")
-			return ctx.Err()
+			return errors.WithStack(ctx.Err())
 
 		case <-t.C:
 			t.Read = true
@@ -124,8 +129,8 @@ func (ap *app) collect(
 							output:      ev.output,
 						})
 					if ap.cfg.earlyExit {
-						return errors.Mark(
-							errors.Newf("😿  %s", ev.actor), errAuditViolation)
+						// the defer above will catch the violation.
+						return nil
 					}
 				}
 
@@ -186,5 +191,3 @@ func (ap *app) collect(
 	}
 	return nil
 }
-
-var errAuditViolation = errors.New("audit violation")

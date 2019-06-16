@@ -31,11 +31,7 @@ func (ap *app) conduct(ctx context.Context) (err error) {
 		if cleanupErr := ap.runCleanup(ctx); cleanupErr != nil {
 			// Error during cleanup. runCleanup already
 			// printed out the details via log.Errorf.
-			if err == nil {
-				// We only propagate the cleanup error as final error
-				// if there was no error yet.
-				err = cleanupErr
-			}
+			err = combineErrs(err, cleanupErr)
 		}
 	}()
 

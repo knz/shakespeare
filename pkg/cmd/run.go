@@ -72,6 +72,9 @@ func Run() error {
 		log.Errorf(ctx, "play error: %v", err)
 		// We'll exit with the error later below.
 	}
+	if !errors.Is(err, errAuditViolation) {
+		err = combineErrs(err, ap.checkAuditViolations())
+	}
 
 	finalErr := ap.au.checkFinal(ctx)
 	if finalErr != nil {

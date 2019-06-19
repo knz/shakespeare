@@ -29,20 +29,20 @@ func Run() error {
 	cfg := newConfig()
 	if err := cfg.initArgs(ctx); err != nil {
 		log.Errorf(ctx, "arg error: %+v", err)
-		return err
+		return errors.WithDetail(err, "(while parsing the command line)")
 	}
 
 	// Initialize the logging sub-system.
 	if err := cfg.setupLogging(ctx); err != nil {
 		log.Errorf(ctx, "init error: %+v", err)
-		return err
+		return errors.WithDetail(err, "(while initializing the logging subsystem)")
 	}
 
 	// Read the scenario.
 	rd := bufio.NewReader(os.Stdin)
 	if err := cfg.parseCfg(rd); err != nil {
 		log.Errorf(ctx, "parse error: %+v", err)
-		return err
+		return errors.WithDetail(err, "(while parsing the specification)")
 	}
 	if cfg.doPrint {
 		cfg.printCfg()
@@ -51,8 +51,9 @@ func Run() error {
 	// Generate the steps.
 	if err := cfg.compile(); err != nil {
 		log.Errorf(ctx, "compile error: %+v", err)
-		return err
+		return errors.WithDetail(err, "(while compiling the script)")
 	}
+
 	if cfg.doPrint {
 		cfg.printSteps()
 	}
@@ -69,8 +70,9 @@ func Run() error {
 	// Run the script.
 	err := ap.runConduct(ctx)
 	if err != nil {
-		log.Errorf(ctx, "play error: %v", err)
+		log.Errorf(ctx, "play error: %+v", err)
 		// We'll exit with the error later below.
+		err = errors.WithDetail(err, "(while conducting the play)")
 	}
 	if !errors.Is(err, errAuditViolation) {
 		err = errors.CombineErrors(err, ap.checkAuditViolations())
@@ -78,7 +80,8 @@ func Run() error {
 
 	finalErr := ap.au.checkFinal(ctx)
 	if finalErr != nil {
-		log.Errorf(ctx, "audit error: %v", finalErr)
+		log.Errorf(ctx, "audit error: %+v", finalErr)
+		finalErr = errors.WithDetail(finalErr, "(while finalizing the audit)")
 	}
 	err = errors.CombineErrors(err, finalErr)
 

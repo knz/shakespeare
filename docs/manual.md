@@ -50,7 +50,7 @@ more characters in a play.
 A role definition is defined as follows:
 
 ```
-role <name> is
+role <name> [extends <name>]
   # zero or more action definition:
   [ :<name>  <cmd> ] ...
 
@@ -65,9 +65,9 @@ role <name> is
 end
 ```
 
-The `role` keyword followed by a role name, the `is` keyword and
-the various role specification directives.
-The section ends with the keyword `end` on its own line.
+The `role` keyword followed by a role name, an optional `extends`
+directive, followed by the various role specification directives.  The
+section ends with the keyword `end` on its own line.
 
 ### Semantics
 

@@ -12,11 +12,11 @@ end
 parse
 include inctest1.cfg
 ----
-role doctor is
+role doctor
   signal cures event at (?P<ts_now>)(?P<event>.*)
   :cure echo cured
 end
-role empty is
+role empty
 end
 cast
   bob plays doctor

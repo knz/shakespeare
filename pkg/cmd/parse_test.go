@@ -19,11 +19,13 @@ func TestParse(t *testing.T) {
 			return
 		}
 		datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
+			// First round of parse.
 			rd, err := newReaderFromString("<testdata>", d.Input)
-			rd.includePath = includePath
 			if err != nil {
 				t.Fatal(err)
 			}
+			rd.includePath = includePath
+			defer rd.close()
 			cfg := newConfig()
 			if err := cfg.parseCfg(context.TODO(), rd); err != nil {
 				return fmt.Sprintf("parse error: %s\n", renderError(err))
@@ -35,6 +37,37 @@ func TestParse(t *testing.T) {
 					return fmt.Sprintf("compile error: %s\n", renderError(err))
 				}
 				cfg.printSteps(&out)
+			}
+
+			if out.String() != d.Expected {
+				// Shortcut, don't even bother parsing a second time.
+				return out.String()
+			}
+
+			// Second round of parse.
+			rd2, err := newReaderFromString("<testdata-reparse>", out.String())
+			if err != nil {
+				t.Fatal(err)
+			}
+			rd2.includePath = includePath
+			cfg = newConfig()
+			if err := cfg.parseCfg(context.TODO(), rd2); err != nil {
+				t.Fatalf("reparse error: %s\n", renderError(err))
+			}
+			var out2 bytes.Buffer
+			cfg.printCfg(&out2)
+
+			if len(cfg.stanzas) > 0 {
+				if err := cfg.compile(); err != nil {
+					t.Fatalf("compile error after reparse: %s\n", renderError(err))
+				}
+				cfg.printSteps(&out2)
+			}
+			if out.String() != out2.String() {
+				t.Errorf("parse/print is not idempotent; got:\n%s\nexpected:\n%s",
+					strings.ReplaceAll(out2.String(), "\n", "\n  "),
+					strings.ReplaceAll(out.String(), "\n", "\n  "),
+				)
 			}
 			return out.String()
 		})

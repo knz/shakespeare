@@ -34,7 +34,9 @@ func (cfg *config) parseCfg(ctx context.Context, rd *reader) error {
 			// The "role" syntax is special because the role name
 			// is listed in the heading line.
 			roleName := roleRe.ReplaceAllString(line, "${rolename}")
-			if err := cfg.parseRole(ctx, rd, roleName); err != nil {
+			extends := strings.TrimSpace(roleRe.ReplaceAllString(line, "${extends}"))
+			extends = strings.TrimSpace(strings.TrimPrefix(extends, "extends"))
+			if err := cfg.parseRole(ctx, rd, roleName, extends); err != nil {
 				// Error is already decoded by parseSection called by parseRole.
 				return err
 			}
@@ -142,20 +144,32 @@ func (cfg *config) parseAudience(line string) error {
 	return nil
 }
 
-var roleRe = compileRe(`^role\s+(?P<rolename>\w+)\s+is$`)
+var roleRe = compileRe(`^role\s+(?P<rolename>\w+)(?P<extends>(?:\s+extends\s+\w+)?)\s*$`)
 var actionDefRe = compileRe(`^:(?P<actionname>\w+)\s+(?P<cmd>.*)$`)
 var spotlightDefRe = compileRe(`^spotlight\s+(?P<cmd>.*)$`)
 var cleanupDefRe = compileRe(`^cleanup\s+(?P<cmd>.*)$`)
 var parseDefRe = compileRe(`^signal\s+(?P<name>\S+)\s+(?P<type>\S+)\s+at\s+(?P<re>.*)$`)
 
-func (cfg *config) parseRole(ctx context.Context, rd *reader, roleName string) error {
+func (cfg *config) parseRole(
+	ctx context.Context, rd *reader, roleName string, extends string,
+) error {
 	if _, ok := cfg.roles[roleName]; ok {
 		return fmt.Errorf("duplicate role definition: %s", roleName)
 	}
 
+	var thisRole *role
+	if extends != "" {
+		parentRole, ok := cfg.roles[extends]
+		if !ok {
+			return fmt.Errorf("unknown role: %s", extends)
+		}
+		thisRole = parentRole.clone(roleName)
+	} else {
+		thisRole = &role{name: roleName, actionCmds: make(map[string]cmd)}
+	}
+
 	parserNames := make(map[string]struct{})
-	thisRole := role{name: roleName, actionCmds: make(map[string]cmd)}
-	cfg.roles[roleName] = &thisRole
+	cfg.roles[roleName] = thisRole
 	cfg.roleNames = append(cfg.roleNames, roleName)
 
 	return parseSection(ctx, rd, func(line string) error {

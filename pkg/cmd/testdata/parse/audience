@@ -5,7 +5,7 @@ audience
   condice watches alice cures
 end
 ----
-role doctor is
+role doctor
   signal cures event at (?P<ts_now>)(?P<event>.*)
   :cure echo cured
 end
@@ -32,7 +32,7 @@ audience
   condice watches every doctor cures
 end
 ----
-role doctor is
+role doctor
   signal cures event at (?P<ts_now>)(?P<event>.*)
   :cure echo cured
 end
@@ -61,7 +61,7 @@ audience
   condice watches bob cures
 end
 ----
-role doctor is
+role doctor
   signal cures event at (?P<ts_now>)(?P<event>.*)
   :cure echo cured
 end
@@ -90,7 +90,7 @@ audience
   condice watches alice cures
 end
 ----
-role doctor is
+role doctor
   signal cures event at (?P<ts_now>)(?P<event>.*)
   :cure echo cured
 end

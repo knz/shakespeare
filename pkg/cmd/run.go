@@ -73,31 +73,22 @@ func Run() error {
 		// We'll exit with the error later below.
 	}
 	if !errors.Is(err, errAuditViolation) {
-		err = combineErrs(err, ap.checkAuditViolations())
+		err = errors.CombineErrors(err, ap.checkAuditViolations())
 	}
 
 	finalErr := ap.au.checkFinal(ctx)
 	if finalErr != nil {
 		log.Errorf(ctx, "audit error: %v", finalErr)
 	}
-	err = combineErrs(err, finalErr)
+	err = errors.CombineErrors(err, finalErr)
 
 	// Generate the plots.
 	plotErr := ap.plot(ctx)
 	if plotErr != nil {
-		log.Errorf(ctx, "plot error: %v", plotErr)
+		log.Errorf(ctx, "plot error: %+v", plotErr)
+		plotErr = errors.WithDetail(plotErr, "(while plotting the data)")
 	}
-	return combineErrs(err, plotErr)
-}
-
-func combineErrs(err, otherErr error) error {
-	if otherErr == nil {
-		return err
-	}
-	if err == nil {
-		return otherErr
-	}
-	return errors.WithSecondaryError(err, otherErr)
+	return errors.CombineErrors(err, plotErr)
 }
 
 func (ap *app) runConduct(bctx context.Context) error {

@@ -31,7 +31,7 @@ func (ap *app) conduct(ctx context.Context) (err error) {
 		if cleanupErr := ap.runCleanup(ctx); cleanupErr != nil {
 			// Error during cleanup. runCleanup already
 			// printed out the details via log.Errorf.
-			err = combineErrs(err, cleanupErr)
+			err = errors.CombineErrors(err, cleanupErr)
 		}
 	}()
 

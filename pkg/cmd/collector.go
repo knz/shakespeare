@@ -178,7 +178,7 @@ func (ap *app) collect(
 
 				w, err := of.getWriter(fName)
 				if err != nil {
-					return errors.Wrapf(err, "opening %q: %+v", fName)
+					return errors.Wrapf(err, "opening %q", fName)
 				}
 				// shuffle is a random value between [-.25, +.25] used to randomize event plots.
 				shuffle := (.5 * rand.Float64()) - .25

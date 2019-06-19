@@ -61,7 +61,7 @@ func (ap *app) collect(
 ) (err error) {
 	defer func() {
 		auditErr := ap.checkAuditViolations()
-		err = combineErrs(err, auditErr)
+		err = errors.CombineErrors(err, auditErr)
 	}()
 
 	of := newOutputFiles()

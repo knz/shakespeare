@@ -64,7 +64,7 @@ func TestParse(t *testing.T) {
 				cfg.printSteps(&out2)
 			}
 			if out.String() != out2.String() {
-				t.Errorf("parse/print is not idempotent; got:\n%s\nexpected:\n%s",
+				t.Errorf("parse/print is not idempotent; got:\n  %s\nexpected:\n  %s",
 					strings.ReplaceAll(out2.String(), "\n", "\n  "),
 					strings.ReplaceAll(out.String(), "\n", "\n  "),
 				)

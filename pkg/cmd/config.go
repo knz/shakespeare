@@ -96,7 +96,8 @@ func (cfg *config) printCfg(w io.Writer) {
 			for _, rp := range r.resParsers {
 				fmt.Fprintf(w, "  signal %s\n", rp.String())
 			}
-			for actName, a := range r.actionCmds {
+			for _, actName := range r.actionNames {
+				a := r.actionCmds[actName]
 				fmt.Fprintf(w, "  :%s %s\n", actName, a)
 			}
 			fmt.Fprintln(w, "end")

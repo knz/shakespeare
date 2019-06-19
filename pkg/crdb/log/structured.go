@@ -20,7 +20,7 @@ import (
 	"strings"
 
 	"github.com/knz/shakespeare/pkg/crdb/caller"
-	"github.com/knz/shakespeare/pkg/crdb/log/logtags"
+	"github.com/cockroachdb/logtags"
 )
 
 // FormatTags appends the tags to a strings.Builder. If there are no tags,

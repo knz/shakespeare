@@ -1,8 +1,23 @@
 parse
+audience
+  condice expects always: t < 10
+end
+----
+# no roles defined
+# no cast defined
+script
+  tempo 1s
+  # no stanzas defined, play will terminate immediately
+end
+audience
+  condice expects always: t < 10
+end
+
+parse
 include doctor.cfg
 include medical_cast.cfg
 audience
-  condice expects always: t < 10
+  condice expects always: [alice.cures] =~ "cures"
 end
 ----
 role doctor
@@ -12,6 +27,8 @@ end
 cast
   alice plays doctor
   # alice plays from working directory alice
+  # alice cures are watched by audience [condice]
+  # alice cures are checked by auditors [condice]
   bob plays doctor(with_a_hat)
   # bob plays from working directory bob
 end
@@ -20,5 +37,6 @@ script
   # no stanzas defined, play will terminate immediately
 end
 audience
-  condice expects always: t < 10
+  condice watches alice cures
+  condice expects always: [alice.cures] =~ "cures"
 end

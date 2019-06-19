@@ -24,6 +24,8 @@ type config struct {
 	artifactsDir string
 	// The path to the unix shell used to execute script commands.
 	shellPath string
+	// The list of directory to search for includes.
+	includePath []string
 
 	// roles is the set of roles defined by the configuration.
 	// This is populated during parsing.

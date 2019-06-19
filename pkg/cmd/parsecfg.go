@@ -1,10 +1,8 @@
 package cmd
 
 import (
-	"bufio"
 	"context"
 	"fmt"
-	"io"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -15,7 +13,7 @@ import (
 )
 
 // parseCfg parses a configuration from the given buffered input.
-func (cfg *config) parseCfg(rd *bufio.Reader) error {
+func (cfg *config) parseCfg(ctx context.Context, rd *reader) error {
 	topLevelParsers := []struct {
 		headerRe *regexp.Regexp
 		parseFn  func(line string) error
@@ -25,7 +23,7 @@ func (cfg *config) parseCfg(rd *bufio.Reader) error {
 		{audienceRe, cfg.parseAudience},
 	}
 	for {
-		line, stop, skip, err := readLine(rd)
+		line, pos, stop, skip, err := rd.readLine(ctx)
 		if err != nil || stop {
 			return err
 		} else if skip {
@@ -36,7 +34,8 @@ func (cfg *config) parseCfg(rd *bufio.Reader) error {
 			// The "role" syntax is special because the role name
 			// is listed in the heading line.
 			roleName := roleRe.ReplaceAllString(line, "${rolename}")
-			if err := cfg.parseRole(rd, roleName); err != nil {
+			if err := cfg.parseRole(ctx, rd, roleName); err != nil {
+				// Error is already decoded by parseSection called by parseRole.
 				return err
 			}
 		} else {
@@ -45,13 +44,14 @@ func (cfg *config) parseCfg(rd *bufio.Reader) error {
 			for _, parser := range topLevelParsers {
 				if parser.headerRe.MatchString(line) {
 					foundParser = true
-					if err := parseSection(rd, parser.parseFn); err != nil {
+					if err := parseSection(ctx, rd, parser.parseFn); err != nil {
+						// Error is already decorated by parseSection.
 						return err
 					}
 				}
 			}
 			if !foundParser {
-				return fmt.Errorf("unknown syntax: %s", line)
+				return pos.wrapErr(fmt.Errorf("unknown syntax: %s", line))
 			}
 		}
 	}
@@ -63,9 +63,9 @@ func compileRe(re string) *regexp.Regexp {
 
 // parseSection applies the given lineParser to every line inside a section,
 // and stops at the "end" keyword.
-func parseSection(rd *bufio.Reader, lineParser func(line string) error) error {
+func parseSection(ctx context.Context, rd *reader, lineParser func(line string) error) error {
 	for {
-		line, stop, skip, err := readLine(rd)
+		line, pos, stop, skip, err := rd.readLine(ctx)
 		if err != nil || stop {
 			return err
 		} else if skip {
@@ -75,7 +75,7 @@ func parseSection(rd *bufio.Reader, lineParser func(line string) error) error {
 			return nil
 		}
 		if err := lineParser(line); err != nil {
-			return err
+			return pos.wrapErr(err)
 		}
 	}
 }
@@ -148,7 +148,7 @@ var spotlightDefRe = compileRe(`^spotlight\s+(?P<cmd>.*)$`)
 var cleanupDefRe = compileRe(`^cleanup\s+(?P<cmd>.*)$`)
 var parseDefRe = compileRe(`^signal\s+(?P<name>\S+)\s+(?P<type>\S+)\s+at\s+(?P<re>.*)$`)
 
-func (cfg *config) parseRole(rd *bufio.Reader, roleName string) error {
+func (cfg *config) parseRole(ctx context.Context, rd *reader, roleName string) error {
 	if _, ok := cfg.roles[roleName]; ok {
 		return fmt.Errorf("duplicate role definition: %s", roleName)
 	}
@@ -157,7 +157,7 @@ func (cfg *config) parseRole(rd *bufio.Reader, roleName string) error {
 	thisRole := role{name: roleName, actionCmds: make(map[string]cmd)}
 	cfg.roles[roleName] = &thisRole
 
-	return parseSection(rd, func(line string) error {
+	return parseSection(ctx, rd, func(line string) error {
 		if actionDefRe.MatchString(line) {
 			aName := actionDefRe.ReplaceAllString(line, "${actionname}")
 			aCmd := actionDefRe.ReplaceAllString(line, "${cmd}")
@@ -361,44 +361,6 @@ func (cfg *config) parseScript(line string) error {
 		return fmt.Errorf("unknown syntax: %s", line)
 	}
 	return nil
-}
-
-// readLine reads a logical line of specification. It may be split
-// across multiple input lines using backslashes.
-func readLine(rd *bufio.Reader) (line string, stop bool, skip bool, err error) {
-	for {
-		var oneline string
-		oneline, err = rd.ReadString('\n')
-		if err != nil && err != io.EOF {
-			return "", true, false, err
-		}
-		if strings.HasSuffix(oneline, "\\\n") {
-			line += oneline
-			continue
-		}
-		oneline = strings.TrimSuffix(oneline, "\n")
-		if err == io.EOF && line != "" {
-			return "", true, false, fmt.Errorf("EOF encountered while expecting line continuation")
-		}
-		line += oneline
-		break
-	}
-
-	line = strings.TrimSpace(line)
-	if err == io.EOF && ignoreLine(line) {
-		return "", true, false, nil
-	}
-
-	if ignoreLine(line) {
-		return "", false, true, nil
-	}
-
-	return line, false, false, nil
-}
-
-// Empty lines and comment lines are ignored.
-func ignoreLine(line string) bool {
-	return line == "" || strings.HasPrefix(line, "#")
 }
 
 func parseAuditWhen(when string) (auditorWhen, error) {

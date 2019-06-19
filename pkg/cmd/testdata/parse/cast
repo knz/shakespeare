@@ -18,7 +18,7 @@ cast
   bob plays doctor(with_a_hat)
 end
 ----
-role doctor is
+role doctor
   signal cures event at (?P<ts_now>)(?P<event>.*)
   :cure echo cured
 end

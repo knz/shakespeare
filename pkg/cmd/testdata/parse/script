@@ -69,7 +69,7 @@ script
   prompt bob   c...c.
 end
 ----
-role doctor is
+role doctor
   signal cures event at (?P<ts_now>)(?P<event>.*)
   :cure echo cured
 end
@@ -115,7 +115,7 @@ script
   prompt every doctor ......
 end
 ----
-role doctor is
+role doctor
   signal cures event at (?P<ts_now>)(?P<event>.*)
   :cure echo cured
 end

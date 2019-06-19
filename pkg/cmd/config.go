@@ -86,7 +86,7 @@ func (cfg *config) printCfg(w io.Writer) {
 	} else {
 		for _, rn := range cfg.roleNames {
 			r := cfg.roles[rn]
-			fmt.Fprintf(w, "role %s is\n", r.name)
+			fmt.Fprintf(w, "role %s\n", r.name)
 			if r.cleanupCmd != "" {
 				fmt.Fprintf(w, "  cleanup %s\n", r.cleanupCmd)
 			}
@@ -190,6 +190,18 @@ type role struct {
 	actionNames []string
 	// resParsers are the supported signals for each actor.
 	resParsers []*resultParser
+}
+
+func (r *role) clone(newName string) *role {
+	newR := *r
+	newR.actionNames = append([]string(nil), r.actionNames...)
+	newR.resParsers = append([]*resultParser(nil), r.resParsers...)
+	newR.actionCmds = make(map[string]cmd, len(r.actionCmds))
+	for k, v := range r.actionCmds {
+		newR.actionCmds[k] = v
+	}
+	newR.name = newName
+	return &newR
 }
 
 type resultParser struct {

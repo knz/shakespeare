@@ -1,9 +1,9 @@
 parse
-role test is
+role test
   signal test event at (?P<ts_now>)(?P<event>.*)
 end
 ----
-role test is
+role test
   signal test event at (?P<ts_now>)(?P<event>.*)
 end
 # no cast defined
@@ -15,11 +15,11 @@ end
 
 
 parse
-role test is
+role test
   signal test event at (?P<ts_rfc3339>)(?P<event>.*)
 end
 ----
-role test is
+role test
   signal test event at (?P<ts_rfc3339>\d\d\d\d-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)Z)(?P<event>.*)
 end
 # no cast defined
@@ -30,11 +30,11 @@ end
 # no audience defined
 
 parse
-role test is
+role test
   signal test event at (?P<ts_log>)(?P<event>.*)
 end
 ----
-role test is
+role test
   signal test event at (?P<ts_log>\d{6} \d\d:\d\d:\d\d\.\d{6})(?P<event>.*)
 end
 # no cast defined
@@ -45,7 +45,7 @@ end
 # no audience defined
 
 parse
-role test is
+role test
   signal test event at (?P<event>.*)
 end
 ----
@@ -53,7 +53,7 @@ parse error: <testdata>:2: role "test": unknown time stamp format in regexp: sig
 
 
 parse
-role test is
+role test
   signal test event at .*
 end
 ----

@@ -38,7 +38,7 @@ Naturally, Shakespeare does not know anything about the `road` and
 A road supports a `car` action:
 
 ```
-role road is
+role road
   :car  <..omitted..>
   ...
 end
@@ -49,7 +49,7 @@ end
 Meanwhile, we define the other role `redlight` with two actions `red` and `green`.
 
 ```
-role redlight is
+role redlight
   :red    <..omitted..>
   :green  <..omitted..>
 end
@@ -145,7 +145,7 @@ In the example above, we will define that the `car` action produces
 data in a traffic log, and define a spotlight to collect data from this traffic log:
 
 ```
-role road is
+role road
   :car  <..omitted..>   >>traffic.log
   spotlight touch traffic.log; tail -f traffic.log
   signal traffic event at (?P<ts_now>)(?P<event>.*)
@@ -177,14 +177,14 @@ all `traffic` events from `myroad`.
 Here is a valid configuration collecting all the elements seen so far:
 
 ```
-role road is
+role road
   :car      echo car rides >> traffic.log  # we'll replace this later
   spotlight touch traffic.log; tail -F traffic.log
   signal    traffic event at (?P<ts_now>)(?P<event>.*)
   cleanup   rm -f traffic.log
 end
 
-role redlight is
+role redlight
   :red   true # we'll replace this later
   :green true # we'll replace this later
 end
@@ -234,7 +234,7 @@ We actually would like to see the cars stop when the light is
 red. We'll define this as follows:
 
 ```
-role road is
+role road
   :car  if test -e blocked; then \
           echo "car stopped"; \
         else \

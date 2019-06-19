@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"bufio"
 	"context"
 	"flag"
 	"fmt"
@@ -32,6 +31,15 @@ func Run() error {
 		return errors.WithDetail(err, "(while parsing the command line)")
 	}
 
+	file := "-"
+	if pflag.NArg() < 1 {
+		if !cfg.quiet {
+			fmt.Println("no configuration specified, reading from standard input...")
+		}
+	} else {
+		file = pflag.Arg(0)
+	}
+
 	// Initialize the logging sub-system.
 	if err := cfg.setupLogging(ctx); err != nil {
 		log.Errorf(ctx, "init error: %+v", err)
@@ -39,11 +47,18 @@ func Run() error {
 	}
 
 	// Read the scenario.
-	rd := bufio.NewReader(os.Stdin)
-	if err := cfg.parseCfg(rd); err != nil {
+	rd, err := newReader(ctx, file, cfg.includePath)
+	if err != nil {
+		log.Errorf(ctx, "open error: %+v", err)
+		return errors.WithDetail(err, "(while opening the specification)")
+	}
+	defer rd.close()
+
+	if err := cfg.parseCfg(ctx, rd); err != nil {
 		log.Errorf(ctx, "parse error: %+v", err)
 		return errors.WithDetail(err, "(while parsing the specification)")
 	}
+
 	if cfg.doPrint {
 		cfg.printCfg()
 	}
@@ -68,7 +83,7 @@ func Run() error {
 	ap.intro()
 
 	// Run the script.
-	err := ap.runConduct(ctx)
+	err = ap.runConduct(ctx)
 	if err != nil {
 		log.Errorf(ctx, "play error: %+v", err)
 		// We'll exit with the error later below.
@@ -246,6 +261,7 @@ func (cfg *config) initArgs(ctx context.Context) error {
 	pflag.BoolVarP(&cfg.parseOnly, "dry-run", "n", false, "do not execute anything, just check the configuration")
 	pflag.BoolVarP(&cfg.quiet, "quiet", "q", false, "do not emit progress messages")
 	pflag.BoolVarP(&cfg.earlyExit, "stop-at-first-violation", "S", false, "terminate the play as soon as an auditor is dissatisfied")
+	pflag.StringSliceVarP(&cfg.includePath, "search-dir", "I", []string{}, "add this directory to the search path for include directives")
 
 	// Load the go flag settings from the log package into pflag.
 	pflag.CommandLine.AddGoFlagSet(flag.CommandLine)

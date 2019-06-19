@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"io"
 	"time"
 )
 
@@ -58,30 +59,29 @@ func (cfg *config) compile() error {
 }
 
 // printSteps prints the generated steps.
-func (cfg *config) printSteps() {
-	fmt.Println("")
-	fmt.Println("# play")
+func (cfg *config) printSteps(w io.Writer) {
+	fmt.Fprintln(w, "# play")
 	for i, s := range cfg.play {
 		if s.waitUntil != 0 && (i == len(cfg.play)-1 || len(s.concurrentLines) > 0) {
-			fmt.Printf("#  (wait until %s)\n", s.waitUntil)
+			fmt.Fprintf(w, "#  (wait until %s)\n", s.waitUntil)
 		}
 		comma := ""
 		for _, line := range s.concurrentLines {
 			if len(line.steps) > 0 {
-				fmt.Print(comma)
+				fmt.Fprint(w, comma)
 				comma = "#  (meanwhile)\n"
 			}
 			for _, step := range line.steps {
 				switch step.typ {
 				case stepDo:
-					fmt.Printf("#  %s: %s!\n", line.actor.name, step.action)
+					fmt.Fprintf(w, "#  %s: %s!\n", line.actor.name, step.action)
 				case stepAmbiance:
-					fmt.Printf("#  (mood: %s)\n", step.action)
+					fmt.Fprintf(w, "#  (mood: %s)\n", step.action)
 				}
 			}
 		}
 	}
-	fmt.Println("# end")
+	fmt.Fprintln(w, "# end")
 }
 
 // scene describes one scene of the play.

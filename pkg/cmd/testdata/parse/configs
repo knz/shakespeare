@@ -1,0 +1,55 @@
+# Simple constructs
+
+parse
+# empty
+----
+# no roles defined
+# no cast defined
+script
+  tempo 1s
+  # no stanzas defined, play will terminate immediately
+end
+# no audience defined
+
+parse
+cast
+end
+----
+# no roles defined
+# no cast defined
+script
+  tempo 1s
+  # no stanzas defined, play will terminate immediately
+end
+# no audience defined
+
+
+parse
+script
+end
+----
+# no roles defined
+# no cast defined
+script
+  tempo 1s
+  # no stanzas defined, play will terminate immediately
+end
+# no audience defined
+
+
+parse
+audience
+end
+----
+# no roles defined
+# no cast defined
+script
+  tempo 1s
+  # no stanzas defined, play will terminate immediately
+end
+# no audience defined
+
+parse
+woot
+----
+parse error: <testdata>:1: unknown syntax: woot

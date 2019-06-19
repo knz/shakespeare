@@ -45,6 +45,15 @@ func newReader(ctx context.Context, file string, includePath []string) (*reader,
 	return &reader{readers: []*subreader{r}, includePath: includePath}, nil
 }
 
+func newReaderFromString(file string, data string) (*reader, error) {
+	sr := &subreader{
+		lineno: 1,
+		file:   file,
+		rd:     bufio.NewReader(strings.NewReader(data)),
+	}
+	return &reader{readers: []*subreader{sr}, includePath: nil}, nil
+}
+
 func newSubReader(ctx context.Context, file string, includePath []string) (*subreader, error) {
 	r := &subreader{lineno: 1, file: file}
 	if file == "-" {

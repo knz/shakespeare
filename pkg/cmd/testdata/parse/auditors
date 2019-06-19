@@ -1,0 +1,24 @@
+parse
+include doctor.cfg
+include medical_cast.cfg
+audience
+  condice expects always: t < 10
+end
+----
+role doctor is
+  signal cures event at (?P<ts_now>)(?P<event>.*)
+  :cure echo cured
+end
+cast
+  alice plays doctor
+  # alice plays from working directory alice
+  bob plays doctor(with_a_hat)
+  # bob plays from working directory bob
+end
+script
+  tempo 1s
+  # no stanzas defined, play will terminate immediately
+end
+audience
+  condice expects always: t < 10
+end

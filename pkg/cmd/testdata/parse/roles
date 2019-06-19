@@ -1,0 +1,66 @@
+parse
+role empty is
+end
+----
+role empty is
+end
+# no cast defined
+script
+  tempo 1s
+  # no stanzas defined, play will terminate immediately
+end
+# no audience defined
+
+
+
+parse
+role simple is
+  :act :
+end
+----
+role simple is
+  :act :
+end
+# no cast defined
+script
+  tempo 1s
+  # no stanzas defined, play will terminate immediately
+end
+# no audience defined
+
+
+
+parse
+role unknowndir is
+  woot
+end
+----
+parse error: <testdata>:2: role "unknowndir": unknown syntax: woot
+
+
+
+parse
+role samename is
+end
+role samename is
+end
+----
+parse error: duplicate role definition: samename
+
+
+parse
+role dupact is
+  :act foo
+  :act bar
+end
+----
+parse error: <testdata>:3: role "dupact": duplicate action name "act"
+
+
+parse
+role dupsig is
+  signal foo event at (?P<ts_now>)(?P<event>.*)
+  signal foo event at (?P<ts_now>)(?P<event>.*)
+end
+----
+parse error: <testdata>:3: role "dupsig": duplicate signal name "foo": signal foo event at (?P<ts_now>)(?P<event>.*)

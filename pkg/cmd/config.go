@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"io"
 	"regexp"
 	"strings"
 	"time"
@@ -29,15 +30,18 @@ type config struct {
 
 	// roles is the set of roles defined by the configuration.
 	// This is populated during parsing.
-	roles map[string]*role
+	roles     map[string]*role
+	roleNames []string
 
 	// actors is the set of actors defined by the configuration.
 	// This is populated during parsing.
-	actors map[string]*actor
+	actors     map[string]*actor
+	actorNames []string
 
 	// actions is the set of actions defined by the configuration.
 	// This is populated during parsing.
-	actions map[byte][]*action
+	actions     map[byte][]*action
+	actionChars []byte
 
 	// stanzas defines the programmatic play scenario.
 	// This is populated during parsing, and transformed
@@ -53,7 +57,8 @@ type config struct {
 	tempo time.Duration
 
 	// audience is the set of observers/auditors for the play.
-	audience map[string]*audienceMember
+	audience      map[string]*audienceMember
+	audienceNames []string
 }
 
 type audienceMember struct {
@@ -75,76 +80,98 @@ func newConfig() *config {
 }
 
 // printCfg prints the current configuration.
-func (cfg *config) printCfg() {
-	for _, r := range cfg.roles {
-		fmt.Printf("role %s is\n", r.name)
-		if r.cleanupCmd != "" {
-			fmt.Printf("  cleanup %s\n", r.cleanupCmd)
-		}
-		if r.spotlightCmd != "" {
-			fmt.Printf("  spotlight %s\n", r.spotlightCmd)
-		}
-		for _, rp := range r.resParsers {
-			fmt.Printf("  signal %s\n", rp.String())
-		}
-		for actName, a := range r.actionCmds {
-			fmt.Printf("  :%s %s\n", actName, a)
-		}
-		fmt.Println("end")
-		fmt.Println()
-	}
-	fmt.Println("cast")
-	for _, a := range cfg.actors {
-		fmt.Printf("  %s plays %s", a.name, a.role.name)
-		if a.extraEnv != "" {
-			fmt.Printf("(%s)", a.extraEnv)
-		}
-		fmt.Println()
-		fmt.Printf("  # %s plays from working directory %s", a.name, a.workDir)
-		fmt.Println()
-		for sig, sink := range a.sinks {
-			plural := "s"
-			if strings.HasSuffix(sig, "s") {
-				plural = ""
+func (cfg *config) printCfg(w io.Writer) {
+	if len(cfg.roles) == 0 {
+		fmt.Fprintln(w, "# no roles defined")
+	} else {
+		for _, rn := range cfg.roleNames {
+			r := cfg.roles[rn]
+			fmt.Fprintf(w, "role %s is\n", r.name)
+			if r.cleanupCmd != "" {
+				fmt.Fprintf(w, "  cleanup %s\n", r.cleanupCmd)
 			}
-			if len(sink.observers) > 0 {
-				fmt.Printf("  # %s %s%s are watched by audience %+v\n", a.name, sig, plural, sink.observers)
+			if r.spotlightCmd != "" {
+				fmt.Fprintf(w, "  spotlight %s\n", r.spotlightCmd)
 			}
-			if len(sink.auditors) > 0 {
-				fmt.Printf("  # %s %s%s are checked by auditors %+v\n", a.name, sig, plural, sink.auditors)
+			for _, rp := range r.resParsers {
+				fmt.Fprintf(w, "  signal %s\n", rp.String())
 			}
+			for actName, a := range r.actionCmds {
+				fmt.Fprintf(w, "  :%s %s\n", actName, a)
+			}
+			fmt.Fprintln(w, "end")
+			// fmt.Fprintln(w)
 		}
 	}
-	fmt.Println("end")
-	fmt.Println()
+	if len(cfg.actors) == 0 {
+		fmt.Fprintln(w, "# no cast defined")
+	} else {
+		fmt.Fprintln(w, "cast")
+		for _, an := range cfg.actorNames {
+			a := cfg.actors[an]
+			fmt.Fprintf(w, "  %s plays %s", a.name, a.role.name)
+			if a.extraEnv != "" {
+				fmt.Fprintf(w, "(%s)", a.extraEnv)
+			}
+			fmt.Fprintln(w)
+			fmt.Fprintf(w, "  # %s plays from working directory %s\n", a.name, a.workDir)
+			for _, sig := range a.sinkNames {
+				sink := a.sinks[sig]
+				plural := "s"
+				if strings.HasSuffix(sig, "s") {
+					plural = ""
+				}
+				if len(sink.observers) > 0 {
+					fmt.Fprintf(w, "  # %s %s%s are watched by audience %+v\n", a.name, sig, plural, sink.observers)
+				}
+				if len(sink.auditors) > 0 {
+					fmt.Fprintf(w, "  # %s %s%s are checked by auditors %+v\n", a.name, sig, plural, sink.auditors)
+				}
+			}
+		}
+		fmt.Fprintln(w, "end")
+		// fmt.Fprintln(w)
+	}
 
-	fmt.Println("script")
-	fmt.Printf("  tempo %s\n", cfg.tempo)
-	for _, aa := range cfg.actions {
+	fmt.Fprintln(w, "script")
+	fmt.Fprintf(w, "  tempo %s\n", cfg.tempo)
+	for _, aan := range cfg.actionChars {
+		aa := cfg.actions[aan]
 		for _, a := range aa {
-			fmt.Printf("  action %s entails %s\n", a.name, a.String())
+			fmt.Fprintf(w, "  action %s entails %s\n", a.name, a.String())
 		}
 	}
-	for _, stanza := range cfg.stanzas {
-		fmt.Printf("  prompt %-10s %s\n", stanza.actor.name, stanza.script)
+	if len(cfg.stanzas) == 0 {
+		fmt.Fprintln(w, "  # no stanzas defined, play will terminate immediately")
+	} else {
+		for _, stanza := range cfg.stanzas {
+			fmt.Fprintf(w, "  prompt %-10s %s\n", stanza.actor.name, stanza.script)
+		}
 	}
-	fmt.Println("end")
-	fmt.Println()
+	fmt.Fprintln(w, "end")
+	// fmt.Fprintln(w)
 
-	fmt.Println("audience")
-	for _, a := range cfg.audience {
-		for sigName, source := range a.observer.signals {
-			fmt.Printf("  %s watches %s %s\n", a.name, source.origin, sigName)
+	if len(cfg.audience) == 0 {
+		fmt.Fprintln(w, "# no audience defined")
+	} else {
+		fmt.Fprintln(w, "audience")
+		for _, an := range cfg.audienceNames {
+			a := cfg.audience[an]
+			for _, sigName := range a.observer.sigNames {
+				source := a.observer.signals[sigName]
+				for _, origin := range source.origin {
+					fmt.Fprintf(w, "  %s watches %s %s\n", a.name, origin, sigName)
+				}
+			}
+			if a.observer.ylabel != "" {
+				fmt.Fprintf(w, "  %s measures %s\n", a.name, a.observer.ylabel)
+			}
+			if a.auditor.when != auditNone {
+				fmt.Fprintf(w, "  %s expects %s: %s\n", a.name, a.auditor.when.String(), a.auditor.expr)
+			}
 		}
-		if a.observer.ylabel != "" {
-			fmt.Printf("  %s measures %s\n", a.name, a.observer.ylabel)
-		}
-		if a.auditor.when != auditNone {
-			fmt.Printf("  %s expects %s: %s\n", a.name, a.auditor.when.String(), a.auditor.expr)
-		}
+		fmt.Fprintln(w, "end")
 	}
-	fmt.Println("end")
-	fmt.Println()
 }
 
 // cmd is the type of a command that can be executed as
@@ -159,7 +186,8 @@ type role struct {
 	// spotlightCmd is executed in the background during the test.
 	spotlightCmd cmd
 	// actionCmds are executed upon steps in the script.
-	actionCmds map[string]cmd
+	actionCmds  map[string]cmd
+	actionNames []string
 	// resParsers are the supported signals for each actor.
 	resParsers []*resultParser
 }
@@ -206,7 +234,8 @@ type actor struct {
 	// sinks is the set of sinks that are listening to this
 	// actor's signal(s). The map key is the signal name, the value
 	// is the sink.
-	sinks map[string]*sink
+	sinks     map[string]*sink
+	sinkNames []string
 	// hasData indicates there were action events executed for this actor.
 	hasData bool
 }
@@ -256,14 +285,15 @@ type stanza struct {
 }
 
 type observer struct {
-	signals map[string]*audienceSource
-	ylabel  string
+	signals  map[string]*audienceSource
+	sigNames []string
+	ylabel   string
 	// hasData indicates whether data was received for this audience.
 	hasData bool
 }
 
 type audienceSource struct {
-	origin string
+	origin []string
 	// hasData indicates whether data was received from a given actor.
 	hasData    map[string]bool
 	drawEvents bool
@@ -379,6 +409,7 @@ func (cfg *config) addOrGetAudienceMember(name string) *audienceMember {
 			},
 		}
 		cfg.audience[name] = a
+		cfg.audienceNames = append(cfg.audienceNames, name)
 	}
 	return a
 }
@@ -403,6 +434,7 @@ func (a *actor) addAuditor(sigName, auditorName string) {
 	if !ok {
 		s = &sink{}
 		a.sinks[sigName] = s
+		a.sinkNames = append(a.sinkNames, sigName)
 	}
 	found := false
 	for _, ad := range s.auditors {
@@ -423,6 +455,7 @@ func (a *actor) addObserver(sigName, observerName string) {
 	if !ok {
 		s = &sink{}
 		a.sinks[sigName] = s
+		a.sinkNames = append(a.sinkNames, sigName)
 	}
 	found := false
 	for _, ad := range s.observers {
@@ -436,20 +469,26 @@ func (a *actor) addObserver(sigName, observerName string) {
 	}
 }
 
-// addOrUpdateSignalSource adds a signal source to an observer. It is
-// possible for an observer to "merge" signals from multiple actors
-// together into a single sink. ?????
+// addOrUpdateSignalSource adds a signal source to an observer.
 func (a *audienceMember) addOrUpdateSignalSource(r *role, signal, target string) error {
 	isEventSignal, ok := r.getSignal(signal)
 	if !ok {
 		return fmt.Errorf("unknown signal %q for role %s", signal, r.name)
 	}
 
+	if s, ok := a.observer.signals[signal]; ok {
+		if s.drawEvents != isEventSignal {
+			return fmt.Errorf("audience %q watches signal %q with mismatched types", a.name, signal)
+		}
+		s.origin = append(s.origin, target)
+		return nil
+	}
 	aSrc := &audienceSource{
-		origin:     target,
+		origin:     []string{target},
 		hasData:    make(map[string]bool),
 		drawEvents: isEventSignal,
 	}
 	a.observer.signals[signal] = aSrc
+	a.observer.sigNames = append(a.observer.sigNames, signal)
 	return nil
 }

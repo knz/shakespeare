@@ -1,0 +1,111 @@
+parse
+include doctor.cfg
+include medical_cast.cfg
+audience
+  condice watches alice cures
+end
+----
+role doctor is
+  signal cures event at (?P<ts_now>)(?P<event>.*)
+  :cure echo cured
+end
+cast
+  alice plays doctor
+  # alice plays from working directory alice
+  # alice cures are watched by audience [condice]
+  bob plays doctor(with_a_hat)
+  # bob plays from working directory bob
+end
+script
+  tempo 1s
+  # no stanzas defined, play will terminate immediately
+end
+audience
+  condice watches alice cures
+end
+
+parse
+include doctor.cfg
+include medical_cast.cfg
+audience
+  # This merges the cures signal from all doctors into one curve.
+  condice watches every doctor cures
+end
+----
+role doctor is
+  signal cures event at (?P<ts_now>)(?P<event>.*)
+  :cure echo cured
+end
+cast
+  alice plays doctor
+  # alice plays from working directory alice
+  # alice cures are watched by audience [condice]
+  bob plays doctor(with_a_hat)
+  # bob plays from working directory bob
+  # bob cures are watched by audience [condice]
+end
+script
+  tempo 1s
+  # no stanzas defined, play will terminate immediately
+end
+audience
+  condice watches every doctor cures
+end
+
+parse
+include doctor.cfg
+include medical_cast.cfg
+audience
+  # This makes two separate plots.
+  condice watches alice cures
+  condice watches bob cures
+end
+----
+role doctor is
+  signal cures event at (?P<ts_now>)(?P<event>.*)
+  :cure echo cured
+end
+cast
+  alice plays doctor
+  # alice plays from working directory alice
+  # alice cures are watched by audience [condice]
+  bob plays doctor(with_a_hat)
+  # bob plays from working directory bob
+  # bob cures are watched by audience [condice]
+end
+script
+  tempo 1s
+  # no stanzas defined, play will terminate immediately
+end
+audience
+  condice watches alice cures
+  condice watches bob cures
+end
+
+parse
+include doctor.cfg
+include medical_cast.cfg
+audience
+  condice measures milliseconds
+  condice watches alice cures
+end
+----
+role doctor is
+  signal cures event at (?P<ts_now>)(?P<event>.*)
+  :cure echo cured
+end
+cast
+  alice plays doctor
+  # alice plays from working directory alice
+  # alice cures are watched by audience [condice]
+  bob plays doctor(with_a_hat)
+  # bob plays from working directory bob
+end
+script
+  tempo 1s
+  # no stanzas defined, play will terminate immediately
+end
+audience
+  condice watches alice cures
+  condice measures milliseconds
+end

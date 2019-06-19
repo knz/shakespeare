@@ -1,0 +1,48 @@
+parse
+include empty.cfg
+----
+# no roles defined
+# no cast defined
+script
+  tempo 1s
+  # no stanzas defined, play will terminate immediately
+end
+# no audience defined
+
+parse
+include inctest1.cfg
+----
+role doctor is
+  signal cures event at (?P<ts_now>)(?P<event>.*)
+  :cure echo cured
+end
+role empty is
+end
+cast
+  bob plays doctor
+  # bob plays from working directory bob
+  alice plays empty
+  # alice plays from working directory alice
+end
+script
+  tempo 2m3s
+  # no stanzas defined, play will terminate immediately
+end
+# no audience defined
+
+parse
+include synerr.cfg
+----
+parse error: testdata/include/synerr2.cfg:1: unknown syntax: notvalid
+--
+in file included from:
+testdata/include/synerr.cfg:2: <- here
+<testdata>:2: <- here
+
+
+parse
+include nonexistent.cfg
+----
+parse error: <testdata>:1: nonexistent.cfg: file does not exist
+--
+include search path: [. testdata/include]

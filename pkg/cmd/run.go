@@ -11,9 +11,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 	"github.com/knz/shakespeare/pkg/crdb/log"
 	"github.com/knz/shakespeare/pkg/crdb/log/logflags"
-	"github.com/cockroachdb/logtags"
 	"github.com/knz/shakespeare/pkg/crdb/stop"
 	"github.com/knz/shakespeare/pkg/crdb/sysutil"
 	"github.com/spf13/pflag"
@@ -60,7 +60,8 @@ func Run() error {
 	}
 
 	if cfg.doPrint {
-		cfg.printCfg()
+		cfg.printCfg(os.Stdout)
+		fmt.Println()
 	}
 
 	// Generate the steps.
@@ -70,7 +71,7 @@ func Run() error {
 	}
 
 	if cfg.doPrint {
-		cfg.printSteps()
+		cfg.printSteps(os.Stdout)
 	}
 
 	if cfg.parseOnly {

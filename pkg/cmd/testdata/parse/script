@@ -1,0 +1,139 @@
+parse
+script
+  tempo .001s
+end
+----
+# no roles defined
+# no cast defined
+script
+  tempo 1ms
+  # no stanzas defined, play will terminate immediately
+end
+# no audience defined
+
+
+
+parse
+script
+  tempo unknown
+end
+----
+parse error: <testdata>:2: parsing tempo for "tempo unknown": time: invalid duration unknown
+
+
+parse
+script
+   action a entails nop; nop
+   action b entails :something
+   action c entails mood red
+end
+----
+# no roles defined
+# no cast defined
+script
+  tempo 1s
+  action a entails nop
+  action a entails nop
+  action b entails :something
+  action c entails mood red
+  # no stanzas defined, play will terminate immediately
+end
+# no audience defined
+
+
+parse
+script
+   action a entails unknown
+end
+----
+parse error: <testdata>:2: unknown action syntax: action a entails unknown
+
+
+parse
+include doctor.cfg
+include medical_cast.cfg
+script
+   prompt every doctor .....
+end
+----
+parse error: <testdata>:4: action '.' not defined: prompt every doctor .....
+
+
+parse
+include doctor.cfg
+include medical_cast.cfg
+script
+  action . entails nop
+  action c entails :cure
+  prompt alice .c..c..
+  prompt bob   c...c.
+end
+----
+role doctor is
+  signal cures event at (?P<ts_now>)(?P<event>.*)
+  :cure echo cured
+end
+cast
+  alice plays doctor
+  # alice plays from working directory alice
+  bob plays doctor(with_a_hat)
+  # bob plays from working directory bob
+end
+script
+  tempo 1s
+  action . entails nop
+  action c entails :cure
+  prompt alice      .c..c..
+  prompt bob        c...c.
+end
+# no audience defined
+# play
+#  bob: cure!
+#  (wait until 1s)
+#  alice: cure!
+#  (wait until 4s)
+#  alice: cure!
+#  (meanwhile)
+#  bob: cure!
+#  (wait until 7s)
+# end
+
+
+parse
+script
+  action . entails nop
+  prompt every doctor ......
+end
+----
+parse error: <testdata>:3: unknown role "doctor": prompt every doctor ......
+
+
+parse
+include doctor.cfg
+script
+  action . entails nop
+  prompt every doctor ......
+end
+----
+role doctor is
+  signal cures event at (?P<ts_now>)(?P<event>.*)
+  :cure echo cured
+end
+# no cast defined
+script
+  tempo 1s
+  action . entails nop
+  # no stanzas defined, play will terminate immediately
+end
+# no audience defined
+
+
+parse
+include doctor.cfg
+include medical_cast.cfg
+script
+  action . entails :unknownact
+  prompt alice  .....
+end
+----
+parse error: <testdata>:5: action '.', :"unknownact" not defined for role "doctor": prompt alice  .....

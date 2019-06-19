@@ -7,8 +7,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/knz/shakespeare/pkg/crdb/log"
 	"github.com/cockroachdb/logtags"
+	"github.com/knz/shakespeare/pkg/crdb/log"
 )
 
 func (ap *app) plot(ctx context.Context) error {
@@ -84,7 +84,8 @@ func (ap *app) plot(ctx context.Context) error {
 
 		// Find the timeseries to plot for the audience.
 		sigNum := 1
-		for sigName, as := range a.observer.signals {
+		for _, sigName := range a.observer.sigNames {
+			as := a.observer.signals[sigName]
 			// Only look at the actors watched by the audience where
 			// there was actual data received.
 			for actName := range as.hasData {

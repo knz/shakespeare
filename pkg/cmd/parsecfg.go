@@ -156,6 +156,7 @@ func (cfg *config) parseRole(ctx context.Context, rd *reader, roleName string) e
 	parserNames := make(map[string]struct{})
 	thisRole := role{name: roleName, actionCmds: make(map[string]cmd)}
 	cfg.roles[roleName] = &thisRole
+	cfg.roleNames = append(cfg.roleNames, roleName)
 
 	return parseSection(ctx, rd, func(line string) error {
 		if actionDefRe.MatchString(line) {
@@ -163,6 +164,8 @@ func (cfg *config) parseRole(ctx context.Context, rd *reader, roleName string) e
 			aCmd := actionDefRe.ReplaceAllString(line, "${cmd}")
 			if _, ok := thisRole.actionCmds[aName]; ok {
 				return fmt.Errorf("role %q: duplicate action name %q", roleName, aName)
+			} else {
+				thisRole.actionNames = append(thisRole.actionNames, aName)
 			}
 			thisRole.actionCmds[aName] = cmd(aCmd)
 		} else if spotlightDefRe.MatchString(line) {
@@ -184,7 +187,7 @@ func (cfg *config) parseRole(ctx context.Context, rd *reader, roleName string) e
 			rp.re = re
 			pname := parseDefRe.ReplaceAllString(line, "${name}")
 			if _, ok := parserNames[pname]; ok {
-				return fmt.Errorf("role %q: duplicate data series name %q: %s", roleName, pname, line)
+				return fmt.Errorf("role %q: duplicate signal name %q: %s", roleName, pname, line)
 			}
 			parserNames[pname] = struct{}{}
 			rp.name = pname
@@ -274,6 +277,7 @@ func (cfg *config) parseActors(line string) error {
 			sinks:     make(map[string]*sink),
 		}
 		cfg.actors[actorName] = &act
+		cfg.actorNames = append(cfg.actorNames, actorName)
 	} else {
 		return fmt.Errorf("unknown syntax: %s", line)
 	}
@@ -297,8 +301,12 @@ func (cfg *config) parseScript(line string) error {
 		for _, c := range components {
 			actAction := strings.TrimSpace(c)
 
+			_, ok := cfg.actions[actChar]
 			a := action{name: actShorthand}
 			cfg.actions[actChar] = append(cfg.actions[actChar], &a)
+			if !ok {
+				cfg.actionChars = append(cfg.actionChars, actChar)
+			}
 
 			if nopRe.MatchString(actAction) {
 				// action . nop

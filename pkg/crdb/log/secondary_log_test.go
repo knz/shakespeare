@@ -21,7 +21,7 @@ import (
 	"testing"
 
 	"github.com/knz/shakespeare/pkg/crdb/leaktest"
-	"github.com/knz/shakespeare/pkg/crdb/log/logtags"
+	"github.com/cockroachdb/logtags"
 )
 
 func TestSecondaryLog(t *testing.T) {

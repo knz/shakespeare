@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/knz/shakespeare/pkg/crdb/log"
-	"github.com/knz/shakespeare/pkg/crdb/log/logtags"
+	"github.com/cockroachdb/logtags"
 	"github.com/knz/shakespeare/pkg/crdb/stop"
 	"golang.org/x/crypto/ssh/terminal"
 )

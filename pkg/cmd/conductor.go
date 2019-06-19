@@ -8,7 +8,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/knz/shakespeare/pkg/crdb/log"
-	"github.com/knz/shakespeare/pkg/crdb/log/logtags"
+	"github.com/cockroachdb/logtags"
 )
 
 // conduct runs the play.

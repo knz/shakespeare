@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/knz/shakespeare/pkg/crdb/log"
-	"github.com/knz/shakespeare/pkg/crdb/log/logtags"
+	"github.com/cockroachdb/logtags"
 	"github.com/knz/shakespeare/pkg/crdb/stop"
 	"github.com/knz/shakespeare/pkg/crdb/timeutil"
 	"github.com/pkg/errors"

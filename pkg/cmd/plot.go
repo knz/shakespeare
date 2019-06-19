@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 
 	"github.com/knz/shakespeare/pkg/crdb/log"
-	"github.com/knz/shakespeare/pkg/crdb/log/logtags"
+	"github.com/cockroachdb/logtags"
 )
 
 func (ap *app) plot(ctx context.Context) error {

@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/knz/shakespeare/pkg/crdb/log"
 	"github.com/cockroachdb/logtags"
+	"github.com/knz/shakespeare/pkg/crdb/log"
 	"github.com/knz/shakespeare/pkg/crdb/stop"
 	"github.com/knz/shakespeare/pkg/crdb/timeutil"
 	"github.com/pkg/errors"
@@ -94,7 +94,7 @@ func (ap *app) runScene(
 	ctx context.Context, lines []scriptLine, actionChan chan<- actionReport, moodCh chan<- moodChange,
 ) (err error) {
 	// errCh collects the errors from the concurrent actors.
-	errCh := make(chan error, len(lines))
+	errCh := make(chan error, len(lines)+1)
 
 	defer func() {
 		// At the end of the scene, make runScene() return the collected
@@ -126,6 +126,10 @@ func (ap *app) runScene(
 			wg.Done()
 			errCh <- errors.Wrap(err, "stopper")
 		}
+	}
+	if len(lines) == 0 {
+		// Nothing was launched, ensure collectErrors finishes in any case.
+		errCh <- nil
 	}
 
 	// errors are collected by the defer above.

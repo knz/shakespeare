@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
-	"github.com/knz/shakespeare/pkg/crdb/log"
 	"github.com/cockroachdb/logtags"
+	"github.com/knz/shakespeare/pkg/crdb/log"
 )
 
 // conduct runs the play.
@@ -213,7 +213,7 @@ func (ap *app) runForAllActors(
 	ctx context.Context, prefix string, getCommand func(a *actor) cmd,
 ) (err error) {
 	// errCh collects the errors from the concurrent actors.
-	errCh := make(chan error, len(ap.cfg.actors))
+	errCh := make(chan error, len(ap.cfg.actors)+1)
 
 	defer func() {
 		// At the end of the scene, make runScene() return the collected
@@ -224,6 +224,7 @@ func (ap *app) runForAllActors(
 	var wg sync.WaitGroup
 	defer func() { wg.Wait() }()
 
+	actNums := 0
 	for actName, thisActor := range ap.cfg.actors {
 		pCmd := getCommand(thisActor)
 		if pCmd == "" {
@@ -243,6 +244,10 @@ func (ap *app) runForAllActors(
 			errCh <- errors.Wrapf(err, "%s %s", a.role.name, a.name)
 			log.Info(ctx, "<done>")
 		})
+	}
+	if actNums == 0 {
+		// Nothing was launched, ensure that collectErrors terminates in any case.
+		errCh <- nil
 	}
 
 	// errors are collected by the defer above.

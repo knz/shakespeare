@@ -50,7 +50,7 @@ func (ap *app) audit(
 		case ev := <-auChan:
 			evVar := exprVar{actorName: ev.actorName, sigName: ev.sigName}
 			if err := ap.checkEvent(ctx, actionCh,
-				ev.ts, evVar, ev.auditors, ev.typ, ev.val); err != nil {
+				ev.ts, evVar, append(ap.au.alwaysAudit, ev.auditors...), ev.typ, ev.val); err != nil {
 				return err
 			}
 
@@ -73,6 +73,7 @@ func (a *audienceMember) checkExpr(cfg *config) error {
 		}
 		defVars[v] = struct{}{}
 	}
+	foundTrigger := false
 	for v := range defVars {
 		parts := strings.Split(v, ".")
 		if len(parts) != 2 {
@@ -86,13 +87,18 @@ func (a *audienceMember) checkExpr(cfg *config) error {
 		}
 		a.addOrUpdateSignalSource(actor.role, sigName, actorName)
 		actor.addAuditor(sigName, a.name)
+		foundTrigger = true
+	}
+	if !foundTrigger {
+		a.auditor.alwaysSensitive = true
 	}
 	return nil
 }
 
 var predefVars = map[string]struct{}{
-	"t":    struct{}{},
-	"mood": struct{}{},
+	"t":     struct{}{},
+	"mood":  struct{}{},
+	"moodt": struct{}{},
 }
 
 func newAudition(cfg *config) *audition {
@@ -107,6 +113,9 @@ func newAudition(cfg *config) *audition {
 	for aName, a := range cfg.audience {
 		if a.auditor.when != auditNone {
 			au.auditorStates[aName] = &auditorState{}
+			if a.auditor.alwaysSensitive {
+				au.alwaysAudit = append(au.alwaysAudit, aName)
+			}
 		}
 	}
 	for actName, act := range cfg.actors {
@@ -122,6 +131,7 @@ func newAudition(cfg *config) *audition {
 	}
 	au.curVals["mood"] = "clear"
 	au.curVals["t"] = float64(0)
+	au.curVals["moodt"] = float64(0)
 	return au
 }
 
@@ -160,6 +170,7 @@ func (au *audition) collectAndAuditMood(ctx context.Context, evtTime float64, mo
 	au.curMoodStart = evtTime
 	au.curMood = mood
 	au.curVals["mood"] = mood
+	au.curVals["moodt"] = float64(0)
 	return nil
 }
 
@@ -172,7 +183,8 @@ func (ap *app) checkEvent(
 	valTyp parserType,
 	val string,
 ) error {
-	ap.au.curVals["t"] = evTime
+	elapsed := evTime.Sub(ap.au.epoch).Seconds()
+	ap.au.curVals["t"] = elapsed
 	varName := evVar.Name()
 	if valTyp == parseEvent {
 		ap.au.curVals[varName] = val
@@ -184,6 +196,15 @@ func (ap *app) checkEvent(
 		}
 		ap.au.curVals[varName] = fVal
 	}
+
+	// Update the mood time/duration.
+	var moodt float64
+	if math.IsInf(ap.au.curMoodStart, 0) {
+		moodt = elapsed
+	} else {
+		moodt = elapsed - ap.au.curMoodStart
+	}
+	ap.au.curVals["moodt"] = moodt
 
 	for _, auditorName := range auditNames {
 		a, ok := ap.au.cfg.audience[auditorName]

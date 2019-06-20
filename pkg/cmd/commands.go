@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/knz/shakespeare/pkg/crdb/log"
 	"github.com/cockroachdb/logtags"
+	"github.com/knz/shakespeare/pkg/crdb/log"
 	"github.com/knz/shakespeare/pkg/crdb/stop"
 	"github.com/knz/shakespeare/pkg/crdb/timeutil"
 )
@@ -90,7 +90,7 @@ func (a *actor) makeShCmd(pcmd cmd) exec.Cmd {
 		Args: []string{
 			a.shellPath,
 			"-c",
-			`set -euo pipefail; export TMPDIR=$PWD HOME=$PWD/..; shpid=$$; trap "set +x; kill -TERM -$shpid 2>/dev/null || true" EXIT; set -x;` + "\n" + string(pcmd)},
+			`set -euo pipefail; export TMPDIR=$PWD HOME=$PWD/..; shpid=$$; ret=1; trap 'ret=$?; set +x; kill -TERM -$shpid 2>/dev/null || true; exit $ret' EXIT; set -x;` + "\n" + string(pcmd)},
 	}
 	if a.extraEnv != "" {
 		cmd.Path = "/usr/bin/env"

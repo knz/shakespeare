@@ -315,6 +315,7 @@ type audienceSource struct {
 type auditor struct {
 	when            auditorWhen
 	expr            string
+	alwaysSensitive bool
 	compiledExp     *govaluate.EvaluableExpression
 	observedSignals map[exprVar]struct{}
 }
@@ -377,6 +378,9 @@ type audition struct {
 	curVals       map[string]interface{}
 	activations   map[exprVar]struct{}
 	violations    []auditViolation
+	// names of auditors that are not sensitive to any particular signal
+	// and thus reacts to any of them.
+	alwaysAudit []string
 }
 
 type auditViolation struct {

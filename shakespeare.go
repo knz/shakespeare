@@ -5,12 +5,21 @@ import (
 	"os"
 
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 	"github.com/knz/shakespeare/pkg/cmd"
 )
 
 func main() {
 	if err := cmd.Run(); err != nil {
+		fmt.Println("😱 an error has occured!")
 		fmt.Println(err)
+		if bufs := errors.GetContextTags(err); len(bufs) > 0 {
+			var buf *logtags.Buffer
+			for _, b := range bufs {
+				buf = buf.Merge(b)
+			}
+			fmt.Printf("--\n(context of error: %s)\n", buf)
+		}
 		if d := errors.FlattenDetails(err); d != "" {
 			fmt.Printf("--\n%s\n", d)
 		}

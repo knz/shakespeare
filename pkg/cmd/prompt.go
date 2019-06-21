@@ -8,11 +8,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/knz/shakespeare/pkg/crdb/log"
 	"github.com/knz/shakespeare/pkg/crdb/stop"
 	"github.com/knz/shakespeare/pkg/crdb/timeutil"
-	"github.com/pkg/errors"
 )
 
 // prompt directs the actors to perform actions in accordance with the script.
@@ -48,7 +48,7 @@ func (ap *app) prompt(
 			return nil
 		case <-ctx.Done():
 			log.Info(sceneCtx, "interrupted")
-			return errors.WithStack(ctx.Err())
+			return errors.WithContextTags(errors.WithStack(ctx.Err()), ctx)
 		case <-tm:
 			// Wait.
 		}
@@ -81,7 +81,7 @@ func (ap *app) prompt(
 
 		// If there was an error, return it.
 		if err != nil {
-			return err
+			return errors.WithContextTags(err, ctx)
 		}
 	}
 
@@ -124,7 +124,7 @@ func (ap *app) runScene(
 			// started. However, we still need to wait on the sync group, so
 			// we have to signal the task was given up.
 			wg.Done()
-			errCh <- errors.Wrap(err, "stopper")
+			errCh <- errors.WithContextTags(err, ctx)
 		}
 	}
 	if len(lines) == 0 {
@@ -187,7 +187,7 @@ func (a *actor) reportActionEvent(
 		return nil
 	case <-ctx.Done():
 		log.Info(ctx, "interrupted")
-		return errors.WithStack(ctx.Err())
+		return errors.WithContextTags(errors.WithStack(ctx.Err()), ctx)
 	case actionChan <- ev:
 		// ok
 	}
@@ -203,7 +203,7 @@ func (a *actor) reportMoodEvent(
 		return nil
 	case <-ctx.Done():
 		log.Info(ctx, "interrupted")
-		return errors.WithStack(ctx.Err())
+		return errors.WithContextTags(errors.WithStack(ctx.Err()), ctx)
 	case moodCh <- chg:
 		// ok
 	}
@@ -226,6 +226,7 @@ func (a *actor) runAction(
 	dur := actEnd.Sub(actStart)
 	log.Infof(ctx, "%q done (%s)\n%s-- %s (%v)", action, dur, outdata, ps, err)
 
+	err = errors.WithContextTags(err, ctx)
 	if _, ok := err.(*exec.ExitError); err != nil && !ok {
 		return actionReport{}, err
 	}

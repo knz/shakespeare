@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
-	"github.com/knz/shakespeare/pkg/crdb/log"
 	"github.com/cockroachdb/logtags"
+	"github.com/knz/shakespeare/pkg/crdb/log"
 	"github.com/knz/shakespeare/pkg/crdb/timeutil"
 )
 
@@ -31,11 +31,11 @@ func (ap *app) spotlight(
 	log.Infof(ctx, "executing: %s", strings.Join(cmd.Args, " "))
 	outstream, err := cmd.StderrPipe()
 	if err != nil {
-		return errors.Wrap(err, "setting up")
+		return errors.WithContextTags(errors.Wrap(err, "setting up"), ctx)
 	}
 	cmd.Stdout = cmd.Stderr
 	if err := cmd.Start(); err != nil {
-		return errors.Wrap(err, "exec")
+		return errors.WithContextTags(errors.Wrap(err, "exec"), ctx)
 	}
 
 	defer func() {
@@ -88,7 +88,7 @@ func (ap *app) spotlight(
 						log.Info(ctx, "interrupted")
 					case <-ctx.Done():
 						log.Info(ctx, "canceled")
-					case lines <- res{"", err}:
+					case lines <- res{"", errors.WithContextTags(errors.WithStack(err), ctx)}:
 					}
 				} else {
 					log.Info(ctx, "EOF")
@@ -103,7 +103,7 @@ func (ap *app) spotlight(
 		select {
 		case res := <-lines:
 			if res.err != nil {
-				return res.err
+				return errors.WithContextTags(errors.WithStack(res.err), ctx)
 			}
 			if res.line == "" {
 				return nil
@@ -118,7 +118,7 @@ func (ap *app) spotlight(
 
 		case <-ctx.Done():
 			log.Info(ctx, "canceled")
-			return ctx.Err()
+			return errors.WithContextTags(errors.WithStack(ctx.Err()), ctx)
 		}
 	}
 

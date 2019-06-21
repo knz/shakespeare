@@ -110,7 +110,7 @@ func (ap *app) runPrompter(
 	runWorker(promptCtx, ap.stopper, func(ctx context.Context) {
 		defer wg.Done()
 		log.Info(ctx, "<intrat>")
-		errCh <- errors.Wrap(ap.prompt(ctx, actionChan, moodCh), "prompt")
+		errCh <- errors.WithContextTags(ap.prompt(ctx, actionChan, moodCh), ctx)
 		log.Info(ctx, "<exit>")
 	})
 	return promptDone
@@ -131,7 +131,7 @@ func (ap *app) startAudition(
 	runWorker(auCtx, ap.stopper, func(ctx context.Context) {
 		defer wg.Done()
 		log.Info(ctx, "<begins>")
-		err := errors.Wrap(ap.audit(ctx, auChan, actionCh, moodCh), "audition")
+		err := errors.WithContextTags(ap.audit(ctx, auChan, actionCh, moodCh), ctx)
 		if errors.Is(err, context.Canceled) {
 			// It's ok if the audition is canceled.
 			err = nil
@@ -157,7 +157,7 @@ func (ap *app) startCollector(
 	runWorker(colCtx, ap.stopper, func(ctx context.Context) {
 		defer wg.Done()
 		log.Info(ctx, "<intrat>")
-		err := errors.Wrap(ap.collect(ctx, dataLogger, actionChan, collectorChan), "collector")
+		err := errors.WithContextTags(ap.collect(ctx, dataLogger, actionChan, collectorChan), ctx)
 		if errors.Is(err, context.Canceled) {
 			// It's ok if the collector is canceled.
 			err = nil
@@ -191,9 +191,7 @@ func (ap *app) startSpotlights(
 		runWorker(spotCtx, ap.stopper, func(ctx context.Context) {
 			defer wg.Done()
 			log.Info(spotCtx, "<shining>")
-			err := errors.Wrapf(
-				ap.spotlight(ctx, a, monLogger, collectorChan, auChan),
-				"%s [%s]", a.role.name, a.name)
+			err := errors.WithContextTags(ap.spotlight(ctx, a, monLogger, collectorChan, auChan), ctx)
 			if errors.Is(err, context.Canceled) {
 				// It's ok if a sportlight is canceled.
 				err = nil
@@ -241,7 +239,7 @@ func (ap *app) runForAllActors(
 			// Start one actor.
 			log.Info(ctx, "<start>")
 			_, _, err := a.runActorCommand(ctx, ap.stopper, 10*time.Second, false /*interruptible*/, pCmd)
-			errCh <- errors.Wrapf(err, "%s %s", a.role.name, a.name)
+			errCh <- errors.WithContextTags(err, ctx)
 			log.Info(ctx, "<done>")
 		})
 	}
@@ -286,7 +284,7 @@ func collectErrors(
 		numErr++
 	}
 	if numErr > 0 {
-		return errors.Wrapf(err, "%d %s errors", numErr, prefix)
+		return errors.WithContextTags(errors.Wrapf(err, "%d %s errors", numErr, prefix), ctx)
 	}
 	return nil
 }

@@ -80,6 +80,12 @@ start* start bad   good  bad  start
 good   good  good  good  good start
 bad    bad   bad   bad   bad  start
 `},
+		{&neverFsm, `# never
+       t     f     e:t   e:f   reset
+start* start good  bad   good  start
+bad    bad   bad   bad   bad   start
+good   good  good  good  good  start
+`},
 		{&notAlwaysFsm, `# not always
        t     f     e:t   e:f   reset
 start* start good  bad   good  start

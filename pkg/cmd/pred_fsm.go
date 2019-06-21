@@ -47,6 +47,7 @@ var automata = func() map[string]*fsm {
 	r := make(map[string]*fsm)
 	for _, f := range []*fsm{
 		&alwaysFsm,
+		&neverFsm,
 		&notAlwaysFsm,
 		&eventuallyFsm,
 		&alwaysEventuallyFsm,
@@ -120,6 +121,19 @@ var alwaysFsm = fsm{
 		0: []int{0, 2, 1, 2, 0}, // start
 		1: []int{1, 1, 1, 1, 0}, // good
 		2: []int{2, 2, 2, 2, 0}, // bad
+	},
+}
+
+// neverFsm is equivalent to always, switching the end states.
+var neverFsm = fsm{
+	name:       "never",
+	startState: 0,
+	stateNames: []string{"start", "bad", "good"},
+	labels:     []string{"t", "f", "e:t", "e:f", "reset"},
+	edges: [][]int{
+		0: []int{0, 2, 1, 2, 0}, // start
+		1: []int{1, 1, 1, 1, 0}, // bad
+		2: []int{2, 2, 2, 2, 0}, // good
 	},
 }
 

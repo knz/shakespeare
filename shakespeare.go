@@ -11,8 +11,7 @@ import (
 
 func main() {
 	if err := cmd.Run(); err != nil {
-		fmt.Println("😱 an error has occured!")
-		fmt.Println(err)
+		fmt.Println("error:", err)
 		if bufs := errors.GetContextTags(err); len(bufs) > 0 {
 			var buf *logtags.Buffer
 			for _, b := range bufs {

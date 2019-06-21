@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"os"
 	"os/signal"
@@ -21,12 +20,12 @@ import (
 )
 
 // Run runs the program.
-func Run() error {
+func Run() (err error) {
 	ctx := context.Background()
 
 	// Load the configuration.
 	cfg := newConfig()
-	if err := cfg.initArgs(ctx); err != nil {
+	if err = cfg.initArgs(ctx); err != nil {
 		log.Errorf(ctx, "arg error: %+v", err)
 		return errors.WithDetail(err, "(while parsing the command line)")
 	}
@@ -41,7 +40,7 @@ func Run() error {
 	}
 
 	// Initialize the logging sub-system.
-	if err := cfg.setupLogging(ctx); err != nil {
+	if err = cfg.setupLogging(ctx); err != nil {
 		log.Errorf(ctx, "init error: %+v", err)
 		return errors.WithDetail(err, "(while initializing the logging subsystem)")
 	}
@@ -54,7 +53,7 @@ func Run() error {
 	}
 	defer rd.close()
 
-	if err := cfg.parseCfg(ctx, rd); err != nil {
+	if err = cfg.parseCfg(ctx, rd); err != nil {
 		log.Errorf(ctx, "parse error: %+v", err)
 		return errors.WithDetail(err, "(while parsing the specification)")
 	}
@@ -65,7 +64,7 @@ func Run() error {
 	}
 
 	// Generate the steps.
-	if err := cfg.compile(); err != nil {
+	if err = cfg.compile(); err != nil {
 		log.Errorf(ctx, "compile error: %+v", err)
 		return errors.WithDetail(err, "(while compiling the script)")
 	}
@@ -81,7 +80,14 @@ func Run() error {
 
 	// Create the app.
 	ap := newApp(cfg)
+	defer ap.close()
 	ap.intro()
+
+	defer func() {
+		if err != nil {
+			ap.narrate(E, "😱", "an error has occurred!")
+		}
+	}()
 
 	// Run the script.
 	err = ap.runConduct(ctx)
@@ -90,9 +96,6 @@ func Run() error {
 		// We'll exit with the error later below.
 		err = errors.WithDetail(err, "(while conducting the play)")
 	}
-	if !errors.Is(err, errAuditViolation) {
-		err = errors.CombineErrors(err, ap.checkAuditViolations())
-	}
 
 	finalErr := ap.au.checkFinal(ctx)
 	if finalErr != nil {
@@ -100,6 +103,17 @@ func Run() error {
 		finalErr = errors.WithDetail(finalErr, "(while finalizing the audit)")
 	}
 	err = errors.CombineErrors(err, finalErr)
+
+	if !errors.Is(err, errAuditViolation) {
+		// This happens in the common case when a play is left to
+		// terminate without early failure on audit errors: in that case,
+		// the collector's context is canceled, the cancel error overtakes
+		// the audit failure, and then dismissed (we're not reporting
+		// context cancellation as a process failure).
+		// In that case, we still want to verify whether there
+		// are failures remaining.
+		err = errors.CombineErrors(err, ap.checkAuditViolations())
+	}
 
 	// Generate the plots.
 	plotErr := ap.plot(ctx)
@@ -184,7 +198,7 @@ func (ap *app) runConduct(bctx context.Context) error {
 				// code. So we keep the error state here for later.
 				returnErr = errors.New("interrupted")
 				msgDouble := "Note: a second interrupt will skip graceful shutdown and terminate forcefully"
-				ap.narrate(msgDouble)
+				ap.narrate(I, "🛑", msgDouble)
 			}
 
 			requestTermination()
@@ -202,9 +216,9 @@ func (ap *app) runConduct(bctx context.Context) error {
 	// process, and a goroutine is busy telling the server to drain and
 	// stop. From this point on, we just have to wait.
 
-	const msgDrain = "👋 the play is terminating"
+	const msgDrain = "the play is terminating"
 	log.Info(shutdownCtx, msgDrain)
-	ap.narrate(msgDrain)
+	ap.narrate(I, "👏", msgDrain)
 
 	// Notify the user every 2 second of the shutdown progress.
 	go func() {
@@ -243,40 +257,12 @@ func (ap *app) runConduct(bctx context.Context) error {
 		return errors.Errorf("time limit reached, initiating hard shutdown")
 
 	case <-ap.stopper.IsStopped():
-		const msgDone = "🧹 the stage has been cleared"
+		const msgDone = "the stage has been cleared"
 		log.Infof(shutdownCtx, msgDone)
-		ap.narrate(msgDone)
+		ap.narrate(I, "🧹", msgDone)
 	}
 
 	return returnErr
-}
-
-func (cfg *config) initArgs(ctx context.Context) error {
-	cfg.shellPath = os.Getenv("SHELL")
-	pflag.StringVarP(&cfg.dataDir, "output-dir", "o", ".", "output data directory")
-	pflag.BoolVarP(&cfg.doPrint, "print-cfg", "p", false, "print out the parsed configuration")
-	pflag.BoolVarP(&cfg.parseOnly, "dry-run", "n", false, "do not execute anything, just check the configuration")
-	pflag.BoolVarP(&cfg.quiet, "quiet", "q", false, "do not emit progress messages")
-	pflag.BoolVarP(&cfg.earlyExit, "stop-at-first-violation", "S", false, "terminate the play as soon as an auditor is dissatisfied")
-	pflag.StringSliceVarP(&cfg.includePath, "search-dir", "I", []string{}, "add this directory to the search path for include directives")
-
-	// Load the go flag settings from the log package into pflag.
-	pflag.CommandLine.AddGoFlagSet(flag.CommandLine)
-
-	// We'll revisit this value in setupLogging().
-	pflag.Lookup(logflags.LogToStderrName).NoOptDefVal = log.Severity_DEFAULT.String()
-
-	// Parse the command-line.
-	pflag.Parse()
-
-	// Derive the artifacts directory.
-	cfg.artifactsDir = filepath.Join(cfg.dataDir, "artifacts")
-
-	// Ensure the output directory and artifacts dir exist.
-	if err := os.MkdirAll(cfg.artifactsDir, 0755); err != nil {
-		return err
-	}
-	return nil
 }
 
 func (cfg *config) setupLogging(ctx context.Context) error {

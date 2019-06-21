@@ -225,12 +225,12 @@ func (ap *app) checkEvent(
 		log.Infof(ctx, "auditor %s: %s => %v (%v)", auditorName, a.auditor.expr, value, err)
 		if b, ok := value.(bool); (!ok || !b) && err == nil {
 			ev.success = false
-			ap.woops(ctx, "😿  %s (%v)", auditorName, value)
+			ap.woops(ctx, "%s (%v)", auditorName, value)
 		}
 		if err != nil {
 			ev.success = false
 			ev.output = html.EscapeString(fmt.Sprintf("%v", err))
-			ap.woops(ctx, "😿  %s: %v", auditorName, err)
+			ap.woops(ctx, "%s: %v", auditorName, err)
 		}
 
 		// Here the point where we could suspend (not terminate!)
@@ -263,17 +263,21 @@ func (ap *app) checkAuditViolations() error {
 		return nil
 	}
 
-	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "%d audit violations:\n", len(ap.au.violations))
-	comma := ""
-	for _, v := range ap.au.violations {
-		buf.WriteString(comma)
-		comma = "\n"
-		fmt.Fprintf(&buf, "😿  %s (at ~%.2fs", v.auditorName, v.ts)
-		if v.output != "" {
-			fmt.Fprintf(&buf, ", %s", v.output)
+	if !ap.auditReported {
+		// Avoid printing out the audit errors twice.
+		ap.auditReported = true
+		ap.narrate(E, "😞", "%d audit violations:", len(ap.au.violations))
+		for _, v := range ap.au.violations {
+			var buf bytes.Buffer
+			fmt.Fprintf(&buf, "%s (at ~%.2fs", v.auditorName, v.ts)
+			if v.output != "" {
+				fmt.Fprintf(&buf, ", %s", v.output)
+			}
+			buf.WriteByte(')')
+			ap.narrate(E, "😿", "%s", buf.String())
 		}
-		buf.WriteByte(')')
 	}
-	return errors.Mark(errors.New(buf.String()), errAuditViolation)
+
+	err := errors.Newf("%d audit violations", len(ap.au.violations))
+	return errors.Mark(err, errAuditViolation)
 }

@@ -1,14 +1,21 @@
 package cmd
 
 import (
+	"context"
+	"flag"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
 
 	"github.com/Knetic/govaluate"
 	"github.com/cockroachdb/errors"
+	"github.com/knz/shakespeare/pkg/crdb/log"
+	"github.com/knz/shakespeare/pkg/crdb/log/logflags"
+	"github.com/spf13/pflag"
 )
 
 type config struct {
@@ -28,6 +35,8 @@ type config struct {
 	shellPath string
 	// The list of directory to search for includes.
 	includePath []string
+	// Whether to displays emoji.
+	asciiOnly bool
 
 	// roles is the set of roles defined by the configuration.
 	// This is populated during parsing.
@@ -60,6 +69,35 @@ type config struct {
 	// audience is the set of observers/auditors for the play.
 	audience      map[string]*audienceMember
 	audienceNames []string
+}
+
+func (cfg *config) initArgs(ctx context.Context) error {
+	cfg.shellPath = os.Getenv("SHELL")
+	pflag.StringVarP(&cfg.dataDir, "output-dir", "o", ".", "output data directory")
+	pflag.BoolVarP(&cfg.doPrint, "print-cfg", "p", false, "print out the parsed configuration")
+	pflag.BoolVarP(&cfg.parseOnly, "dry-run", "n", false, "do not execute anything, just check the configuration")
+	pflag.BoolVarP(&cfg.quiet, "quiet", "q", false, "do not emit progress messages")
+	pflag.BoolVarP(&cfg.earlyExit, "stop-at-first-violation", "S", false, "terminate the play as soon as an auditor is dissatisfied")
+	pflag.StringSliceVarP(&cfg.includePath, "search-dir", "I", []string{}, "add this directory to the search path for include directives")
+	pflag.BoolVar(&cfg.asciiOnly, "ascii-only", false, "do not display unicode emojis")
+
+	// Load the go flag settings from the log package into pflag.
+	pflag.CommandLine.AddGoFlagSet(flag.CommandLine)
+
+	// We'll revisit this value in setupLogging().
+	pflag.Lookup(logflags.LogToStderrName).NoOptDefVal = log.Severity_DEFAULT.String()
+
+	// Parse the command-line.
+	pflag.Parse()
+
+	// Derive the artifacts directory.
+	cfg.artifactsDir = filepath.Join(cfg.dataDir, "artifacts")
+
+	// Ensure the output directory and artifacts dir exist.
+	if err := os.MkdirAll(cfg.artifactsDir, 0755); err != nil {
+		return err
+	}
+	return nil
 }
 
 type audienceMember struct {

@@ -86,6 +86,8 @@ func Run() (err error) {
 	defer func() {
 		if err != nil {
 			ap.narrate(E, "😱", "an error has occurred!")
+		} else {
+			ap.narrate(I, "😘", "good day! come again soon.")
 		}
 	}()
 

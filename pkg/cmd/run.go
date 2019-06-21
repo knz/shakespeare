@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"syscall"
 	"time"
 
@@ -104,7 +105,7 @@ func Run() (err error) {
 		log.Errorf(ctx, "audit error: %+v", finalErr)
 		finalErr = errors.WithDetail(finalErr, "(while finalizing the audit)")
 	}
-	err = errors.CombineErrors(err, finalErr)
+	err = combineErrors(err, finalErr)
 
 	if !errors.Is(err, errAuditViolation) {
 		// This happens in the common case when a play is left to
@@ -114,7 +115,7 @@ func Run() (err error) {
 		// context cancellation as a process failure).
 		// In that case, we still want to verify whether there
 		// are failures remaining.
-		err = errors.CombineErrors(err, ap.checkAuditViolations())
+		err = combineErrors(err, ap.checkAuditViolations())
 	}
 
 	// Generate the plots.
@@ -123,7 +124,7 @@ func Run() (err error) {
 		log.Errorf(ctx, "plot error: %+v", plotErr)
 		plotErr = errors.WithDetail(plotErr, "(while plotting the data)")
 	}
-	return errors.CombineErrors(err, plotErr)
+	return combineErrors(err, plotErr)
 }
 
 func (ap *app) runConduct(bctx context.Context) error {
@@ -186,8 +187,11 @@ func (ap *app) runConduct(bctx context.Context) error {
 
 		case <-infoCh:
 			log.Info(ctx, showRunning(ap.stopper))
+			buf := make([]byte, 16384)
+			s := runtime.Stack(buf, true)
+			log.Infof(ctx, "go stacks:\n%s", string(buf[:s]))
 
-		case <-ap.stopper.ShouldStop():
+		case <-ap.stopper.ShouldQuiesce():
 			requestTermination()
 			exit = true
 
@@ -230,6 +234,11 @@ func (ap *app) runConduct(bctx context.Context) error {
 			select {
 			case <-ticker.C:
 				log.Info(shutdownCtx, showRunning(ap.stopper))
+			case <-infoCh:
+				log.Info(ctx, showRunning(ap.stopper))
+				buf := make([]byte, 16384)
+				s := runtime.Stack(buf, true)
+				log.Infof(ctx, "go stacks:\n%s", string(buf[:s]))
 			case <-ctx.Done():
 				return
 			case <-ap.stopper.IsStopped():

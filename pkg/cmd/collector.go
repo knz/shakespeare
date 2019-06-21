@@ -61,7 +61,10 @@ func (ap *app) collect(
 ) (err error) {
 	defer func() {
 		auditErr := ap.checkAuditViolations()
-		err = errors.CombineErrors(err, auditErr)
+		// The order of the two arguments here matter: the error
+		// collection returns the last error as its cause. We
+		// want to keep the original error object as cause.
+		err = combineErrors(auditErr, err)
 	}()
 
 	of := newOutputFiles()
@@ -74,13 +77,13 @@ func (ap *app) collect(
 
 	for {
 		select {
-		case <-ap.stopper.ShouldStop():
+		case <-ap.stopper.ShouldQuiesce():
 			log.Info(ctx, "interrupted")
 			return nil
 
 		case <-ctx.Done():
 			log.Info(ctx, "canceled")
-			return errors.WithStack(ctx.Err())
+			return wrapCtxErr(ctx)
 
 		case <-t.C:
 			t.Read = true

@@ -33,13 +33,13 @@ func (ap *app) audit(
 ) error {
 	for {
 		select {
-		case <-ap.stopper.ShouldStop():
+		case <-ap.stopper.ShouldQuiesce():
 			log.Info(ctx, "terminated")
 			return nil
 
 		case <-ctx.Done():
 			log.Info(ctx, "interrupted")
-			return errors.WithStack(ctx.Err())
+			return wrapCtxErr(ctx)
 
 		case ev := <-moodChan:
 			sinceBeginning := ev.ts.Sub(ap.au.epoch).Seconds()
@@ -243,8 +243,8 @@ func (ap *app) checkEvent(
 		select {
 		case <-ctx.Done():
 			log.Info(ctx, "interrupted")
-			return errors.WithStack(ctx.Err())
-		case <-ap.stopper.ShouldStop():
+			return wrapCtxErr(ctx)
+		case <-ap.stopper.ShouldQuiesce():
 			log.Info(ctx, "terminated")
 			return nil
 		case actionCh <- ev:

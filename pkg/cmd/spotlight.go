@@ -1,12 +1,9 @@
 package cmd
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"html"
-	"io"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -26,103 +23,24 @@ func (ap *app) spotlight(
 	collectorChan chan<- observation,
 	auChan chan<- auditableEvent,
 ) error {
-	// Start the spotlight command in the background.
-	cmd := a.makeShCmd(a.role.spotlightCmd)
-	log.Infof(ctx, "executing: %s", strings.Join(cmd.Args, " "))
-	outstream, err := cmd.StderrPipe()
-	if err != nil {
-		return errors.WithContextTags(errors.Wrap(err, "setting up"), ctx)
-	}
-	cmd.Stdout = cmd.Stderr
-	if err := cmd.Start(); err != nil {
-		return errors.WithContextTags(errors.Wrap(err, "exec"), ctx)
-	}
-
-	defer func() {
-		// When the function returns, we'll close the stream but also try
-		// to terminate the command gracefully. If that fails, we'll be a
-		// bit more agressive.
-		outstream.Close()
-		if cmd.Process != nil {
-			cmd.Process.Signal(os.Interrupt)
-			time.Sleep(1)
-			cmd.Process.Kill()
-		}
-		err := cmd.Wait()
-		log.Infof(ctx, "spotlight terminated: %+v", err)
-	}()
-
-	// We'll use a buffered reader to extract lines of data from it.
-	rd := bufio.NewReader(outstream)
-
-	type res struct {
-		line string
-		err  error
-	}
-	lines := make(chan res)
-
-	readCtx := logtags.AddTag(ctx, "reader", nil)
-	runWorker(readCtx, ap.stopper, func(ctx context.Context) {
-		defer func() { close(lines) }()
-		// The reader runs asynchronously, until there is no more data to
-		// read or the context is canceled.
-		for {
-			line, err := rd.ReadString('\n')
-			line = strings.TrimSpace(line)
-			if line != "" {
-				select {
-				case <-ap.stopper.ShouldStop():
-					log.Info(ctx, "interrupted")
-					return
-				case <-ctx.Done():
-					log.Info(ctx, "canceled")
-					return
-				case lines <- res{line, nil}:
-					// ok
-				}
-			}
-			if err != nil {
-				if err != io.EOF {
-					select {
-					case <-ap.stopper.ShouldStop():
-						log.Info(ctx, "interrupted")
-					case <-ctx.Done():
-						log.Info(ctx, "canceled")
-					case lines <- res{"", errors.WithContextTags(errors.WithStack(err), ctx)}:
-					}
-				} else {
-					log.Info(ctx, "EOF")
-				}
-				return
-			}
-		}
+	ps, err, exitErr := a.runActorCommandWithConsumer(ctx, ap.stopper, 0, true, a.role.spotlightCmd, func(line string) error {
+		monLogger.Logf(ctx, "clamors: %q", line)
+		sigCtx := logtags.AddTag(ctx, "signals", nil)
+		line = strings.TrimSpace(line)
+		ap.detectSignals(sigCtx, a, collectorChan, auChan, line)
+		return nil
 	})
-
-	// Process the lines received from the actor.
-	for {
-		select {
-		case res := <-lines:
-			if res.err != nil {
-				return errors.WithContextTags(errors.WithStack(res.err), ctx)
-			}
-			if res.line == "" {
-				return nil
-			}
-			monLogger.Logf(ctx, "clamors: %q", res.line)
-			sigCtx := logtags.AddTag(ctx, "signals", nil)
-			ap.detectSignals(sigCtx, a, collectorChan, auChan, res.line)
-
-		case <-ap.stopper.ShouldStop():
-			log.Info(ctx, "interrupted")
-			return nil
-
-		case <-ctx.Done():
-			log.Info(ctx, "canceled")
-			return errors.WithContextTags(errors.WithStack(ctx.Err()), ctx)
+	log.Infof(ctx, "spotlight terminated (%+v)", err)
+	if ps != nil && !ps.Success() {
+		if errors.Is(err, context.Canceled) {
+			// It's expected that the spotlight gets a hangup at the end of execution. It's not worth reporting.
+		} else {
+			ap.narrate(E, "😞", "%s's spotlight failed: %s (see log for details)", a.name, exitErr)
+			err = combineErrors(err, errors.WithContextTags(errors.Wrap(exitErr, "spotlight terminated abnormally"), ctx))
 		}
 	}
 
-	return nil
+	return err
 }
 
 // detectSignals parses a line produced by the spotlight to detect any
@@ -191,7 +109,7 @@ func (ap *app) detectSignals(
 
 		// Emit to the observers.
 		select {
-		case <-ap.stopper.ShouldStop():
+		case <-ap.stopper.ShouldQuiesce():
 			log.Info(ctx, "interrupted")
 			return
 		case <-ctx.Done():
@@ -202,7 +120,7 @@ func (ap *app) detectSignals(
 		}
 		// Emit to the audition.
 		select {
-		case <-ap.stopper.ShouldStop():
+		case <-ap.stopper.ShouldQuiesce():
 			log.Info(ctx, "interrupted")
 			return
 		case <-ctx.Done():

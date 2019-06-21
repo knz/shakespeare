@@ -31,7 +31,7 @@ func (ap *app) conduct(ctx context.Context) (err error) {
 		if cleanupErr := ap.runCleanup(ctx); cleanupErr != nil {
 			// Error during cleanup. runCleanup already
 			// printed out the details via log.Errorf.
-			err = errors.CombineErrors(err, cleanupErr)
+			err = combineErrors(err, cleanupErr)
 		}
 	}()
 
@@ -88,6 +88,7 @@ func (ap *app) conduct(ctx context.Context) (err error) {
 	var wgPrompt sync.WaitGroup
 	promptDone := ap.runPrompter(ctx, &wgPrompt, actionChan, moodCh, errCh)
 	closers = append(closers, func() {
+		log.Info(ctx, "requesting the prompter to exit")
 		promptDone()
 		wgPrompt.Wait()
 	})
@@ -110,7 +111,12 @@ func (ap *app) runPrompter(
 	runWorker(promptCtx, ap.stopper, func(ctx context.Context) {
 		defer wg.Done()
 		log.Info(ctx, "<intrat>")
-		errCh <- errors.WithContextTags(ap.prompt(ctx, actionChan, moodCh), ctx)
+		err := errors.WithContextTags(ap.prompt(ctx, actionChan, moodCh), ctx)
+		if errors.Is(err, context.Canceled) {
+			// It's ok if the prompt is canceled.
+			err = nil
+		}
+		errCh <- err
 		log.Info(ctx, "<exit>")
 	})
 	return promptDone
@@ -238,7 +244,7 @@ func (ap *app) runForAllActors(
 			defer wg.Done()
 			// Start one actor.
 			log.Info(ctx, "<start>")
-			_, _, err := a.runActorCommand(ctx, ap.stopper, 10*time.Second, false /*interruptible*/, pCmd)
+			_, _, err, _ := a.runActorCommand(ctx, ap.stopper, 10*time.Second, false /*interruptible*/, pCmd)
 			errCh <- errors.WithContextTags(err, ctx)
 			log.Info(ctx, "<done>")
 		})
@@ -259,8 +265,10 @@ func collectErrors(
 	select {
 	case err = <-errCh:
 	}
+	coll := &errorCollection{}
 	if err != nil {
 		log.Errorf(ctx, "complaint during %s: %+v", prefix, err)
+		coll.errs = append(coll.errs, err)
 	}
 	// Signal all to terminate.
 	for _, closer := range closers {
@@ -270,21 +278,21 @@ func collectErrors(
 	// terminates in all cases.
 	close(errCh)
 
-	numErr := 0
 	for stErr := range errCh {
 		if stErr == nil {
 			continue
 		}
 		log.Errorf(ctx, "complaint during %s: %+v", prefix, stErr)
-		if err == nil {
-			err = stErr
-		} else {
-			err = errors.WithSecondaryError(err, stErr)
-		}
-		numErr++
+		coll.errs = append(coll.errs, stErr)
 	}
-	if numErr > 0 {
-		return errors.WithContextTags(errors.Wrapf(err, "%d %s errors", numErr, prefix), ctx)
+
+	if len(coll.errs) > 0 {
+		if len(coll.errs) == 1 {
+			err = coll.errs[0]
+		} else {
+			err = coll
+		}
+		return errors.WithContextTags(errors.Wrap(err, prefix), ctx)
 	}
 	return nil
 }

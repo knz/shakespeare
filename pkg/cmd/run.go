@@ -131,7 +131,7 @@ func (ap *app) runConduct(bctx context.Context) error {
 			close(errChan)
 		}()
 		if err := ap.conduct(ctx); err != nil {
-			errChan <- err
+			errChan <- errors.WithContextTags(err, ctx)
 		}
 	})
 
@@ -184,7 +184,7 @@ func (ap *app) runConduct(bctx context.Context) error {
 				// code. So we keep the error state here for later.
 				returnErr = errors.New("interrupted")
 				msgDouble := "Note: a second interrupt will skip graceful shutdown and terminate forcefully"
-				fmt.Fprintln(os.Stdout, msgDouble)
+				ap.narrate(msgDouble)
 			}
 
 			requestTermination()
@@ -202,11 +202,9 @@ func (ap *app) runConduct(bctx context.Context) error {
 	// process, and a goroutine is busy telling the server to drain and
 	// stop. From this point on, we just have to wait.
 
-	const msgDrain = "the play is terminating"
+	const msgDrain = "👋 the play is terminating"
 	log.Info(shutdownCtx, msgDrain)
-	if !ap.cfg.quiet {
-		fmt.Println(msgDrain)
-	}
+	ap.narrate(msgDrain)
 
 	// Notify the user every 2 second of the shutdown progress.
 	go func() {
@@ -245,11 +243,9 @@ func (ap *app) runConduct(bctx context.Context) error {
 		return errors.Errorf("time limit reached, initiating hard shutdown")
 
 	case <-ap.stopper.IsStopped():
-		const msgDone = "the stage has been cleared"
+		const msgDone = "🧹 the stage has been cleared"
 		log.Infof(shutdownCtx, msgDone)
-		if !ap.cfg.quiet {
-			fmt.Fprintln(os.Stdout, msgDone)
-		}
+		ap.narrate(msgDone)
 	}
 
 	return returnErr

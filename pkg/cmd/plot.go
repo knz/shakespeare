@@ -24,7 +24,7 @@ func (ap *app) plot(ctx context.Context) error {
 	if ap.maxTime < 0 {
 		ap.maxTime = 1
 	}
-	ap.narrate("the timeline extends from %.2fs to %.2fs, relative to %s",
+	ap.narrate("ℹ️ the timeline extends from %.2fs to %.2fs, relative to %s",
 		ap.minTime, ap.maxTime, ap.au.epoch)
 
 	// Give some breathing room to action labels.
@@ -71,7 +71,7 @@ func (ap *app) plot(ctx context.Context) error {
 		if as, ok := ap.au.auditorStates[a.name]; ok && as.hasData {
 			fName := fmt.Sprintf("audit-%s.csv", a.name)
 
-			ap.narrate("observer %s found audit data: %s",
+			ap.narrate("📈 observer %s found audit data: %s",
 				a.name, filepath.Join(ap.cfg.dataDir, fName))
 
 			pl := plot{fName: fName}
@@ -94,7 +94,7 @@ func (ap *app) plot(ctx context.Context) error {
 					fName: fName,
 					title: fmt.Sprintf("%s %s", actName, sigName),
 				}
-				ap.narrate("observer %s found data for %s's %s: %s",
+				ap.narrate("📈 observer %s found data for %s's %s: %s",
 					a.name, actName, sigName, filepath.Join(ap.cfg.dataDir, fName))
 
 				if as.drawEvents {
@@ -125,7 +125,7 @@ func (ap *app) plot(ctx context.Context) error {
 	defer func() {
 		_ = f.Close()
 	}()
-	ap.narrate("per-plot script: %s", fName)
+	ap.narrate("📜 per-plot script: %s", fName)
 
 	fmt.Fprintf(f, "# auto-generated file.\n# See 'runme.gp' to actually generate plots.\n")
 
@@ -240,7 +240,7 @@ func (ap *app) plot(ctx context.Context) error {
 	defer func() {
 		_ = f2.Close()
 	}()
-	ap.narrate("plot-all script: %s", fName)
+	ap.narrate("📜 plot-all script: %s", fName)
 
 	// We'll generate PDF.
 	fmt.Fprintf(f2, "# auto-generated file.\n# Run 'gnuplot runme.gp' to actually generate plots.\n")

@@ -6,8 +6,8 @@ import (
 	"math"
 	"time"
 
-	"github.com/knz/shakespeare/pkg/crdb/log"
 	"github.com/cockroachdb/logtags"
+	"github.com/knz/shakespeare/pkg/crdb/log"
 	"github.com/knz/shakespeare/pkg/crdb/stop"
 	"golang.org/x/crypto/ssh/terminal"
 )
@@ -53,7 +53,7 @@ func (ap *app) narrate(format string, args ...interface{}) {
 	if ap.cfg.quiet {
 		return
 	}
-	fmt.Printf(format, args...)
+	fmt.Printf("📢 "+format, args...)
 	fmt.Println()
 }
 
@@ -70,7 +70,7 @@ func (ap *app) witness(ctx context.Context, format string, args ...interface{}) 
 		if len(s) > 2*width/3-3 {
 			s = s[:2*width/3-3] + "..."
 		}
-		fmt.Printf("%*s%s\n", width/3-1, " ", s)
+		fmt.Printf("%*s👀%s\n", width/3-2, " ", s)
 		/*		pad := width - len(s) - 2
 				if pad < 0 {
 					pad = 0
@@ -106,7 +106,7 @@ func (ap *app) intro() {
 	for _, a := range ap.cfg.actors {
 		playedRoles[a.role.name] = struct{}{}
 	}
-	ap.narrate("welcome a cast of %d actors, playing %d roles",
+	ap.narrate("🎭 welcome a cast of %d actors, playing %d roles",
 		len(ap.cfg.actors), len(playedRoles))
-	ap.narrate("the play is starting; expected duration: %s", ap.cfg.tempo*time.Duration(len(ap.cfg.play)))
+	ap.narrate("🎶 the play is starting; expected duration: %s", ap.cfg.tempo*time.Duration(len(ap.cfg.play)))
 }

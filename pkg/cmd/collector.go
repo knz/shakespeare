@@ -143,7 +143,7 @@ func (ap *app) collect(
 
 				status := 0
 				if !ev.success {
-					ap.narrate(W, "🤨", "action failed: %s (see log for details)", ev.output)
+					ap.narrate(W, "🤨", "action %s:%s failed: %s (see log for details)", ev.actor, ev.action, ev.output)
 					status = 1
 				}
 

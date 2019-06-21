@@ -497,7 +497,7 @@ func (a *audienceMember) addOrUpdateSignalSource(r *role, signal, target string)
 		if s.drawEvents != isEventSignal {
 			return fmt.Errorf("audience %q watches signal %q with mismatched types", a.name, signal)
 		}
-		s.origin = append(s.origin, target)
+		s.maybeAddOrigin(target)
 		return nil
 	}
 	aSrc := &audienceSource{
@@ -508,4 +508,13 @@ func (a *audienceMember) addOrUpdateSignalSource(r *role, signal, target string)
 	a.observer.signals[signal] = aSrc
 	a.observer.sigNames = append(a.observer.sigNames, signal)
 	return nil
+}
+
+func (s *audienceSource) maybeAddOrigin(target string) {
+	for _, o := range s.origin {
+		if o == target {
+			return
+		}
+	}
+	s.origin = append(s.origin, target)
 }

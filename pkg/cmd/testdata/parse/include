@@ -33,11 +33,14 @@ end
 parse
 include synerr.cfg
 ----
-parse error: testdata/include/synerr2.cfg:1: unknown syntax: notvalid
+parse error: testdata/include/synerr2.cfg:1: unknown syntax
+--
+while parsing:
+testdata/include/synerr2.cfg:1   > notvalid
 --
 in file included from:
-testdata/include/synerr.cfg:2: <- here
-<testdata>:2: <- here
+testdata/include/synerr.cfg:2 <- here
+<testdata>:2 <- here
 
 
 parse
@@ -46,3 +49,6 @@ include nonexistent.cfg
 parse error: <testdata>:1: nonexistent.cfg: file does not exist
 --
 include search path: [. testdata/include]
+--
+while parsing:
+<testdata>:1   > include nonexistent.cfg

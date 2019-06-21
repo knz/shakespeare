@@ -77,13 +77,13 @@ func (a *audienceMember) checkExpr(cfg *config) error {
 	for v := range defVars {
 		parts := strings.Split(v, ".")
 		if len(parts) != 2 {
-			return fmt.Errorf("invalid signal reference: %q", v)
+			return errors.Newf("invalid signal reference: %q", v)
 		}
 		actorName := parts[0]
 		sigName := parts[1]
 		actor, ok := cfg.actors[actorName]
 		if !ok {
-			return fmt.Errorf("unknown actor %q", actorName)
+			return errors.Newf("unknown actor %q", actorName)
 		}
 		a.addOrUpdateSignalSource(actor.role, sigName, actorName)
 		actor.addAuditor(sigName, a.name)
@@ -111,7 +111,7 @@ func newAudition(cfg *config) *audition {
 		activations:   make(map[exprVar]struct{}),
 	}
 	for aName, a := range cfg.audience {
-		if a.auditor.when != auditNone {
+		if a.auditor.when != nil && a.auditor.when.name == "always" {
 			au.auditorStates[aName] = &auditorState{}
 			if a.auditor.alwaysSensitive {
 				au.alwaysAudit = append(au.alwaysAudit, aName)
@@ -208,7 +208,7 @@ func (ap *app) checkEvent(
 
 	for _, auditorName := range auditNames {
 		a, ok := ap.au.cfg.audience[auditorName]
-		if !ok || a.auditor.when == auditNone {
+		if !ok || a.auditor.when == nil {
 			return errors.Newf("event for signal %s triggers non-existent auditor %q", varName, auditorName)
 		}
 

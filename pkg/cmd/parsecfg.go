@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"reflect"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -53,7 +55,7 @@ func (cfg *config) parseCfg(ctx context.Context, rd *reader) error {
 				}
 			}
 			if !foundParser {
-				return pos.wrapErr(fmt.Errorf("unknown syntax: %s", line))
+				return pos.wrapErr(errors.Newf("unknown syntax"))
 			}
 		}
 	}
@@ -85,7 +87,7 @@ func parseSection(ctx context.Context, rd *reader, lineParser func(line string) 
 var audienceRe = compileRe(`^audience$`)
 var watchRe = compileRe(`^(?P<name>\S+)\s+watches\s+(?P<target>every\s+\S+|\S+)\s+(?P<signal>\S+)\s*$`)
 var measuresRe = compileRe(`^(?P<name>\S+)\s+measures\s+(?P<ylabel>.*)$`)
-var auditorRe = compileRe(`^(?P<name>\S+)\s+expects\s+(?P<when>always|eventually|always eventually)\s*:\s*(?P<expr>.*)$`)
+var auditorRe = compileRe(`^(?P<name>\S+)\s+expects\s+(?P<when>[a-z]+[a-z ]*[a-z])\s*:\s*(?P<expr>.*)$`)
 
 func (cfg *config) parseAudience(line string) error {
 	if watchRe.MatchString(line) {
@@ -95,7 +97,7 @@ func (cfg *config) parseAudience(line string) error {
 
 		r, foundActors, err := cfg.selectActors(target)
 		if err != nil {
-			return fmt.Errorf("%s: %s", err, line)
+			return err
 		}
 		if len(foundActors) == 0 {
 			log.Warningf(context.TODO(), "there is no actor playing role %q for audience %q to watch", r.name, aName)
@@ -104,7 +106,7 @@ func (cfg *config) parseAudience(line string) error {
 		a := cfg.addOrGetAudienceMember(aName)
 
 		if err := a.addOrUpdateSignalSource(r, signal, target); err != nil {
-			return errors.Wrapf(err, "while parsing: %s", line)
+			return err
 		}
 
 		for _, actor := range foundActors {
@@ -121,24 +123,22 @@ func (cfg *config) parseAudience(line string) error {
 		aExpr := strings.TrimSpace(auditorRe.ReplaceAllString(line, "${expr}"))
 
 		a := cfg.addOrGetAudienceMember(aName)
-		if a.auditor.when != auditNone {
-			return fmt.Errorf("duplicate auditor definition: %s", line)
+		if a.auditor.when != nil {
+			return errors.Newf("duplicate auditor definition: %q", aName)
 		}
 		a.auditor.expr = aExpr
 
 		when, err := parseAuditWhen(aWhen)
 		if err != nil {
-			return errors.Wrapf(
-				errors.Wrapf(err, "auditor %q", aName),
-				"while parsing: %s", line)
+			return err
 		}
 		a.auditor.when = when
 
 		if err := a.checkExpr(cfg); err != nil {
-			return errors.Wrapf(
-				errors.Wrapf(err, "auditor %q", aName),
-				"while parsing: %s", line)
+			return err
 		}
+	} else {
+		return errors.New("unknown syntax")
 	}
 
 	return nil
@@ -154,14 +154,14 @@ func (cfg *config) parseRole(
 	ctx context.Context, rd *reader, roleName string, extends string,
 ) error {
 	if _, ok := cfg.roles[roleName]; ok {
-		return fmt.Errorf("duplicate role definition: %s", roleName)
+		return errors.Newf("duplicate role definition: %q", roleName)
 	}
 
 	var thisRole *role
 	if extends != "" {
 		parentRole, ok := cfg.roles[extends]
 		if !ok {
-			return fmt.Errorf("unknown role: %s", extends)
+			return explainAlternatives(errors.Newf("unknown role: %s", extends), "roles", cfg.roles)
 		}
 		thisRole = parentRole.clone(roleName)
 	} else {
@@ -177,7 +177,7 @@ func (cfg *config) parseRole(
 			aName := actionDefRe.ReplaceAllString(line, "${actionname}")
 			aCmd := actionDefRe.ReplaceAllString(line, "${cmd}")
 			if _, ok := thisRole.actionCmds[aName]; ok {
-				return fmt.Errorf("role %q: duplicate action name %q", roleName, aName)
+				return errors.Newf("duplicate action name: %q", aName)
 			} else {
 				thisRole.actionNames = append(thisRole.actionNames, aName)
 			}
@@ -196,12 +196,12 @@ func (cfg *config) parseRole(
 
 			re, err := regexp.Compile(reS)
 			if err != nil {
-				return fmt.Errorf("role %q: error compiling regexp %s: %+v", roleName, reS, err)
+				return errors.Wrapf(err, "compiling regexp %s", reS)
 			}
 			rp.re = re
 			pname := parseDefRe.ReplaceAllString(line, "${name}")
 			if _, ok := parserNames[pname]; ok {
-				return fmt.Errorf("role %q: duplicate signal name %q: %s", roleName, pname, line)
+				return errors.Newf("duplicate signal name: %q", pname)
 			}
 			parserNames[pname] = struct{}{}
 			rp.name = pname
@@ -211,20 +211,21 @@ func (cfg *config) parseRole(
 			case "event":
 				rp.typ = parseEvent
 				if !hasSubexp(re, "event") {
-					return fmt.Errorf("role %q: expected 'event' in regexp: %s", roleName, line)
+					return errors.New("expected (?P<event>...) in regexp")
 				}
 			case "scalar":
 				rp.typ = parseScalar
 				if !hasSubexp(re, "scalar") {
-					return fmt.Errorf("role %q: expected 'scalar' in regexp: %s", roleName, line)
+					return errors.New("expected (?P<scalar>...) in regexp")
 				}
 			case "delta":
 				rp.typ = parseDelta
 				if !hasSubexp(re, "delta") {
-					return fmt.Errorf("role %q: expected 'delta' in regexp: %s", roleName, line)
+					return errors.New("expected (?P<delta>...) in regexp")
 				}
 			default:
-				return fmt.Errorf("role %q: unknown parser type %q: %s", roleName, ptype, line)
+				return explainAlternativesList(errors.Newf("unknown signal type %q", ptype),
+					"signals", "event", "scalar", "delta")
 			}
 
 			if hasSubexp(re, "ts_rfc3339") {
@@ -238,12 +239,14 @@ func (cfg *config) parseRole(
 				// Special "format": there is actually no timestamp. We'll auto-generate values.
 				rp.reGroup = ""
 			} else {
-				return fmt.Errorf("role %q: unknown time stamp format in regexp: %s", roleName, line)
+				return explainAlternativesList(
+					errors.New("unknown or missing time stamp format (?P<ts_...>) in regexp"),
+					"formats", "ts_now", "ts_log", "ts_rfc3339")
 			}
 
 			thisRole.resParsers = append(thisRole.resParsers, &rp)
 		} else {
-			return fmt.Errorf("role %q: unknown syntax: %s", roleName, line)
+			return errors.New("unknown syntax")
 		}
 		return nil
 	})
@@ -269,12 +272,12 @@ func (cfg *config) parseActors(line string) error {
 
 		r, ok := cfg.roles[roleName]
 		if !ok {
-			return fmt.Errorf("unknown role: %s", roleName)
+			return explainAlternatives(errors.Newf("unknown role: %s", roleName), "roles", cfg.roles)
 		}
 
 		actorName = strings.TrimSpace(actorName)
 		if _, ok := cfg.actors[actorName]; ok {
-			return fmt.Errorf("duplicate actor definition: %s", actorName)
+			return errors.Newf("duplicate actor definition: %q", actorName)
 		}
 
 		if extraEnv != "" {
@@ -293,7 +296,7 @@ func (cfg *config) parseActors(line string) error {
 		cfg.actors[actorName] = &act
 		cfg.actorNames = append(cfg.actorNames, actorName)
 	} else {
-		return fmt.Errorf("unknown syntax: %s", line)
+		return errors.New("unknown syntax")
 	}
 	return nil
 }
@@ -336,14 +339,14 @@ func (cfg *config) parseScript(line string) error {
 				act := doRe.ReplaceAllString(actAction, "${action}")
 				a.act = act
 			} else {
-				return fmt.Errorf("unknown action syntax: %s", line)
+				return errors.Newf("unknown action syntax: %s", line)
 			}
 		}
 	} else if tempoRe.MatchString(line) {
 		durS := tempoRe.ReplaceAllString(line, "${dur}")
 		dur, err := time.ParseDuration(durS)
 		if err != nil {
-			return fmt.Errorf("parsing tempo for %q: %+v", line, err)
+			return errors.Wrap(err, "parsing tempo")
 		}
 		cfg.tempo = dur
 	} else if stanzaRe.MatchString(line) {
@@ -352,7 +355,7 @@ func (cfg *config) parseScript(line string) error {
 
 		r, foundActors, err := cfg.selectActors(target)
 		if err != nil {
-			return fmt.Errorf("%s: %s", err, line)
+			return err
 		}
 		if len(foundActors) == 0 {
 			log.Warningf(context.TODO(), "there is no actor playing role %q to play this script: %s", r.name, line)
@@ -362,14 +365,16 @@ func (cfg *config) parseScript(line string) error {
 		for i := 0; i < len(script); i++ {
 			actionSteps, ok := cfg.actions[script[i]]
 			if !ok {
-				return fmt.Errorf("action '%c' not defined: %s", script[i], line)
+				return explainAlternatives(errors.Newf("script action '%c' not defined", script[i]), "script actions", cfg.actions)
 			}
 			for _, act := range actionSteps {
 				if act.typ != doAction {
 					continue
 				}
 				if _, ok := r.actionCmds[act.act]; !ok {
-					return fmt.Errorf("action '%c', :%q not defined for role %q: %s", script[i], act.act, r.name, line)
+					return explainAlternatives(
+						errors.Newf("action :%s (used in script action '%c') is not defined for role %q", act.act, script[i], r.name),
+						fmt.Sprintf("actions for role %s", r.name), r.actionCmds)
 				}
 			}
 		}
@@ -380,20 +385,34 @@ func (cfg *config) parseScript(line string) error {
 			})
 		}
 	} else {
-		return fmt.Errorf("unknown syntax: %s", line)
+		return errors.New("unknown syntax")
 	}
 	return nil
 }
 
-func parseAuditWhen(when string) (auditorWhen, error) {
-	switch when {
-	case "always":
-		return auditAlways, nil
-	case "eventually":
-		return auditEventually, nil
-	case "eventually always":
-		return auditEventuallyAlways, nil
-	default:
-		return 0, fmt.Errorf("unknown when syntax: %q", when)
+func parseAuditWhen(when string) (*fsm, error) {
+	if f, ok := automata[when]; ok {
+		return f, nil
 	}
+	return nil, explainAlternatives(
+		errors.Newf("predicate modality %q not recognized", when),
+		"modalities", automata)
+}
+
+func explainAlternatives(err error, name string, theMap interface{}) error {
+	keys := reflect.ValueOf(theMap).MapKeys()
+	if len(keys) == 0 {
+		return errors.WithHintf(err, "no %s defined yet", name)
+	}
+	keyS := make([]string, len(keys))
+	for i, k := range keys {
+		keyS[i] = k.String()
+	}
+	return explainAlternativesList(err, name, keyS...)
+}
+
+func explainAlternativesList(err error, name string, values ...string) error {
+	sort.Strings(values)
+	return errors.WithHintf(err,
+		"available %s: %s", name, strings.Join(values, ", "))
 }

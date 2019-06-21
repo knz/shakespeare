@@ -18,7 +18,11 @@ script
   tempo unknown
 end
 ----
-parse error: <testdata>:2: parsing tempo for "tempo unknown": time: invalid duration unknown
+parse error: <testdata>:2: parsing tempo: time: invalid duration unknown
+--
+while parsing:
+<testdata>:1     script
+<testdata>:2   >   tempo unknown
 
 
 parse
@@ -47,6 +51,10 @@ script
 end
 ----
 parse error: <testdata>:2: unknown action syntax: action a entails unknown
+--
+while parsing:
+<testdata>:1     script
+<testdata>:2   >    action a entails unknown
 
 
 parse
@@ -56,7 +64,13 @@ script
    prompt every doctor .....
 end
 ----
-parse error: <testdata>:4: action '.' not defined: prompt every doctor .....
+parse error: <testdata>:4: script action '.' not defined
+--
+while parsing:
+<testdata>:2     include medical_cast.cfg
+<testdata>:3     script
+<testdata>:4   >    prompt every doctor .....
+HINT: no script actions defined yet
 
 
 parse
@@ -105,7 +119,13 @@ script
   prompt every doctor ......
 end
 ----
-parse error: <testdata>:3: unknown role "doctor": prompt every doctor ......
+parse error: <testdata>:3: unknown role "doctor"
+--
+while parsing:
+<testdata>:1     script
+<testdata>:2       action . entails nop
+<testdata>:3   >   prompt every doctor ......
+HINT: no roles defined yet
 
 
 parse
@@ -136,4 +156,25 @@ script
   prompt alice  .....
 end
 ----
-parse error: <testdata>:5: action '.', :"unknownact" not defined for role "doctor": prompt alice  .....
+parse error: <testdata>:5: action :unknownact (used in script action '.') is not defined for role "doctor"
+--
+while parsing:
+<testdata>:3     script
+<testdata>:4       action . entails :unknownact
+<testdata>:5   >   prompt alice  .....
+HINT: available actions for role doctor: cure
+
+parse
+include doctor.cfg
+include medical_cast.cfg
+script
+  prompt alice  woo
+end
+----
+parse error: <testdata>:4: script action 'w' not defined
+--
+while parsing:
+<testdata>:2     include medical_cast.cfg
+<testdata>:3     script
+<testdata>:4   >   prompt alice  woo
+HINT: no script actions defined yet

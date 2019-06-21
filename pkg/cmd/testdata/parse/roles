@@ -57,7 +57,11 @@ role unknowndir
   woot
 end
 ----
-parse error: <testdata>:2: role "unknowndir": unknown syntax: woot
+parse error: <testdata>:2: unknown syntax
+--
+while parsing:
+<testdata>:1     role unknowndir
+<testdata>:2   >   woot
 
 
 
@@ -67,7 +71,7 @@ end
 role samename
 end
 ----
-parse error: duplicate role definition: samename
+parse error: duplicate role definition: "samename"
 
 
 parse
@@ -76,7 +80,12 @@ role dupact
   :act bar
 end
 ----
-parse error: <testdata>:3: role "dupact": duplicate action name "act"
+parse error: <testdata>:3: duplicate action name: "act"
+--
+while parsing:
+<testdata>:1     role dupact
+<testdata>:2       :act foo
+<testdata>:3   >   :act bar
 
 
 parse
@@ -85,4 +94,9 @@ role dupsig
   signal foo event at (?P<ts_now>)(?P<event>.*)
 end
 ----
-parse error: <testdata>:3: role "dupsig": duplicate signal name "foo": signal foo event at (?P<ts_now>)(?P<event>.*)
+parse error: <testdata>:3: duplicate signal name: "foo"
+--
+while parsing:
+<testdata>:1     role dupsig
+<testdata>:2       signal foo event at (?P<ts_now>)(?P<event>.*)
+<testdata>:3   >   signal foo event at (?P<ts_now>)(?P<event>.*)

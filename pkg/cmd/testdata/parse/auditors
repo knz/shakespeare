@@ -40,3 +40,18 @@ audience
   condice watches alice cures
   condice expects always: [alice.cures] =~ "cures"
 end
+
+parse
+include doctor.cfg
+include medical_cast.cfg
+audience
+  condice expects notknown: true
+end
+----
+parse error: <testdata>:4: predicate modality "notknown" not recognized
+--
+while parsing:
+<testdata>:2     include medical_cast.cfg
+<testdata>:3     audience
+<testdata>:4   >   condice expects notknown: true
+HINT: available modalities: always, always eventually, eventually, eventually always, never, not always, once, thrice, twice

@@ -15,6 +15,8 @@ type fsm struct {
 	labels     []string
 }
 
+func (f *fsm) String() string { return f.name }
+
 type fsmEval struct {
 	curState int
 	labelMap map[string]int

@@ -65,7 +65,7 @@ func (ap *app) prompt(
 
 		sceneTime := timeutil.Now()
 		elapsed = sceneTime.Sub(ap.au.epoch)
-		ap.narrate("scene %d (~%ds in%s):", sceneNum, int(elapsed.Seconds()), extraMsg)
+		ap.narrate(I, "", "scene %d (~%ds in%s):", sceneNum, int(elapsed.Seconds()), extraMsg)
 
 		// Now run the scene.
 		err := ap.runScene(sceneCtx, scene.concurrentLines, actionChan, moodCh)
@@ -74,7 +74,7 @@ func (ap *app) prompt(
 		if ap.cfg.tempo != 0 {
 			sceneDur := timeutil.Now().Sub(sceneTime).Seconds()
 			if sceneDur >= surpriseDur {
-				ap.narrate("woah! scene %d lasted %.1fx longer than expected!",
+				ap.narrate(W, "😮", "woah! scene %d lasted %.1fx longer than expected!",
 					sceneNum, sceneDur/ap.cfg.tempo.Seconds())
 			}
 		}
@@ -149,7 +149,7 @@ func (ap *app) runLine(
 
 		switch step.typ {
 		case stepAmbiance:
-			ap.narrate("    (mood %s)", step.action)
+			ap.narrate(I, "🎊", "    (mood %s)", step.action)
 			ts := timeutil.Now()
 			if err := a.reportMoodEvent(ctx, ap.stopper, moodCh,
 				moodChange{ts: ts, newMood: step.action}); err != nil {
@@ -165,7 +165,7 @@ func (ap *app) runLine(
 			}
 
 		case stepDo:
-			ap.narrate("    %s: %s!", a.name, step.action)
+			ap.narrate(I, "🥁", "    %s: %s!", a.name, step.action)
 			ev, err := a.runAction(stepCtx, ap.stopper, step.action, actionChan)
 			if err != nil {
 				return err
@@ -227,8 +227,11 @@ func (a *actor) runAction(
 	log.Infof(ctx, "%q done (%s)\n%s-- %s (%v)", action, dur, outdata, ps, err)
 
 	err = errors.WithContextTags(err, ctx)
-	if _, ok := err.(*exec.ExitError); err != nil && !ok {
-		return actionReport{}, err
+	if _, ok := errors.If(err, func(err error) (interface{}, bool) {
+		_, ok := err.(*exec.ExitError)
+		return nil, ok
+	}); err != nil && !ok {
+		return actionReport{}, errors.WithStack(err)
 	}
 
 	ev := actionReport{

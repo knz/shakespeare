@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/knz/shakespeare/pkg/crdb/log"
 	"github.com/knz/shakespeare/pkg/crdb/stop"
@@ -74,7 +75,14 @@ func (a *actor) runActorCommand(
 	outdataB, err := cmd.CombinedOutput()
 	outdata = string(outdataB)
 	log.Infof(ctx, "done\n%s\n-- %s (%v)", outdata, cmd.ProcessState, err)
-	return outdata, cmd.ProcessState, err
+	if err != nil {
+		if outdata != "" {
+			err = errors.WithDetailf(err, "command output:\n%s", outdata)
+		} else {
+			err = errors.WithDetail(err, "(command produced no output)")
+		}
+	}
+	return outdata, cmd.ProcessState, errors.WithContextTags(err, ctx)
 }
 
 func (a *actor) makeShCmd(pcmd cmd) exec.Cmd {

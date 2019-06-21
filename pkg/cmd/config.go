@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/Knetic/govaluate"
+	"github.com/cockroachdb/errors"
 )
 
 type config struct {
@@ -167,8 +168,8 @@ func (cfg *config) printCfg(w io.Writer) {
 			if a.observer.ylabel != "" {
 				fmt.Fprintf(w, "  %s measures %s\n", a.name, a.observer.ylabel)
 			}
-			if a.auditor.when != auditNone {
-				fmt.Fprintf(w, "  %s expects %s: %s\n", a.name, a.auditor.when.String(), a.auditor.expr)
+			if a.auditor.when != nil {
+				fmt.Fprintf(w, "  %s expects %s: %s\n", a.name, a.auditor.when.name, a.auditor.expr)
 			}
 		}
 		fmt.Fprintln(w, "end")
@@ -313,7 +314,7 @@ type audienceSource struct {
 }
 
 type auditor struct {
-	when            auditorWhen
+	when            *fsm
 	expr            string
 	alwaysSensitive bool
 	compiledExp     *govaluate.EvaluableExpression
@@ -327,26 +328,6 @@ type exprVar struct {
 
 func (e exprVar) Name() string {
 	return e.actorName + "." + e.sigName
-}
-
-type auditorWhen int
-
-const (
-	auditNone auditorWhen = iota
-	auditAlways
-	auditEventually
-	auditEventuallyAlways
-)
-
-var wName = map[auditorWhen]string{
-	auditNone:             "???",
-	auditAlways:           "always",
-	auditEventually:       "eventually",
-	auditEventuallyAlways: "eventually always",
-}
-
-func (w auditorWhen) String() string {
-	return wName[w]
 }
 
 type auditorState struct {
@@ -398,7 +379,7 @@ func (cfg *config) selectActors(target string) (*role, []*actor, error) {
 		roleName := strings.TrimPrefix(target, "every ")
 		r, ok := cfg.roles[roleName]
 		if !ok {
-			return nil, nil, fmt.Errorf("unknown role %q", roleName)
+			return nil, nil, explainAlternatives(errors.Newf("unknown role %q", roleName), "roles", cfg.roles)
 		}
 		var res []*actor
 		for _, a := range cfg.actors {
@@ -411,7 +392,7 @@ func (cfg *config) selectActors(target string) (*role, []*actor, error) {
 	}
 	act, ok := cfg.actors[target]
 	if !ok {
-		return nil, nil, fmt.Errorf("unknown actor %q", target)
+		return nil, nil, explainAlternatives(errors.Newf("unknown actor %q", target), "actors", cfg.actors)
 	}
 	return act.role, []*actor{act}, nil
 }
@@ -490,12 +471,14 @@ func (a *actor) addObserver(sigName, observerName string) {
 func (a *audienceMember) addOrUpdateSignalSource(r *role, signal, target string) error {
 	isEventSignal, ok := r.getSignal(signal)
 	if !ok {
-		return fmt.Errorf("unknown signal %q for role %s", signal, r.name)
+		return explainAlternatives(errors.Newf("unknown signal %q for role %s", signal, r.name),
+			"signals", r.resParsers)
 	}
 
 	if s, ok := a.observer.signals[signal]; ok {
 		if s.drawEvents != isEventSignal {
-			return fmt.Errorf("audience %q watches signal %q with mismatched types", a.name, signal)
+			return errors.WithHint(errors.Newf("audience %q watches signal %q with mismatched types", a.name, signal),
+				"a single audience member cannot watch both event and non-event signals")
 		}
 		s.maybeAddOrigin(target)
 		return nil

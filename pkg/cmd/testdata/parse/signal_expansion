@@ -49,7 +49,12 @@ role test
   signal test event at (?P<event>.*)
 end
 ----
-parse error: <testdata>:2: role "test": unknown time stamp format in regexp: signal test event at (?P<event>.*)
+parse error: <testdata>:2: unknown or missing time stamp format (?P<ts_...>) in regexp
+--
+while parsing:
+<testdata>:1     role test
+<testdata>:2   >   signal test event at (?P<event>.*)
+HINT: available formats: ts_log, ts_now, ts_rfc3339
 
 
 parse
@@ -57,4 +62,8 @@ role test
   signal test event at .*
 end
 ----
-parse error: <testdata>:2: role "test": expected 'event' in regexp: signal test event at .*
+parse error: <testdata>:2: expected (?P<event>...) in regexp
+--
+while parsing:
+<testdata>:1     role test
+<testdata>:2   >   signal test event at .*

@@ -109,3 +109,20 @@ audience
   condice watches alice cures
   condice measures milliseconds
 end
+
+
+parse
+include doctor.cfg
+audience
+  condice watches every doctors \
+    cures
+end
+----
+parse error: <testdata>:3: unknown role "doctors"
+--
+while parsing:
+<testdata>:1     include doctor.cfg
+<testdata>:2     audience
+<testdata>:3   >   condice watches every doctors \
+<testdata>:4        cures
+HINT: available roles: doctor

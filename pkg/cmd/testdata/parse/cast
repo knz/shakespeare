@@ -42,6 +42,25 @@ cast
 end
 ----
 parse error: <testdata>:2: unknown role: unknownrole
+--
+while parsing:
+<testdata>:1     cast
+<testdata>:2   >   alice plays unknownrole
+HINT: no roles defined yet
+
+parse
+include doctor.cfg
+cast
+  alice plays unknownrole
+end
+----
+parse error: <testdata>:3: unknown role: unknownrole
+--
+while parsing:
+<testdata>:1     include doctor.cfg
+<testdata>:2     cast
+<testdata>:3   >   alice plays unknownrole
+HINT: available roles: doctor
 
 
 parse
@@ -51,7 +70,12 @@ cast
    alice plays doctor
 end
 ----
-parse error: <testdata>:4: duplicate actor definition: alice
+parse error: <testdata>:4: duplicate actor definition: "alice"
+--
+while parsing:
+<testdata>:2     cast
+<testdata>:3        alice plays doctor
+<testdata>:4   >    alice plays doctor
 
 
 parse
@@ -60,4 +84,9 @@ cast
    alice plays doctor(
 end
 ----
-parse error: <testdata>:3: unknown syntax: alice plays doctor(
+parse error: <testdata>:3: unknown syntax
+--
+while parsing:
+<testdata>:1     include doctor.cfg
+<testdata>:2     cast
+<testdata>:3   >    alice plays doctor(

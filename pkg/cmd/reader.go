@@ -109,12 +109,44 @@ type pos struct {
 
 func (p *pos) wrapErr(err error) error {
 	err = errors.WrapWithDepthf(1, err, "%s:%d", p.r.file, p.lineno)
+
+	lineIdx := p.lineno - 1
+	var buf bytes.Buffer
+	buf.WriteString("while parsing:\n")
+	contextLineStart := lineIdx
+	if contextLineStart > 0 {
+		contextLineStart -= 2
+		if contextLineStart < 0 {
+			contextLineStart = 0
+		}
+	}
+	if contextLineStart < lineIdx {
+		for i, line := range p.r.lines[contextLineStart:lineIdx] {
+			fmt.Fprintf(&buf, "%s:%-3d   %s\n", p.r.file, contextLineStart+i+1, strings.TrimSuffix(line, "\n"))
+		}
+	}
+	fmt.Fprintf(&buf, "%s:%-3d > %s\n", p.r.file, lineIdx+1, strings.TrimSuffix(p.r.lines[lineIdx], "\n"))
+
+	contextLineEnd := lineIdx
+	if contextLineEnd < len(p.r.lines)-1 {
+		contextLineEnd += 2
+		if contextLineEnd >= len(p.r.lines) {
+			contextLineEnd = len(p.r.lines) - 1
+		}
+	}
+	if contextLineEnd > lineIdx {
+		for i, line := range p.r.lines[lineIdx+1 : contextLineEnd+1] {
+			fmt.Fprintf(&buf, "%s:%-3d  %s\n", p.r.file, lineIdx+1+i+1, strings.TrimSuffix(line, "\n"))
+		}
+	}
+	err = errors.WithDetail(err, strings.TrimSpace(buf.String()))
+
 	if p.r.parent != nil {
 		var buf bytes.Buffer
 		buf.WriteString("in file included from:\n")
 		comma := ""
 		for r := p.r.parent; r != nil; r = r.parent {
-			fmt.Fprintf(&buf, "%s%s:%d: <- here", comma, r.file, r.lineno)
+			fmt.Fprintf(&buf, "%s%s:%d <- here", comma, r.file, r.lineno)
 			comma = "\n"
 		}
 		err = errors.WithDetail(err, buf.String())
@@ -143,12 +175,13 @@ func (r *subreader) readLine(
 		r.lines = append(r.lines, oneline)
 		r.lineno++
 		if strings.HasSuffix(oneline, "\\\n") {
+			oneline = oneline[:len(oneline)-2] + "\n"
 			line += oneline
 			continue
 		}
 		oneline = strings.TrimSuffix(oneline, "\n")
 		if err == io.EOF && line != "" {
-			return "", pos{}, true, false, startPos.wrapErr(fmt.Errorf("EOF encountered while expecting line continuation"))
+			return "", pos{}, true, false, startPos.wrapErr(errors.New("EOF encountered while expecting line continuation"))
 		}
 		line += oneline
 		break

@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/datadriven"
-	"github.com/cockroachdb/errors"
 )
 
 func TestParse(t *testing.T) {
@@ -76,12 +75,6 @@ func TestParse(t *testing.T) {
 
 func renderError(err error) string {
 	var buf bytes.Buffer
-	buf.WriteString(err.Error())
-	if d := errors.FlattenDetails(err); d != "" {
-		fmt.Fprintf(&buf, "\n--\n%s", d)
-	}
-	if d := errors.FlattenHints(err); d != "" {
-		fmt.Fprintf(&buf, "\nHINT: %s", d)
-	}
+	RenderError(&buf, err)
 	return buf.String()
 }

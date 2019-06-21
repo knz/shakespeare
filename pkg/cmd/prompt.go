@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"html"
-	"os/exec"
 	"sync"
 	"time"
 
@@ -40,15 +39,15 @@ func (ap *app) prompt(
 
 		// Now wait for that time. Note: we have to fire a timer in any
 		// case, to have something to select on - we need a select to also
-		// test the context cancellation or stopper.ShouldStop().
+		// test the context cancellation or stopper.ShouldQuiesce().
 		tm := time.After(toWait)
 		select {
-		case <-ap.stopper.ShouldStop():
+		case <-ap.stopper.ShouldQuiesce():
 			log.Info(sceneCtx, "terminated")
 			return nil
 		case <-ctx.Done():
 			log.Info(sceneCtx, "interrupted")
-			return errors.WithContextTags(errors.WithStack(ctx.Err()), ctx)
+			return wrapCtxErr(ctx)
 		case <-tm:
 			// Wait.
 		}
@@ -151,7 +150,7 @@ func (ap *app) runLine(
 		case stepAmbiance:
 			ap.narrate(I, "🎊", "    (mood %s)", step.action)
 			ts := timeutil.Now()
-			if err := a.reportMoodEvent(ctx, ap.stopper, moodCh,
+			if err := a.reportMoodEvent(stepCtx, ap.stopper, moodCh,
 				moodChange{ts: ts, newMood: step.action}); err != nil {
 				return err
 			}
@@ -160,7 +159,7 @@ func (ap *app) runLine(
 				startTime: ts,
 				output:    step.action,
 			}
-			if err := a.reportActionEvent(ctx, ap.stopper, actionChan, ev); err != nil {
+			if err := a.reportActionEvent(stepCtx, ap.stopper, actionChan, ev); err != nil {
 				return err
 			}
 
@@ -170,7 +169,7 @@ func (ap *app) runLine(
 			if err != nil {
 				return err
 			}
-			if err := a.reportActionEvent(ctx, ap.stopper, actionChan, ev); err != nil {
+			if err := a.reportActionEvent(stepCtx, ap.stopper, actionChan, ev); err != nil {
 				return err
 			}
 		}
@@ -182,12 +181,12 @@ func (a *actor) reportActionEvent(
 	ctx context.Context, stopper *stop.Stopper, actionChan chan<- actionReport, ev actionReport,
 ) error {
 	select {
-	case <-stopper.ShouldStop():
+	case <-stopper.ShouldQuiesce():
 		log.Info(ctx, "terminated")
 		return nil
 	case <-ctx.Done():
 		log.Info(ctx, "interrupted")
-		return errors.WithContextTags(errors.WithStack(ctx.Err()), ctx)
+		return wrapCtxErr(ctx)
 	case actionChan <- ev:
 		// ok
 	}
@@ -198,12 +197,12 @@ func (a *actor) reportMoodEvent(
 	ctx context.Context, stopper *stop.Stopper, moodCh chan<- moodChange, chg moodChange,
 ) error {
 	select {
-	case <-stopper.ShouldStop():
+	case <-stopper.ShouldQuiesce():
 		log.Info(ctx, "terminated")
 		return nil
 	case <-ctx.Done():
 		log.Info(ctx, "interrupted")
-		return errors.WithContextTags(errors.WithStack(ctx.Err()), ctx)
+		return wrapCtxErr(ctx)
 	case moodCh <- chg:
 		// ok
 	}
@@ -220,19 +219,14 @@ func (a *actor) runAction(
 	ctx = logtags.AddTag(ctx, "action", action)
 
 	actStart := timeutil.Now()
-	outdata, ps, err := a.runActorCommand(ctx, stopper, 0 /*timeout*/, true /*interruptible*/, aCmd)
+	outdata, ps, err, exitErr := a.runActorCommand(ctx, stopper, 0 /*timeout*/, true /*interruptible*/, aCmd)
+	if err != nil {
+		return actionReport{}, err
+	}
 	actEnd := timeutil.Now()
 
 	dur := actEnd.Sub(actStart)
-	log.Infof(ctx, "%q done (%s)\n%s-- %s (%v)", action, dur, outdata, ps, err)
-
-	err = errors.WithContextTags(err, ctx)
-	if _, ok := errors.If(err, func(err error) (interface{}, bool) {
-		_, ok := err.(*exec.ExitError)
-		return nil, ok
-	}); err != nil && !ok {
-		return actionReport{}, errors.WithStack(err)
-	}
+	log.Infof(ctx, "%q done (%s)\n%s-- %s (%v)", action, dur, outdata, ps, exitErr)
 
 	ev := actionReport{
 		typ:       reportActionExec,

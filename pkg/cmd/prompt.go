@@ -59,7 +59,7 @@ func (ap *app) prompt(
 
 		extraMsg := ""
 		if toWait < 0 {
-			extraMsg = fmt.Sprintf(", running %.4fs behind schedule", toWait.Seconds())
+			extraMsg = fmt.Sprintf(", running %.4fs behind schedule", -toWait.Seconds())
 		}
 
 		sceneTime := timeutil.Now()

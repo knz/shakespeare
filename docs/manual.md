@@ -80,6 +80,9 @@ Constraints:
 
 Behavior:
 
+- If the `extends` clause is specified, the role it designates
+  is copied as template for the new role.
+
 - The command associated with an action is executed when that action
   is prompted in a [script](#Script-configuration).
 

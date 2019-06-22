@@ -94,7 +94,6 @@ func (ap *app) collect(
 			t.Read = true
 			t.Reset(time.Second)
 			of.Flush()
-			continue
 
 		case ev := <-actionChan:
 			sinceBeginning := ev.startTime.Sub(ap.au.epoch).Seconds()
@@ -178,7 +177,6 @@ func (ap *app) collect(
 						"action %s:%s failed %s", ev.actor, ev.action, ref)
 				}
 			}
-			continue
 
 		case ev := <-collectorChan:
 			sinceBeginning := ev.ts.Sub(ap.au.epoch).Seconds()
@@ -205,10 +203,7 @@ func (ap *app) collect(
 				shuffle := (.5 * rand.Float64()) - .25
 				fmt.Fprintf(w, "%.4f %s %.3f\n", sinceBeginning, ev.val, shuffle)
 			}
-
-			continue
 		}
-		break
 	}
-	return nil
+	// unreachable
 }

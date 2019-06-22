@@ -53,10 +53,9 @@ func (ap *app) audit(
 				ev.ts, evVar, append(ap.au.alwaysAudit, ev.auditors...), ev.typ, ev.val); err != nil {
 				return err
 			}
-
 		}
 	}
-	return nil
+	// unreachable
 }
 
 func (a *audienceMember) checkExpr(cfg *config) error {

@@ -44,7 +44,7 @@ func (cfg *config) compile() error {
 						step{typ: stepAmbiance, action: act.act})
 				case doAction:
 					curLine.steps = append(curLine.steps,
-						step{typ: stepDo, action: act.act})
+						step{typ: stepDo, action: act.act, failOk: act.failOk})
 				}
 			}
 			if len(curLine.steps) == 0 {
@@ -74,7 +74,11 @@ func (cfg *config) printSteps(w io.Writer) {
 			for _, step := range line.steps {
 				switch step.typ {
 				case stepDo:
-					fmt.Fprintf(w, "#  %s: %s!\n", line.actor.name, step.action)
+					actChar := '!'
+					if step.failOk {
+						actChar = '?'
+					}
+					fmt.Fprintf(w, "#  %s: %s%c\n", line.actor.name, step.action, actChar)
 				case stepAmbiance:
 					fmt.Fprintf(w, "#  (mood: %s)\n", step.action)
 				}
@@ -104,6 +108,7 @@ type scriptLine struct {
 type step struct {
 	typ    stepType
 	action string
+	failOk bool
 }
 
 type stepType int

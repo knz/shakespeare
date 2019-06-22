@@ -95,13 +95,17 @@ func (ap *app) runScene(
 	// errCh collects the errors from the concurrent actors.
 	errCh := make(chan error, len(lines)+1)
 
+	stopCtx, stopOnError := context.WithCancel(ctx)
+	defer stopOnError()
+
 	defer func() {
 		// At the end of the scene, make runScene() return the collected
 		// errors.
 		err = collectErrors(ctx, nil, errCh, "prompt")
 	}()
 
-	// There is a barrier at the end of the scene.
+	// We'll cancel any remaining actions, and wait, at the end of the
+	// scene.
 	var wg sync.WaitGroup
 	defer func() { wg.Wait() }()
 
@@ -109,7 +113,7 @@ func (ap *app) runScene(
 		// Start the scene for this actor.
 		a := line.actor
 		steps := line.steps
-		lineCtx := logtags.AddTag(ctx, "actor", a.name)
+		lineCtx := logtags.AddTag(stopCtx, "actor", a.name)
 		lineCtx = logtags.AddTag(lineCtx, "role", a.role.name)
 		wg.Add(1)
 		// we use runAsyncTask() here instead of runWorker(), so that if
@@ -117,7 +121,21 @@ func (ap *app) runScene(
 		// point, the task won't even start.
 		if err := runAsyncTask(lineCtx, ap.stopper, func(ctx context.Context) {
 			defer wg.Done()
-			errCh <- ap.runLine(ctx, a, steps, actionChan, moodCh)
+			err := ap.runLine(ctx, a, steps, actionChan, moodCh)
+			if errors.Is(err, context.Canceled) {
+				// It's ok if an action gets aborted.
+				err = nil
+			}
+			errCh <- err
+			if err != nil {
+				// Stop the concurrent actions.
+				// We wait for a few moments to leave any concurrent failing
+				// actions a chance to report their failure, too.
+				// This is useful in the (relatively common) case
+				// where a user mistake causes the action to fail immediately.
+				time.Sleep(time.Second / 2)
+				stopOnError()
+			}
 		}); err != nil {
 			// runAsyncTask() returns err when the task hasn't
 			// started. However, we still need to wait on the sync group, so
@@ -164,14 +182,24 @@ func (ap *app) runLine(
 			}
 
 		case stepDo:
-			ap.narrate(I, "🥁", "    %s: %s!", a.name, step.action)
+			qc := '!'
+			if step.failOk {
+				qc = '?'
+			}
+			ap.narrate(I, "🥁", "    %s: %s%c", a.name, step.action, qc)
 			ev, err := a.runAction(stepCtx, ap.stopper, step.action, actionChan)
 			if err != nil {
 				return err
 			}
-			if err := a.reportActionEvent(stepCtx, ap.stopper, actionChan, ev); err != nil {
-				return err
+			ev.failOk = step.failOk
+			reportErr := a.reportActionEvent(stepCtx, ap.stopper, actionChan, ev)
+			if !ev.success && !step.failOk {
+				return combineErrors(reportErr,
+					errors.WithContextTags(
+						errors.Newf("action %s:%s failed: %s\n%s",
+							ev.actor, ev.action, ev.output, ev.extOutput), stepCtx))
 			}
+			return reportErr
 		}
 	}
 	return nil
@@ -220,22 +248,32 @@ func (a *actor) runAction(
 
 	actStart := timeutil.Now()
 	outdata, ps, err, exitErr := a.runActorCommand(ctx, stopper, 0 /*timeout*/, true /*interruptible*/, aCmd)
-	if err != nil {
-		return actionReport{}, err
-	}
 	actEnd := timeutil.Now()
 
 	dur := actEnd.Sub(actStart)
-	log.Infof(ctx, "%q done (%s)\n%s-- %s (%v)", action, dur, outdata, ps, exitErr)
+	log.Infof(ctx, "%q done (%s)\n%s-- %s (%v / %v)", action, dur, outdata, ps, err, exitErr)
 
+	if err != nil && ps == nil {
+		// If we don't have a process status,
+		// the command was not even executed.
+		return actionReport{}, err
+	}
+
+	var combinedErrOutput string
+	if err != nil {
+		combinedErrOutput = fmt.Sprintf("%v / %v", err, ps)
+	} else {
+		combinedErrOutput = ps.String()
+	}
 	ev := actionReport{
 		typ:       reportActionExec,
 		startTime: actStart,
 		duration:  dur.Seconds(),
 		actor:     a.name,
 		action:    action,
-		success:   ps.Success(),
-		output:    html.EscapeString(ps.String()),
+		success:   err == nil && ps.Success(),
+		output:    html.EscapeString(combinedErrOutput),
+		extOutput: outdata,
 	}
 	return ev, nil
 }

@@ -93,6 +93,7 @@ const (
 	I urgency = urgency(ttycolor.Reset)
 	W urgency = urgency(ttycolor.Yellow)
 	E urgency = urgency(ttycolor.Red)
+	G urgency = urgency(ttycolor.Green)
 )
 
 var narratorCtx = logtags.AddTag(context.Background(), "narrator", nil)
@@ -136,14 +137,14 @@ func (ap *app) witness(ctx context.Context, format string, args ...interface{}) 
 	}
 }
 
-func (ap *app) woops(ctx context.Context, format string, args ...interface{}) {
+func (ap *app) judge(ctx context.Context, u urgency, sym, format string, args ...interface{}) {
 	log.Infof(ctx, format, args...)
 	if ap.cfg.quiet {
 		return
 	}
 	s := fmt.Sprintf(format, args...)
 	if !ap.cfg.asciiOnly {
-		s = "😿 " + s
+		s = sym + s
 	}
 	width := int(atomic.LoadInt32(&ap.terminalWidth))
 	if width == 0 || !isTerminal {
@@ -153,7 +154,7 @@ func (ap *app) woops(ctx context.Context, format string, args ...interface{}) {
 			s = s[:width/3-3] + "..."
 		}
 		fmt.Printf("%*s%s%s%s\n", 2*width/3-1, " ",
-			ttycolor.StdoutProfile[ttycolor.Red],
+			ttycolor.StdoutProfile[ttycolor.Code(u)],
 			s,
 			ttycolor.StdoutProfile[ttycolor.Reset])
 	}

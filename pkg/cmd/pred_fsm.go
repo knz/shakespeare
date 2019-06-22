@@ -117,10 +117,10 @@ var notAlwaysFsm = fsm{
 var alwaysFsm = fsm{
 	name:       "always",
 	startState: 0,
-	stateNames: []string{"start", "good", "bad"},
+	stateNames: []string{"checking", "good", "bad"},
 	labels:     []string{"t", "f", "e:t", "e:f", "reset"},
 	edges: [][]int{
-		0: []int{0, 2, 1, 2, 0}, // start
+		0: []int{0, 2, 1, 2, 0}, // checking
 		1: []int{1, 1, 1, 1, 0}, // good
 		2: []int{2, 2, 2, 2, 0}, // bad
 	},
@@ -130,10 +130,10 @@ var alwaysFsm = fsm{
 var neverFsm = fsm{
 	name:       "never",
 	startState: 0,
-	stateNames: []string{"start", "bad", "good"},
+	stateNames: []string{"checking", "bad", "good"},
 	labels:     []string{"t", "f", "e:t", "e:f", "reset"},
 	edges: [][]int{
-		0: []int{0, 2, 1, 2, 0}, // start
+		0: []int{0, 2, 1, 2, 0}, // checking
 		1: []int{1, 1, 1, 1, 0}, // bad
 		2: []int{2, 2, 2, 2, 0}, // good
 	},
@@ -142,7 +142,7 @@ var neverFsm = fsm{
 var eventuallyFsm = fsm{
 	name:       "eventually",
 	startState: 0,
-	stateNames: []string{"start", "good", "bad"},
+	stateNames: []string{"checking", "good", "bad"},
 	labels:     []string{"t", "f", "e:t", "e:f", "reset"},
 	edges: [][]int{
 		0: []int{1, 0, 1, 2, 0}, // start

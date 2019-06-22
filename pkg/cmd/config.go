@@ -374,7 +374,7 @@ func (e exprVar) Name() string {
 
 type auditorState struct {
 	hasData bool
-	history []auditorEvent
+	eval    fsmEval
 }
 
 type auditorEvent struct {
@@ -393,14 +393,14 @@ type audition struct {
 	cfg *config
 	// epoch is the instant at which the collector started collecting events.
 	// audition instants are relative to this moment.
-	epoch         time.Time
-	curMood       string
-	curMoodStart  float64
-	moodPeriods   []moodPeriod
-	auditorStates map[string]*auditorState
-	curVals       map[string]interface{}
-	activations   map[exprVar]struct{}
-	violations    []auditViolation
+	epoch           time.Time
+	curMood         string
+	curMoodStart    float64
+	moodPeriods     []moodPeriod
+	auditorStates   map[string]*auditorState
+	curVals         map[string]interface{}
+	activations     map[exprVar]struct{}
+	auditViolations []auditViolation
 	// names of auditors that are not sensitive to any particular signal
 	// and thus reacts to any of them.
 	alwaysAudit []string
@@ -408,6 +408,7 @@ type audition struct {
 
 type auditViolation struct {
 	ts          float64
+	result      result
 	auditorName string
 	output      string
 }

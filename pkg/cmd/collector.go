@@ -36,9 +36,14 @@ type actionReport struct {
 	action  string
 	success bool
 	// output represents
-	// - for regular action reports, the stdout/stderr of the command
+	// - for regular action reports, the one line process exit status
 	// - for mood changes, the new mood
+	// it is short and oneline so it is suitable for printing out in event graphs
 	output string
+	// extOutput is stdout/stderr for commands.
+	extOutput string
+	// failOk is set if the script tolerates a failure for this action.
+	failOk bool
 }
 
 type actReportType int
@@ -146,7 +151,6 @@ func (ap *app) collect(
 
 				status := 0
 				if !ev.success {
-					ap.narrate(W, "🤨", "action %s:%s failed: %s (see log for details)", ev.actor, ev.action, ev.output)
 					status = 1
 				}
 
@@ -160,6 +164,19 @@ func (ap *app) collect(
 
 				fmt.Fprintf(w, "%.4f %.4f %s %d %q\n",
 					sinceBeginning, ev.duration, ev.action, status, ev.output)
+
+				if !ev.success {
+					level := E
+					sym := "😞"
+					ref := "(see below for details)"
+					if ev.failOk {
+						level = W
+						sym = "🤨"
+						ref = "(see log for details)"
+					}
+					ap.narrate(level, sym,
+						"action %s:%s failed %s", ev.actor, ev.action, ref)
+				}
 			}
 			continue
 

@@ -220,6 +220,8 @@ ASCII printable character, followed by the `entails` keyword, followed
 by a "scene line": one or more of the following items, separated by semicolons:
 
 - `:<name>`: a reference to a role action.
+- `:<name>?`: a reference to a role action; the test will tolerate
+  an error in the executed command.
 - `mood <name>`: sets the mood of the play to the given name.
 - `nop`: "no-operation": do nothing.
 

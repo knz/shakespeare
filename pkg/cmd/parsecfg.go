@@ -337,6 +337,10 @@ func (cfg *config) parseScript(line string) error {
 				// action r :dosomething
 				a.typ = doAction
 				act := doRe.ReplaceAllString(actAction, "${action}")
+				if strings.HasSuffix(act, "?") {
+					a.failOk = true
+					act = strings.TrimSuffix(act, "?")
+				}
 				a.act = act
 			} else {
 				return errors.Newf("unknown action syntax: %s", line)

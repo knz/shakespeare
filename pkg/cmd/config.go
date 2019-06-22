@@ -304,10 +304,10 @@ type sink struct {
 // action is the description of a step that can be mentioned
 // in a play stanza.
 type action struct {
-	name string
-	typ  actionType
-	dur  time.Duration
-	act  string
+	name   string
+	typ    actionType
+	act    string
+	failOk bool
 }
 
 func (a *action) String() string {
@@ -317,7 +317,11 @@ func (a *action) String() string {
 	case ambianceAction:
 		return fmt.Sprintf("mood %s", a.act)
 	case doAction:
-		return fmt.Sprintf(":%s", a.act)
+		qual := ""
+		if a.failOk {
+			qual = "?"
+		}
+		return fmt.Sprintf(":%s%s", a.act, qual)
 	}
 	return "<action???>"
 }

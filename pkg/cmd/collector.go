@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"html"
 	"math/rand"
 	"path/filepath"
 	"time"
@@ -33,8 +34,13 @@ type actionReport struct {
 	actor string
 	// action is the executed action for regular action reports,
 	// unused otherwise.
-	action  string
-	success bool
+	action string
+	// result indicates whether:
+	// - resOk - the action succeeded, or auditor was happy
+	// - resErr - the action could not run, or auditor failed to evaluate
+	// - resFailure - the action exited with non-zero, or auditor was unhappy
+	// - resInfo - the auditor was activated but did not report anything special
+	result result
 	// output represents
 	// - for regular action reports, the one line process exit status
 	// - for mood changes, the new mood
@@ -45,6 +51,16 @@ type actionReport struct {
 	// failOk is set if the script tolerates a failure for this action.
 	failOk bool
 }
+
+type result int
+
+const (
+	// The following values come back in generated CSV files.
+	resOk      result = 0
+	resErr            = 1
+	resFailure        = 2
+	resInfo           = 3
+)
 
 type actReportType int
 
@@ -104,18 +120,21 @@ func (ap *app) collect(
 				dataLogger.Logf(ctx, "%.2f mood set: %s", sinceBeginning, ev.output)
 
 			case reportAuditViolation:
+				ac, ok := ap.cfg.audience[ev.actor]
+				if !ok {
+					return errors.Newf("event received for non-existent audience %q: %+v", ev.actor, ev)
+				}
+				ac.observer.hasData = true
+
 				a, ok := ap.au.auditorStates[ev.actor]
 				if !ok {
 					return errors.Newf("event received for non-existent auditor: %+v", ev)
 				}
 				a.hasData = true
 
-				status := 0
-				if !ev.success {
-					status = 1
-				}
+				status := int(ev.result)
 
-				dataLogger.Logf(ctx, "%.2f audit check by %s: %v (%q)", sinceBeginning, ev.actor, ev.success, ev.output)
+				dataLogger.Logf(ctx, "%.2f audit check by %s: %v (%q)", sinceBeginning, ev.actor, ev.result, ev.output)
 				fName := filepath.Join(ap.cfg.dataDir, fmt.Sprintf("audit-%s.csv", ev.actor))
 				w, err := of.getWriter(fName)
 				if err != nil {
@@ -123,15 +142,17 @@ func (ap *app) collect(
 				}
 
 				if ev.output != "" {
-					fmt.Fprintf(w, "%.4f %d %q\n", sinceBeginning, status, ev.output)
+					t := html.EscapeString(ev.output)
+					fmt.Fprintf(w, "%.4f %d %q\n", sinceBeginning, status, fmt.Sprintf("%s: %s", ev.actor, t))
 				} else {
 					fmt.Fprintf(w, "%.4f %d\n", sinceBeginning, status)
 				}
 
-				if !ev.success {
-					ap.au.violations = append(ap.au.violations,
+				if ev.result == resErr || ev.result == resFailure {
+					ap.au.auditViolations = append(ap.au.auditViolations,
 						auditViolation{
 							ts:          sinceBeginning,
+							result:      ev.result,
 							auditorName: ev.actor,
 							output:      ev.output,
 						})
@@ -148,10 +169,7 @@ func (ap *app) collect(
 				}
 				a.hasData = true
 
-				status := 0
-				if !ev.success {
-					status = 1
-				}
+				status := int(ev.result)
 
 				dataLogger.Logf(ctx, "%.2f action %s:%s (%.4fs)", sinceBeginning, ev.actor, ev.action, ev.duration)
 
@@ -164,7 +182,7 @@ func (ap *app) collect(
 				fmt.Fprintf(w, "%.4f %.4f %s %d %q\n",
 					sinceBeginning, ev.duration, ev.action, status, ev.output)
 
-				if !ev.success {
+				if ev.result != resOk {
 					level := E
 					sym := "😞"
 					ref := "(see below for details)"

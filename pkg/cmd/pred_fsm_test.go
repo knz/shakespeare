@@ -75,16 +75,16 @@ func TestReferenceFsms(t *testing.T) {
 		exp string
 	}{
 		{&alwaysFsm, `# always
-       t     f     e:t   e:f  reset
-start* start bad   good  bad  start
-good   good  good  good  good start
-bad    bad   bad   bad   bad  start
+          t        f        e:t      e:f      reset
+checking* checking bad      good     bad      checking
+good      good     good     good     good     checking
+bad       bad      bad      bad      bad      checking
 `},
 		{&neverFsm, `# never
-       t     f     e:t   e:f   reset
-start* start good  bad   good  start
-bad    bad   bad   bad   bad   start
-good   good  good  good  good  start
+          t        f        e:t      e:f      reset
+checking* checking good     bad      good     checking
+bad       bad      bad      bad      bad      checking
+good      good     good     good     good     checking
 `},
 		{&notAlwaysFsm, `# not always
        t     f     e:t   e:f   reset
@@ -93,10 +93,10 @@ good   good  good  good  good  start
 bad    bad   bad   bad   bad   start
 `},
 		{&eventuallyFsm, `# eventually
-       t     f     e:t   e:f  reset
-start* good  start good  bad  start
-good   good  good  good  good start
-bad    bad   bad   bad   bad  start
+          t        f        e:t      e:f      reset
+checking* good     checking good     bad      checking
+good      good     good     good     good     checking
+bad       bad      bad      bad      bad      checking
 `},
 		{&eventuallyAlwaysFsm, `# eventually always
            t         f         e:t       e:f   reset
@@ -155,38 +155,38 @@ func TestFsmBehavior(t *testing.T) {
 		expected string
 	}{
 		{&alwaysFsm, []string{"t", "t", "t", "e:t"},
-			`start: start
-t, -> start
-t, -> start
-t, -> start
+			`start: checking
+t, -> checking
+t, -> checking
+t, -> checking
 e:t, -> good
 `},
 		{&alwaysFsm, []string{"t", "f", "t", "e:t"},
-			`start: start
-t, -> start
+			`start: checking
+t, -> checking
 f, -> bad
 t, -> bad
 e:t, -> bad
 `},
 		{&eventuallyFsm, []string{"f", "f", "f", "e:t"},
-			`start: start
-f, -> start
-f, -> start
-f, -> start
+			`start: checking
+f, -> checking
+f, -> checking
+f, -> checking
 e:t, -> good
 `},
 		{&eventuallyFsm, []string{"f", "t", "f", "e:f"},
-			`start: start
-f, -> start
+			`start: checking
+f, -> checking
 t, -> good
 f, -> good
 e:f, -> good
 `},
 		{&eventuallyFsm, []string{"f", "f", "f", "e:f"},
-			`start: start
-f, -> start
-f, -> start
-f, -> start
+			`start: checking
+f, -> checking
+f, -> checking
+f, -> checking
 e:f, -> bad
 `},
 	}

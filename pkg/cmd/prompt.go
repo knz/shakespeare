@@ -193,13 +193,15 @@ func (ap *app) runLine(
 			}
 			ev.failOk = step.failOk
 			reportErr := a.reportActionEvent(stepCtx, ap.stopper, actionChan, ev)
-			if !ev.success && !step.failOk {
+			if ev.result != resOk && !step.failOk {
 				return combineErrors(reportErr,
 					errors.WithContextTags(
 						errors.Newf("action %s:%s failed: %s\n%s",
 							ev.actor, ev.action, ev.output, ev.extOutput), stepCtx))
 			}
-			return reportErr
+			if reportErr != nil {
+				return reportErr
+			}
 		}
 	}
 	return nil
@@ -258,6 +260,15 @@ func (a *actor) runAction(
 		// the command was not even executed.
 		return actionReport{}, err
 	}
+	var result result
+	switch {
+	case ps == nil:
+		result = resErr
+	case err == nil && ps.Success():
+		result = resOk
+	default:
+		result = resFailure
+	}
 
 	var combinedErrOutput string
 	if err != nil {
@@ -271,7 +282,7 @@ func (a *actor) runAction(
 		duration:  dur.Seconds(),
 		actor:     a.name,
 		action:    action,
-		success:   err == nil && ps.Success(),
+		result:    result,
 		output:    html.EscapeString(combinedErrOutput),
 		extOutput: outdata,
 	}

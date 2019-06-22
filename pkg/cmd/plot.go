@@ -76,9 +76,9 @@ func (ap *app) plot(ctx context.Context) error {
 
 			pl := plot{fName: fName}
 
-			pl.opts = "using 1:(.87):($2==1?'😿':'') with labels font ',14'  axes x1y2"
+			pl.opts = "using 1:(.87):(faces[$2+1]) with labels font ',14'  axes x1y2"
 			group.plots = append(group.plots, pl)
-			pl.opts = fmt.Sprintf("using 1:($2==0?NaN:.8):($2==0?NaN:'%s violation') with labels hypertext point pt 17 axes x1y2", a.name)
+			pl.opts = "using 1:($2==3?NaN:.8):($2==3?NaN:$3) with labels hypertext point pt 17 axes x1y2"
 			group.plots = append(group.plots, pl)
 		}
 
@@ -122,9 +122,7 @@ func (ap *app) plot(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	defer func() {
-		_ = f.Close()
-	}()
+	defer f.Close()
 	ap.narrate(I, "📜", "per-plot script: %s", fName)
 
 	fmt.Fprintf(f, "# auto-generated file.\n# See 'runme.gp' to actually generate plots.\n")
@@ -137,6 +135,14 @@ func (ap *app) plot(ctx context.Context) error {
 
 	// We want multiple plots sharing the same objects (overlays).
 	fmt.Fprintf(f, "set multiplot layout %d,1\n", len(plotGroups)+1)
+
+	// Auditor faces.
+	fmt.Fprintf(f, `array faces[4]
+faces[1] = "😺"
+faces[2] = "🙀"
+faces[3] = "😿"
+faces[4] = ""
+`)
 
 	// We force the x range to be the same for all the plots.
 	// If we did not do that, each plot may get a different x range
@@ -237,9 +243,7 @@ func (ap *app) plot(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	defer func() {
-		_ = f2.Close()
-	}()
+	defer f2.Close()
 	ap.narrate(I, "📜", "plot-all script: %s", fName)
 
 	// We'll generate PDF.
@@ -250,6 +254,15 @@ func (ap *app) plot(ctx context.Context) error {
 	fmt.Fprintf(f2, "set term svg mouse standalone size 600,%d dynamic font \",6\"\n", 200*(len(plotGroups)+1))
 	fmt.Fprintf(f2, "set output 'plot.svg'\n")
 	fmt.Fprintf(f2, "load 'plot.gp'\n")
+
+	fName = filepath.Join(ap.cfg.dataDir, "plot.html")
+	f3, err := os.Create(fName)
+	if err != nil {
+		return err
+	}
+	defer f3.Close()
+	ap.narrate(I, "📜", "HTML include for SVG plots: %s", fName)
+	fmt.Fprintln(f3, `<html><body><embed id="E" src="plot.svg"/></body></html>`)
 
 	log.Info(ctx, "done")
 

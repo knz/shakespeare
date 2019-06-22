@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"html"
 	"math"
 	"strconv"
 	"strings"
@@ -110,8 +109,10 @@ func newAudition(cfg *config) *audition {
 		activations:   make(map[exprVar]struct{}),
 	}
 	for aName, a := range cfg.audience {
-		if a.auditor.when != nil && a.auditor.when.name == "always" {
-			au.auditorStates[aName] = &auditorState{}
+		if a.auditor.when != nil {
+			au.auditorStates[aName] = &auditorState{
+				eval: makeFsmEval(a.auditor.when),
+			}
 			if a.auditor.alwaysSensitive {
 				au.alwaysAudit = append(au.alwaysAudit, aName)
 			}
@@ -215,21 +216,57 @@ func (ap *app) checkEvent(
 			typ:       reportAuditViolation,
 			startTime: evTime,
 			actor:     auditorName,
-			success:   true,
+			result:    resErr,
 		}
-
+		skipReport := false
 		// Make a copy so that an auditor-specific err does not leak to
 		// subsequent evaluations.
+		log.Infof(ctx, "auditor %s: variables %+v", auditorName, ap.au.curVals)
 		value, err := a.auditor.compiledExp.Eval(govaluate.MapParameters(ap.au.curVals))
 		log.Infof(ctx, "auditor %s: %s => %v (%v)", auditorName, a.auditor.expr, value, err)
-		if b, ok := value.(bool); (!ok || !b) && err == nil {
-			ev.success = false
-			ap.woops(ctx, "%s (%v)", auditorName, value)
-		}
 		if err != nil {
-			ev.success = false
-			ev.output = html.EscapeString(fmt.Sprintf("%v", err))
-			ap.woops(ctx, "%s: %v", auditorName, err)
+			ev.output = fmt.Sprintf("%v", err)
+			ap.judge(ctx, E, "🙀", "%s: %v", auditorName, err)
+		} else {
+			// We got a result. Determine its truthiness.
+			label := "f"
+			if b, ok := value.(bool); ok && b {
+				label = "t"
+			}
+			// Advance the fsm.
+			e := ap.au.auditorStates[auditorName]
+			prevState := e.eval.state()
+			e.eval.advance(label)
+			newState := e.eval.state()
+			ev.output = newState
+			switch newState {
+			case "good":
+				ev.result = resOk
+			case "bad":
+				ev.result = resFailure
+				// Reset the auditor for the next attempt.
+				e.eval.advance("reset")
+			default:
+				ev.result = resInfo
+			}
+
+			// Report the change to the user,
+			if prevState != newState {
+				var res urgency
+				var sym string
+				switch newState {
+				case "good":
+					res, sym = G, "😺"
+				case "bad":
+					res, sym = E, "😿"
+				default:
+					res = I
+				}
+				ap.judge(ctx, res, sym, "%s (%v: %s -> %s)",
+					auditorName, label, prevState, newState)
+			} else {
+				skipReport = true
+			}
 		}
 
 		// Here the point where we could suspend (not terminate!)
@@ -238,16 +275,19 @@ func (ap *app) checkEvent(
 		// to ensure that the violation is also saved
 		// to the output (eg csv) files.
 
-		// Send the report.
-		select {
-		case <-ctx.Done():
-			log.Info(ctx, "interrupted")
-			return wrapCtxErr(ctx)
-		case <-ap.stopper.ShouldQuiesce():
-			log.Info(ctx, "terminated")
-			return nil
-		case actionCh <- ev:
-			// ok
+		// If there was an error, or we changed state, report
+		// the change.
+		if !skipReport {
+			select {
+			case <-ctx.Done():
+				log.Info(ctx, "interrupted")
+				return wrapCtxErr(ctx)
+			case <-ap.stopper.ShouldQuiesce():
+				log.Info(ctx, "terminated")
+				return nil
+			case actionCh <- ev:
+				// ok
+			}
 		}
 	}
 
@@ -257,7 +297,7 @@ func (ap *app) checkEvent(
 var errAuditViolation = errors.New("audit violation")
 
 func (ap *app) checkAuditViolations() error {
-	if len(ap.au.violations) == 0 {
+	if len(ap.au.auditViolations) == 0 {
 		// No violation, nothing to do.
 		return nil
 	}
@@ -265,8 +305,8 @@ func (ap *app) checkAuditViolations() error {
 	if !ap.auditReported {
 		// Avoid printing out the audit errors twice.
 		ap.auditReported = true
-		ap.narrate(E, "😞", "%d audit violations:", len(ap.au.violations))
-		for _, v := range ap.au.violations {
+		ap.narrate(E, "😞", "%d audit violations:", len(ap.au.auditViolations))
+		for _, v := range ap.au.auditViolations {
 			var buf bytes.Buffer
 			fmt.Fprintf(&buf, "%s (at ~%.2fs", v.auditorName, v.ts)
 			if v.output != "" {
@@ -277,6 +317,6 @@ func (ap *app) checkAuditViolations() error {
 		}
 	}
 
-	err := errors.Newf("%d audit violations", len(ap.au.violations))
+	err := errors.Newf("%d audit violations", len(ap.au.auditViolations))
 	return errors.Mark(err, errAuditViolation)
 }

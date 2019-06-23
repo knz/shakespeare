@@ -56,7 +56,8 @@ func (ap *app) plot(ctx context.Context) error {
 	var plotGroups []plotgroup
 
 	// Analyze the collected data, and prepare the plot specifications.
-	for _, a := range ap.cfg.audience {
+	for _, audienceName := range ap.cfg.audienceNames {
+		a := ap.cfg.audience[audienceName]
 		if !a.observer.hasData {
 			// No data for this audience, nothing to do.
 			continue
@@ -171,7 +172,8 @@ faces[4] = ""
 	fmt.Fprintf(f, "set grid ytics\n")
 	fmt.Fprintf(f, "plot \\\n")
 	plotNum := 1
-	for actorName, a := range ap.cfg.actors {
+	for _, actorName := range ap.cfg.actorNames {
+		a := ap.cfg.actors[actorName]
 		if !a.hasData {
 			continue
 		}

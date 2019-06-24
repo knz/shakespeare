@@ -75,62 +75,62 @@ func TestReferenceFsms(t *testing.T) {
 		exp string
 	}{
 		{&alwaysFsm, `# always
-          t        f        e:t      e:f      reset
-checking* checking bad      good     bad      checking
-good      good     good     good     good     checking
-bad       bad      bad      bad      bad      checking
+          t        f        end      reset
+checking* checking bad      good     checking
+good      good     good     good     checking
+bad       bad      bad      bad      checking
 `},
 		{&neverFsm, `# never
-          t        f        e:t      e:f      reset
-checking* checking good     bad      good     checking
-bad       bad      bad      bad      bad      checking
-good      good     good     good     good     checking
+          t        f        end      reset
+checking* checking good     bad      checking
+bad       bad      bad      bad      checking
+good      good     good     good     checking
 `},
 		{&notAlwaysFsm, `# not always
-       t     f     e:t   e:f   reset
-start* start good  bad   good  start
-good   good  good  good  good  start
-bad    bad   bad   bad   bad   start
+       t     f     end   reset
+start* start good  bad   start
+good   good  good  good  start
+bad    bad   bad   bad   start
 `},
 		{&eventuallyFsm, `# eventually
-          t        f        e:t      e:f      reset
-checking* good     checking good     bad      checking
-good      good     good     good     good     checking
-bad       bad      bad      bad      bad      checking
+          t        f        end      reset
+checking* good     checking bad      checking
+good      good     good     good     checking
+bad       bad      bad      bad      checking
 `},
 		{&eventuallyAlwaysFsm, `# eventually always
-           t         f         e:t       e:f   reset
-start*     activated start     good      bad   start
-activated  activated bad       good      bad   activated
-good       good      good      good      good  activated
-bad        bad       bad       bad       bad   activated
+       t     f     end   reset
+start* good  start bad   start
+good   good  bad   good  start
+bad    bad   bad   bad   start
 `},
 		{&alwaysEventuallyFsm, `# always eventually
-       t     f     e:t   e:f   reset
-start* start start good  bad   start
-good   good  good  good  good  start
-bad    bad   bad   bad   bad   start
+           t         f         end       reset
+start*     activated start     bad       start
+activated  activated start     good      start
+good       good      good      good      start
+bad        bad       bad       bad       start
 `},
 		{&onceFsm, `# once
-        t      f      e:t    e:f    reset
-notyet* good   notyet good   bad    notyet
-good    bad    good   bad    good   good
-bad     bad    bad    bad    bad    good
+        t      f      end    reset
+notyet* good   notyet bad    notyet
+good    bad    good   good   good
+bad     bad    bad    bad    good
 `},
 		{&twiceFsm, `# twice
-        t      f      e:t    e:f    reset
-notyet* once   notyet bad    bad    notyet
-once    good   once   good   bad    notyet
-good    bad    good   good   good   notyet
-bad     bad    bad    bad    bad    good
+        t      f      end    reset
+notyet* once   notyet bad    notyet
+once    good   once   bad    notyet
+good    bad    good   good   notyet
+bad     bad    bad    bad    good
 `},
 		{&thriceFsm, `# thrice
-        t      f      e:t    e:f    reset
-notyet* once   notyet bad    bad    notyet
-once    twice  once   bad    bad    notyet
-twice   good   twice  good   bad    notyet
-good    bad    good   good   good   notyet
-bad     bad    bad    bad    bad    good
+        t      f      end    reset
+notyet* once   notyet bad    notyet
+once    twice  once   bad    notyet
+twice   good   twice  bad    notyet
+good    bad    good   good   notyet
+bad     bad    bad    bad    good
 `},
 	}
 
@@ -154,40 +154,33 @@ func TestFsmBehavior(t *testing.T) {
 		input    []string
 		expected string
 	}{
-		{&alwaysFsm, []string{"t", "t", "t", "e:t"},
+		{&alwaysFsm, []string{"t", "t", "t", "end"},
 			`start: checking
 t, -> checking
 t, -> checking
 t, -> checking
-e:t, -> good
+end, -> good
 `},
-		{&alwaysFsm, []string{"t", "f", "t", "e:t"},
+		{&alwaysFsm, []string{"t", "f", "t", "end"},
 			`start: checking
 t, -> checking
 f, -> bad
 t, -> bad
-e:t, -> bad
+end, -> bad
 `},
-		{&eventuallyFsm, []string{"f", "f", "f", "e:t"},
+		{&eventuallyFsm, []string{"f", "f", "f", "end"},
 			`start: checking
 f, -> checking
 f, -> checking
 f, -> checking
-e:t, -> good
+end, -> bad
 `},
-		{&eventuallyFsm, []string{"f", "t", "f", "e:f"},
+		{&eventuallyFsm, []string{"f", "t", "f", "end"},
 			`start: checking
 f, -> checking
 t, -> good
 f, -> good
-e:f, -> good
-`},
-		{&eventuallyFsm, []string{"f", "f", "f", "e:f"},
-			`start: checking
-f, -> checking
-f, -> checking
-f, -> checking
-e:f, -> bad
+end, -> good
 `},
 	}
 

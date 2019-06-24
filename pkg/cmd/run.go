@@ -100,13 +100,6 @@ func Run() (err error) {
 		err = errors.WithDetail(err, "(while conducting the play)")
 	}
 
-	finalErr := ap.au.checkFinal(ctx)
-	if finalErr != nil {
-		log.Errorf(ctx, "audit error: %+v", finalErr)
-		finalErr = errors.WithDetail(finalErr, "(while finalizing the audit)")
-	}
-	err = combineErrors(err, finalErr)
-
 	if !errors.Is(err, errAuditViolation) {
 		// This happens in the common case when a play is left to
 		// terminate without early failure on audit errors: in that case,

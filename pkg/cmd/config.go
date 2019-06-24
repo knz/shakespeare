@@ -142,7 +142,7 @@ func (cfg *config) printCfg(w io.Writer) {
 			if r.spotlightCmd != "" {
 				fmt.Fprintf(w, "  spotlight %s\n", r.spotlightCmd)
 			}
-			for _, rp := range r.resParsers {
+			for _, rp := range r.sigParsers {
 				fmt.Fprintf(w, "  signal %s\n", rp.String())
 			}
 			for _, actName := range r.actionNames {
@@ -232,7 +232,7 @@ func (cfg *config) printCfg(w io.Writer) {
 				if a.auditor.activeCond.src == "true" {
 					fmt.Fprintf(w, "  %s audits throughout\n", a.name)
 				} else {
-					fmt.Fprintf(w, "  %s audits when %s\n", a.name, a.auditor.activeCond.src)
+					fmt.Fprintf(w, "  %s audits only when %s\n", a.name, a.auditor.activeCond.src)
 				}
 			}
 			for _, as := range a.auditor.assignments {
@@ -260,14 +260,16 @@ type role struct {
 	// actionCmds are executed upon steps in the script.
 	actionCmds  map[string]cmd
 	actionNames []string
-	// resParsers are the supported signals for each actor.
-	resParsers []*resultParser
+	// sigParsers are the supported signals for each actor.
+	sigParsers []*resultParser
+	sigNames   []string
 }
 
 func (r *role) clone(newName string) *role {
 	newR := *r
 	newR.actionNames = append([]string(nil), r.actionNames...)
-	newR.resParsers = append([]*resultParser(nil), r.resParsers...)
+	newR.sigParsers = append([]*resultParser(nil), r.sigParsers...)
+	newR.sigNames = append([]string(nil), r.sigNames...)
 	newR.actionCmds = make(map[string]cmd, len(r.actionCmds))
 	for k, v := range r.actionCmds {
 		newR.actionCmds[k] = v
@@ -417,7 +419,7 @@ type auditor struct {
 type expr struct {
 	src      string
 	compiled *govaluate.EvaluableExpression
-	deps     map[string]struct{}
+	deps     map[exprVar]struct{}
 }
 
 type assignment struct {
@@ -435,7 +437,7 @@ func (s *assignment) String() string {
 	var mode string
 	switch s.assignMode {
 	case assignSingle:
-		fmt.Fprintf(&buf, "computes %s as %s", s.targetVar, s.expr)
+		fmt.Fprintf(&buf, "computes %s as %s", s.targetVar, s.expr.src)
 		return buf.String()
 	case assignFirstN:
 		mode = "first"
@@ -446,7 +448,7 @@ func (s *assignment) String() string {
 	case assignBottomN:
 		mode = "bottom"
 	}
-	fmt.Fprintf(&buf, "collects %s as %s %d %s", s.targetVar, mode, s.N, s.expr)
+	fmt.Fprintf(&buf, "collects %s as %s %d %s", s.targetVar, mode, s.N, s.expr.src)
 	return buf.String()
 }
 
@@ -513,8 +515,8 @@ type audition struct {
 	curMoodStart    float64
 	moodPeriods     []moodPeriod
 	auditorStates   map[string]*auditorState
+	curActivated    map[exprVar]bool
 	curVals         map[string]interface{}
-	activations     map[exprVar]struct{}
 	auditViolations []auditViolation
 	// names of auditors that are not sensitive to any particular signal
 	// and thus reacts to any of them.
@@ -572,7 +574,7 @@ func (cfg *config) addOrGetAudienceMember(name string) *audienceMember {
 
 // getSignal retrieves a role's signal.
 func (r *role) getSignal(signal string) (isEventSignal bool, ok bool) {
-	for _, rp := range r.resParsers {
+	for _, rp := range r.sigParsers {
 		if rp.name == signal {
 			return rp.typ == parseEvent, true
 		}
@@ -605,8 +607,8 @@ func (a *actor) addObserver(sigName, observerName string) {
 func (a *audienceMember) addOrUpdateSignalSource(r *role, vr exprVar) error {
 	isEventSignal, ok := r.getSignal(vr.sigName)
 	if !ok {
-		return explainAlternatives(errors.Newf("unknown signal %q for role %s", vr.sigName, r.name),
-			"signals", r.resParsers)
+		return explainAlternativesList(errors.Newf("unknown signal %q for role %s", vr.sigName, r.name),
+			"signals", r.sigNames...)
 	}
 
 	if s, ok := a.observer.obsVars[vr]; ok {

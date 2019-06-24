@@ -50,7 +50,7 @@ func (ap *app) detectSignals(
 	evs := map[float64]*auditableEvent{}
 	var tss []float64
 
-	for _, rp := range a.role.resParsers {
+	for _, rp := range a.role.sigParsers {
 		sink, ok := a.sinks[rp.name]
 		if !ok {
 			// No audience for this signal: don't even bother collecting the data.

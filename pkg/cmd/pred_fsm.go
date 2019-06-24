@@ -67,11 +67,11 @@ var onceFsm = fsm{
 	name:       "once",
 	startState: 0,
 	stateNames: []string{"notyet", "good", "bad"},
-	labels:     []string{"t", "f", "e:t", "e:f", "reset"},
+	labels:     []string{"t", "f", "end", "reset"},
 	edges: [][]int{
-		0: []int{1, 0, 1, 2, 0}, // notyet
-		1: []int{2, 1, 2, 1, 1}, // good
-		2: []int{2, 2, 2, 2, 1}, // bad
+		0: []int{1, 0, 2, 0}, // notyet
+		1: []int{2, 1, 1, 1}, // good
+		2: []int{2, 2, 2, 1}, // bad
 	},
 }
 
@@ -79,12 +79,12 @@ var twiceFsm = fsm{
 	name:       "twice",
 	startState: 0,
 	stateNames: []string{"notyet", "once", "good", "bad"},
-	labels:     []string{"t", "f", "e:t", "e:f", "reset"},
+	labels:     []string{"t", "f", "end", "reset"},
 	edges: [][]int{
-		0: []int{1, 0, 3, 3, 0}, // notyet
-		1: []int{2, 1, 2, 3, 0}, // once
-		2: []int{3, 2, 2, 2, 0}, // good
-		3: []int{3, 3, 3, 3, 2}, // bad
+		0: []int{1, 0, 3, 0}, // notyet
+		1: []int{2, 1, 3, 0}, // once
+		2: []int{3, 2, 2, 0}, // good
+		3: []int{3, 3, 3, 2}, // bad
 	},
 }
 
@@ -92,25 +92,13 @@ var thriceFsm = fsm{
 	name:       "thrice",
 	startState: 0,
 	stateNames: []string{"notyet", "once", "twice", "good", "bad"},
-	labels:     []string{"t", "f", "e:t", "e:f", "reset"},
+	labels:     []string{"t", "f", "end", "reset"},
 	edges: [][]int{
-		0: []int{1, 0, 4, 4, 0}, // notyet
-		1: []int{2, 1, 4, 4, 0}, // once
-		2: []int{3, 2, 3, 4, 0}, // twice
-		3: []int{4, 3, 3, 3, 0}, // good
-		4: []int{4, 4, 4, 4, 3}, // bad
-	},
-}
-
-var notAlwaysFsm = fsm{
-	name:       "not always",
-	startState: 0,
-	stateNames: []string{"start", "good", "bad"},
-	labels:     []string{"t", "f", "e:t", "e:f", "reset"},
-	edges: [][]int{
-		0: []int{0, 1, 2, 1, 0}, // start
-		1: []int{1, 1, 1, 1, 0}, // good
-		2: []int{2, 2, 2, 2, 0}, // bad
+		0: []int{1, 0, 4, 0}, // notyet
+		1: []int{2, 1, 4, 0}, // once
+		2: []int{3, 2, 4, 0}, // twice
+		3: []int{4, 3, 3, 0}, // good
+		4: []int{4, 4, 4, 3}, // bad
 	},
 }
 
@@ -118,11 +106,11 @@ var alwaysFsm = fsm{
 	name:       "always",
 	startState: 0,
 	stateNames: []string{"checking", "good", "bad"},
-	labels:     []string{"t", "f", "e:t", "e:f", "reset"},
+	labels:     []string{"t", "f", "end", "reset"},
 	edges: [][]int{
-		0: []int{0, 2, 1, 2, 0}, // checking
-		1: []int{1, 1, 1, 1, 0}, // good
-		2: []int{2, 2, 2, 2, 0}, // bad
+		0: []int{0, 2, 1, 0}, // checking
+		1: []int{1, 1, 1, 0}, // good
+		2: []int{2, 2, 2, 0}, // bad
 	},
 }
 
@@ -131,48 +119,62 @@ var neverFsm = fsm{
 	name:       "never",
 	startState: 0,
 	stateNames: []string{"checking", "bad", "good"},
-	labels:     []string{"t", "f", "e:t", "e:f", "reset"},
+	labels:     []string{"t", "f", "end", "reset"},
 	edges: [][]int{
-		0: []int{0, 2, 1, 2, 0}, // checking
-		1: []int{1, 1, 1, 1, 0}, // bad
-		2: []int{2, 2, 2, 2, 0}, // good
+		0: []int{0, 2, 1, 0}, // checking
+		1: []int{1, 1, 1, 0}, // bad
+		2: []int{2, 2, 2, 0}, // good
 	},
 }
 
+var notAlwaysFsm = fsm{
+	name:       "not always",
+	startState: 0,
+	stateNames: []string{"start", "good", "bad"},
+	labels:     []string{"t", "f", "end", "reset"},
+	edges: [][]int{
+		0: []int{0, 1, 2, 0}, // start
+		1: []int{1, 1, 1, 0}, // good
+		2: []int{2, 2, 2, 0}, // bad
+	},
+}
+
+// eventually is not always not (switch the truth value on the not
+// always labels).
 var eventuallyFsm = fsm{
 	name:       "eventually",
 	startState: 0,
 	stateNames: []string{"checking", "good", "bad"},
-	labels:     []string{"t", "f", "e:t", "e:f", "reset"},
+	labels:     []string{"t", "f", "end", "reset"},
 	edges: [][]int{
-		0: []int{1, 0, 1, 2, 0}, // start
-		1: []int{1, 1, 1, 1, 0}, // good
-		2: []int{2, 2, 2, 2, 0}, // bad
+		0: []int{1, 0, 2, 0}, // checking
+		1: []int{1, 1, 1, 0}, // good
+		2: []int{2, 2, 2, 0}, // bad
 	},
 }
 
 var alwaysEventuallyFsm = fsm{
 	name:       "always eventually",
 	startState: 0,
-	stateNames: []string{"start", "good", "bad"},
-	labels:     []string{"t", "f", "e:t", "e:f", "reset"},
+	stateNames: []string{"start", "activated", "good", "bad"},
+	labels:     []string{"t", "f", "end", "reset"},
 	edges: [][]int{
-		0: []int{0, 0, 1, 2, 0}, // start
-		1: []int{1, 1, 1, 1, 0}, // good
-		2: []int{2, 2, 2, 2, 0}, // bad
+		0: []int{1, 0, 3, 0}, // start
+		1: []int{1, 0, 2, 0}, // activated
+		2: []int{2, 2, 2, 0}, // good
+		3: []int{3, 3, 3, 0}, // bad
 	},
 }
 
 var eventuallyAlwaysFsm = fsm{
 	name:       "eventually always",
 	startState: 0,
-	stateNames: []string{"start", "activated", "good", "bad"},
-	labels:     []string{"t", "f", "e:t", "e:f", "reset"},
+	stateNames: []string{"start", "good", "bad"},
+	labels:     []string{"t", "f", "end", "reset"},
 	edges: [][]int{
-		0: []int{1, 0, 2, 3, 0}, // start
-		1: []int{1, 3, 2, 3, 1}, // activated
-		2: []int{2, 2, 2, 2, 1}, // good
-		3: []int{3, 3, 3, 3, 1}, // bad
+		0: []int{1, 0, 2, 0}, // start
+		1: []int{1, 2, 1, 0}, // good
+		2: []int{2, 2, 2, 0}, // bad
 	},
 }
 

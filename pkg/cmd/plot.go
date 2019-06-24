@@ -68,6 +68,17 @@ func (ap *app) plot(ctx context.Context) error {
 			title:  fmt.Sprintf("observer %s", a.name),
 		}
 
+		if a.auditor.expectFsm != nil || len(a.auditor.assignments) > 0 {
+			if a.auditor.activeCond.src != "" && a.auditor.activeCond.src != "true" {
+				group.title += fmt.Sprintf("\naudits, only when %s", a.auditor.activeCond.src)
+			} else {
+				group.title += "\naudits, throughout"
+			}
+			if a.auditor.expectFsm != nil {
+				group.title += fmt.Sprintf("\nexpects %s: %s", a.auditor.expectFsm.name, a.auditor.expectExpr.src)
+			}
+		}
+
 		// Find the timeserie(s) to plot for the auditor.
 		if as, ok := ap.au.auditorStates[a.name]; ok && as.hasData {
 			fName := fmt.Sprintf("audit-%s.csv", a.name)
@@ -79,7 +90,7 @@ func (ap *app) plot(ctx context.Context) error {
 
 			pl.opts = "using 1:(.87):(faces[$2+1]) with labels font ',14'  axes x1y2"
 			group.plots = append(group.plots, pl)
-			pl.opts = "using 1:($2==3?NaN:.8):($2==3?NaN:$3) with labels hypertext point pt 17 axes x1y2"
+			pl.opts = "using 1:(.8):3 with labels hypertext point pt 17 axes x1y2"
 			group.plots = append(group.plots, pl)
 		}
 
@@ -266,7 +277,12 @@ faces[4] = ""
 	}
 	defer f3.Close()
 	ap.narrate(I, "📜", "HTML include for SVG plots: %s", fName)
-	fmt.Fprintln(f3, `<html><body><embed id="E" src="plot.svg"/></body></html>`)
+	fmt.Fprintln(f3, `<!DOCTYPE html>
+<html lang="en">
+  <head><meta charset="utf-8"/></head>
+  <body><embed id="E" src="plot.svg"/></body>
+</html>
+`)
 
 	log.Info(ctx, "done")
 

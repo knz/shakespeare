@@ -88,7 +88,7 @@ func parseSection(ctx context.Context, rd *reader, lineParser func(line string) 
 var audienceRe = compileRe(`^audience$`)
 var watchRe = compileRe(`^(?P<name>\S+)\s+watches\s+(?P<target>every\s+\S+|\S+)\s+(?P<signal>\S+)\s*$`)
 var measuresRe = compileRe(`^(?P<name>\S+)\s+measures\s+(?P<ylabel>.*)$`)
-var activeRe = compileRe(`^(?P<name>\S+)\s+audits\s+(?P<expr>when\s+.*|throughout)\s*$`)
+var activeRe = compileRe(`^(?P<name>\S+)\s+audits\s+(?P<expr>only\s+while\s+.*|throughout)\s*$`)
 var collectsRe = compileRe(`^(?P<name>\S+)\s+collects\s+(?P<var>\S+)\s+as\s+(?P<mode>\S+)\s+(?P<N>\d+)\s+(?P<expr>.*)$`)
 var computesRe = compileRe(`^(?P<name>\S+)\s+computes\s+(?P<var>\S+)\s+as\s+(?P<expr>.*)$`)
 var expectsRe = compileRe(`^(?P<name>\S+)\s+expects\s+(?P<when>[a-z]+[a-z ]*[a-z])\s*:\s*(?P<expr>.*)$`)
@@ -152,8 +152,9 @@ func (cfg *config) parseAudience(line string) error {
 
 		var expr string
 		switch {
-		case strings.HasPrefix(aWhen, "when"):
-			expr = strings.TrimSpace(strings.TrimPrefix(aWhen, "when"))
+		case strings.HasPrefix(aWhen, "only"):
+			expr = strings.TrimSpace(strings.TrimPrefix(aWhen, "only"))
+			expr = strings.TrimSpace(strings.TrimPrefix(expr, "while"))
 		case strings.HasPrefix(aWhen, "throughout"):
 			expr = "true"
 		default:
@@ -350,7 +351,8 @@ func (cfg *config) parseRole(
 					"formats", "ts_now", "ts_log", "ts_rfc3339")
 			}
 
-			thisRole.resParsers = append(thisRole.resParsers, &rp)
+			thisRole.sigParsers = append(thisRole.sigParsers, &rp)
+			thisRole.sigNames = append(thisRole.sigNames, rp.name)
 		} else {
 			return errors.New("unknown syntax")
 		}

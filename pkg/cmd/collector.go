@@ -217,7 +217,7 @@ func (ap *app) collect(
 				}
 				// shuffle is a random value between [-.25, +.25] used to randomize event plots.
 				shuffle := (.5 * rand.Float64()) - .25
-				fmt.Fprintf(w, "%.4f %s %.3f\n", ev.ts, ev.val, shuffle)
+				fmt.Fprintf(w, "%.4f %q %.3f\n", ev.ts, html.EscapeString(ev.val), shuffle)
 			}
 		}
 	}

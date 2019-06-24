@@ -14,20 +14,17 @@ import (
 )
 
 type observation struct {
-	typ       parserType
-	observers []string
-	auditors  []string
-	actorName string
-	sigName   string
-	ts        time.Time
-	val       string
+	ts      float64
+	typ     parserType
+	varName exprVar
+	val     string
 }
 
 type actionReport struct {
 	typ       actReportType
-	startTime time.Time
-	// duration is the duration of the command for regular action
-	// reports.
+	startTime float64
+	// duration is the duration of the command (in seconds) for regular
+	// action reports.
 	duration float64
 	// actor is the observed actor for regular action reports,
 	// or the auditor name for violation reports.
@@ -112,7 +109,7 @@ func (ap *app) collect(
 			of.Flush()
 
 		case ev := <-actionChan:
-			sinceBeginning := ev.startTime.Sub(ap.au.epoch).Seconds()
+			sinceBeginning := ev.startTime
 			ap.expandTimeRange(sinceBeginning)
 
 			switch ev.typ {
@@ -197,21 +194,22 @@ func (ap *app) collect(
 			}
 
 		case ev := <-collectorChan:
-			sinceBeginning := ev.ts.Sub(ap.au.epoch).Seconds()
-			ap.expandTimeRange(sinceBeginning)
+			ap.expandTimeRange(ev.ts)
 
-			dataLogger.Logf(ctx, "%.2f %+v %q %q",
-				sinceBeginning, ev.observers, ev.sigName, ev.val)
+			dataLogger.Logf(ctx, "%.2f %s %s", ev.ts, ev.varName.String(), ev.val)
 
-			for _, obsName := range ev.observers {
-				a, ok := ap.cfg.audience[obsName]
-				if !ok {
-					return errors.Newf("event received for non-existent audience %q: %+v", obsName, ev)
-				}
+			vr, ok := ap.cfg.vars[ev.varName]
+			if !ok {
+				return errors.Newf("event received for non-existent variable %q: %+v", ev.varName.String(), ev)
+			}
+
+			for _, obsName := range vr.watcherNames {
+				a := vr.watchers[obsName]
 				a.observer.hasData = true
-				a.observer.signals[ev.sigName].hasData[ev.actorName] = true
+				a.observer.obsVars[ev.varName].hasData = true
+
 				fName := filepath.Join(ap.cfg.dataDir,
-					csvFileName(obsName, ev.actorName, ev.sigName))
+					csvFileName(obsName, ev.varName.actorName, ev.varName.sigName))
 
 				w, err := of.getWriter(fName)
 				if err != nil {
@@ -219,7 +217,7 @@ func (ap *app) collect(
 				}
 				// shuffle is a random value between [-.25, +.25] used to randomize event plots.
 				shuffle := (.5 * rand.Float64()) - .25
-				fmt.Fprintf(w, "%.4f %s %.3f\n", sinceBeginning, ev.val, shuffle)
+				fmt.Fprintf(w, "%.4f %s %.3f\n", ev.ts, ev.val, shuffle)
 			}
 		}
 	}

@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
 	"flag"
 	"fmt"
@@ -69,6 +70,10 @@ type config struct {
 	// audience is the set of observers/auditors for the play.
 	audience      map[string]*audienceMember
 	audienceNames []string
+
+	// vars is the set of variables computed by the audience.
+	vars     map[exprVar]*variable
+	varNames []exprVar
 }
 
 func (cfg *config) initArgs(ctx context.Context) error {
@@ -108,14 +113,19 @@ type audienceMember struct {
 
 // newConfig creates a config with defaults.
 func newConfig() *config {
-	return &config{
+	cfg := &config{
 		roles:    make(map[string]*role),
 		actors:   make(map[string]*actor),
 		actions:  make(map[byte][]*action),
 		stanzas:  nil,
 		tempo:    time.Second,
 		audience: make(map[string]*audienceMember),
+		vars:     make(map[exprVar]*variable),
 	}
+	cfg.maybeAddVar(nil, exprVar{sigName: "t"}, false)
+	cfg.maybeAddVar(nil, exprVar{sigName: "mood"}, false)
+	cfg.maybeAddVar(nil, exprVar{sigName: "moodt"}, false)
+	return cfg
 }
 
 // printCfg prints the current configuration.
@@ -191,23 +201,45 @@ func (cfg *config) printCfg(w io.Writer) {
 	fmt.Fprintln(w, "end")
 	// fmt.Fprintln(w)
 
-	if len(cfg.audience) == 0 {
+	if len(cfg.audience) == 0 && len(cfg.vars) == 0 {
 		fmt.Fprintln(w, "# no audience defined")
 	} else {
 		fmt.Fprintln(w, "audience")
-		for _, an := range cfg.audienceNames {
-			a := cfg.audience[an]
-			for _, sigName := range a.observer.sigNames {
-				source := a.observer.signals[sigName]
-				for _, origin := range source.origin {
-					fmt.Fprintf(w, "  %s watches %s %s\n", a.name, origin, sigName)
+		for _, vn := range cfg.varNames {
+			v := cfg.vars[vn]
+			qual := ""
+			if v.isArray {
+				qual = "(collection)"
+			}
+			for _, watcherName := range v.watcherNames {
+				typ := "variable"
+				if vn.actorName != "" {
+					typ = "signal"
 				}
+				fmt.Fprintf(w, "  # %s %s%s triggers %s\n", typ, vn, qual, watcherName)
+			}
+		}
+		for _, an := range cfg.audienceNames {
+			fmt.Fprintf(w, "  #\n")
+			a := cfg.audience[an]
+			for _, varName := range a.observer.obsVarNames {
+				fmt.Fprintf(w, "  %s watches %s %s\n", a.name, varName.actorName, varName.sigName)
 			}
 			if a.observer.ylabel != "" {
 				fmt.Fprintf(w, "  %s measures %s\n", a.name, a.observer.ylabel)
 			}
-			if a.auditor.when != nil {
-				fmt.Fprintf(w, "  %s expects %s: %s\n", a.name, a.auditor.when.name, a.auditor.expr)
+			if a.auditor.activeCond.src != "" {
+				if a.auditor.activeCond.src == "true" {
+					fmt.Fprintf(w, "  %s audits throughout\n", a.name)
+				} else {
+					fmt.Fprintf(w, "  %s audits when %s\n", a.name, a.auditor.activeCond.src)
+				}
+			}
+			for _, as := range a.auditor.assignments {
+				fmt.Fprintf(w, "  %s %s\n", a.name, as.String())
+			}
+			if a.auditor.expectFsm != nil {
+				fmt.Fprintf(w, "  %s expects %s: %s\n", a.name, a.auditor.expectFsm.name, a.auditor.expectExpr.src)
 			}
 		}
 		fmt.Fprintln(w, "end")
@@ -286,6 +318,9 @@ type actor struct {
 	// sinks is the set of sinks that are listening to this
 	// actor's signal(s). The map key is the signal name, the value
 	// is the sink.
+	// This is merely used to:
+	// - determine whether a signal is active (there is a sink, as opposed to no sink)
+	// - to print the configuration.
 	sinks     map[string]*sink
 	sinkNames []string
 	// hasData indicates there were action events executed for this actor.
@@ -340,41 +375,121 @@ type stanza struct {
 	script string
 }
 
+// observer is the "collector" part of an audience member.
 type observer struct {
-	signals  map[string]*audienceSource
-	sigNames []string
-	ylabel   string
+	obsVars     map[exprVar]*collectedSignal
+	obsVarNames []exprVar
+	ylabel      string
 	// hasData indicates whether data was received for this audience.
 	hasData bool
 }
 
-type audienceSource struct {
+type collectedSignal struct {
 	origin []string
 	// hasData indicates whether data was received from a given actor.
-	hasData    map[string]bool
+	hasData    bool
 	drawEvents bool
 }
 
-type auditor struct {
-	when            *fsm
-	expr            string
-	alwaysSensitive bool
-	compiledExp     *govaluate.EvaluableExpression
-	observedSignals map[exprVar]struct{}
+type variable struct {
+	name         exprVar
+	isArray      bool
+	watchers     map[string]*audienceMember
+	watcherNames []string
 }
+
+type auditor struct {
+	// observedSignals is the set of actor signals
+	// that this auditor is sensitive on.
+	observedSignals map[exprVar]struct{}
+
+	// activCond determines when this auditor wakes up.
+	activeCond expr
+
+	// assignments specifies what to compute when active.
+	assignments []assignment
+
+	// expectFsm and expectExpr are the expect condition, when active.
+	expectFsm  *fsm
+	expectExpr expr
+}
+
+type expr struct {
+	src      string
+	compiled *govaluate.EvaluableExpression
+	deps     map[string]struct{}
+}
+
+type assignment struct {
+	// targetVar is the variable to assign.
+	targetVar string
+	// source value.
+	expr expr
+	// assignMode is how to assign to the variable.
+	assignMode assignMode
+	N          int
+}
+
+func (s *assignment) String() string {
+	var buf bytes.Buffer
+	var mode string
+	switch s.assignMode {
+	case assignSingle:
+		fmt.Fprintf(&buf, "computes %s as %s", s.targetVar, s.expr)
+		return buf.String()
+	case assignFirstN:
+		mode = "first"
+	case assignLastN:
+		mode = "last"
+	case assignTopN:
+		mode = "top"
+	case assignBottomN:
+		mode = "bottom"
+	}
+	fmt.Fprintf(&buf, "collects %s as %s %d %s", s.targetVar, mode, s.N, s.expr)
+	return buf.String()
+}
+
+type assignMode int
+
+const (
+	assignSingle  assignMode = iota // stores the value
+	assignFirstN                    // first N values in array
+	assignLastN                     // last N values in array
+	assignTopN                      // top N values in array
+	assignBottomN                   // bottom N values in array
+)
 
 type exprVar struct {
 	actorName string
 	sigName   string
 }
 
-func (e exprVar) Name() string {
+func (e exprVar) String() string {
+	if e.actorName == "" {
+		return e.sigName
+	}
 	return e.actorName + "." + e.sigName
 }
 
 type auditorState struct {
+	// activated is set to false at the start of each audit round, and
+	// set to true every time one of its dependent variables is
+	// activated.
+	activated bool
+
+	// auditing is set to true when the activation condition has
+	// last become true, and reset to false when the activation
+	// condition has last become false.
+	auditing bool
+
+	// eval is the check FSM. Initialized every time auditing goes
+	// from false to true.
+	eval fsmEval
+
+	// hasData is set to true the first time the auditor
+	// derives an audit event.
 	hasData bool
-	eval    fsmEval
 }
 
 type auditorEvent struct {
@@ -446,7 +561,7 @@ func (cfg *config) addOrGetAudienceMember(name string) *audienceMember {
 		a = &audienceMember{
 			name: name,
 			observer: observer{
-				signals: make(map[string]*audienceSource),
+				obsVars: make(map[exprVar]*collectedSignal),
 			},
 		}
 		cfg.audience[name] = a
@@ -465,32 +580,8 @@ func (r *role) getSignal(signal string) (isEventSignal bool, ok bool) {
 	return false, false
 }
 
-// addAuditor registers an auditor to an actor's signal sink.
-// The auditor will receive data change events from that actor's signal.
-// addAuditor entails addObserver.
-func (a *actor) addAuditor(sigName, auditorName string) {
-	a.addObserver(sigName, auditorName)
-
-	s, ok := a.sinks[sigName]
-	if !ok {
-		s = &sink{}
-		a.sinks[sigName] = s
-		a.sinkNames = append(a.sinkNames, sigName)
-	}
-	found := false
-	for _, ad := range s.auditors {
-		if ad == auditorName {
-			found = true
-			break
-		}
-	}
-	if !found {
-		s.auditors = append(s.auditors, auditorName)
-	}
-}
-
 // addObserver registers an observer to an actor's signal sink.
-// The observer will receive plottable events from that actor's signal.
+// The observer is reported when printing the configuration.
 func (a *actor) addObserver(sigName, observerName string) {
 	s, ok := a.sinks[sigName]
 	if !ok {
@@ -511,36 +602,53 @@ func (a *actor) addObserver(sigName, observerName string) {
 }
 
 // addOrUpdateSignalSource adds a signal source to an observer.
-func (a *audienceMember) addOrUpdateSignalSource(r *role, signal, target string) error {
-	isEventSignal, ok := r.getSignal(signal)
+func (a *audienceMember) addOrUpdateSignalSource(r *role, vr exprVar) error {
+	isEventSignal, ok := r.getSignal(vr.sigName)
 	if !ok {
-		return explainAlternatives(errors.Newf("unknown signal %q for role %s", signal, r.name),
+		return explainAlternatives(errors.Newf("unknown signal %q for role %s", vr.sigName, r.name),
 			"signals", r.resParsers)
 	}
 
-	if s, ok := a.observer.signals[signal]; ok {
+	if s, ok := a.observer.obsVars[vr]; ok {
 		if s.drawEvents != isEventSignal {
-			return errors.WithHint(errors.Newf("audience %q watches signal %q with mismatched types", a.name, signal),
+			return errors.WithHint(errors.Newf("audience %q watches signal %q with mismatched types", a.name, vr.String()),
 				"a single audience member cannot watch both event and non-event signals")
 		}
-		s.maybeAddOrigin(target)
 		return nil
 	}
-	aSrc := &audienceSource{
-		origin:     []string{target},
-		hasData:    make(map[string]bool),
+	aSrc := &collectedSignal{
 		drawEvents: isEventSignal,
 	}
-	a.observer.signals[signal] = aSrc
-	a.observer.sigNames = append(a.observer.sigNames, signal)
+	a.observer.obsVars[vr] = aSrc
+	a.observer.obsVarNames = append(a.observer.obsVarNames, vr)
 	return nil
 }
 
-func (s *audienceSource) maybeAddOrigin(target string) {
-	for _, o := range s.origin {
-		if o == target {
-			return
+func (cfg *config) maybeAddVar(a *audienceMember, varName exprVar, dupOk bool) error {
+	v, ok := cfg.vars[varName]
+	if !ok {
+		v = &variable{
+			name:     varName,
+			watchers: make(map[string]*audienceMember),
+		}
+		cfg.vars[varName] = v
+		cfg.varNames = append(cfg.varNames, varName)
+	} else {
+		if !dupOk {
+			return errors.Newf("variable already defined: %q", varName)
 		}
 	}
-	s.origin = append(s.origin, target)
+	if a != nil {
+		v.maybeAddWatcher(a)
+	}
+	return nil
+}
+
+func (v *variable) maybeAddWatcher(watcher *audienceMember) {
+	if _, ok := v.watchers[watcher.name]; ok {
+		return
+	}
+	log.Warningf(context.TODO(), "added wather %q for var %q", watcher.name, v.name)
+	v.watchers[watcher.name] = watcher
+	v.watcherNames = append(v.watcherNames, watcher.name)
 }

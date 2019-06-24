@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -87,7 +88,10 @@ func parseSection(ctx context.Context, rd *reader, lineParser func(line string) 
 var audienceRe = compileRe(`^audience$`)
 var watchRe = compileRe(`^(?P<name>\S+)\s+watches\s+(?P<target>every\s+\S+|\S+)\s+(?P<signal>\S+)\s*$`)
 var measuresRe = compileRe(`^(?P<name>\S+)\s+measures\s+(?P<ylabel>.*)$`)
-var auditorRe = compileRe(`^(?P<name>\S+)\s+expects\s+(?P<when>[a-z]+[a-z ]*[a-z])\s*:\s*(?P<expr>.*)$`)
+var activeRe = compileRe(`^(?P<name>\S+)\s+audits\s+(?P<expr>when\s+.*|throughout)\s*$`)
+var collectsRe = compileRe(`^(?P<name>\S+)\s+collects\s+(?P<var>\S+)\s+as\s+(?P<mode>\S+)\s+(?P<N>\d+)\s+(?P<expr>.*)$`)
+var computesRe = compileRe(`^(?P<name>\S+)\s+computes\s+(?P<var>\S+)\s+as\s+(?P<expr>.*)$`)
+var expectsRe = compileRe(`^(?P<name>\S+)\s+expects\s+(?P<when>[a-z]+[a-z ]*[a-z])\s*:\s*(?P<expr>.*)$`)
 
 func (cfg *config) parseAudience(line string) error {
 	if watchRe.MatchString(line) {
@@ -105,38 +109,140 @@ func (cfg *config) parseAudience(line string) error {
 		}
 		a := cfg.addOrGetAudienceMember(aName)
 
-		if err := a.addOrUpdateSignalSource(r, signal, target); err != nil {
-			return err
-		}
-
 		for _, actor := range foundActors {
 			actor.addObserver(signal, aName)
+
+			varName := exprVar{actor.name, signal}
+			if err := cfg.maybeAddVar(a, varName, true /* dupOk */); err != nil {
+				return err
+			}
+			if err := a.addOrUpdateSignalSource(r, varName); err != nil {
+				return err
+			}
 		}
 	} else if measuresRe.MatchString(line) {
 		aName := measuresRe.ReplaceAllString(line, "${name}")
 		ylabel := strings.TrimSpace(measuresRe.ReplaceAllString(line, "${ylabel}"))
 		a := cfg.addOrGetAudienceMember(aName)
 		a.observer.ylabel = ylabel
-	} else if auditorRe.MatchString(line) {
-		aName := auditorRe.ReplaceAllString(line, "${name}")
-		aWhen := auditorRe.ReplaceAllString(line, "${when}")
-		aExpr := strings.TrimSpace(auditorRe.ReplaceAllString(line, "${expr}"))
+	} else if expectsRe.MatchString(line) {
+		aName := expectsRe.ReplaceAllString(line, "${name}")
+		aWhen := expectsRe.ReplaceAllString(line, "${when}")
+		aExpr := strings.TrimSpace(expectsRe.ReplaceAllString(line, "${expr}"))
 
 		a := cfg.addOrGetAudienceMember(aName)
-		if a.auditor.when != nil {
-			return errors.Newf("duplicate auditor definition: %q", aName)
-		}
-		a.auditor.expr = aExpr
 
+		if a.auditor.expectFsm != nil {
+			return errors.New("only one 'expects' verb is supported at this point")
+		}
 		when, err := parseAuditWhen(aWhen)
 		if err != nil {
 			return err
 		}
-		a.auditor.when = when
+		a.auditor.expectFsm = when
 
-		if err := a.checkExpr(cfg); err != nil {
+		exp, err := a.checkExpr(cfg, aExpr)
+		if err != nil {
 			return err
 		}
+		a.auditor.expectExpr = exp
+	} else if activeRe.MatchString(line) {
+		aName := activeRe.ReplaceAllString(line, "${name}")
+		aWhen := activeRe.ReplaceAllString(line, "${expr}")
+
+		var expr string
+		switch {
+		case strings.HasPrefix(aWhen, "when"):
+			expr = strings.TrimSpace(strings.TrimPrefix(aWhen, "when"))
+		case strings.HasPrefix(aWhen, "throughout"):
+			expr = "true"
+		default:
+			return errors.Newf("invalid activation period: %q", aWhen)
+		}
+
+		a := cfg.addOrGetAudienceMember(aName)
+		if a.auditor.activeCond.src != "" {
+			return errors.Newf("%q already has an activation period defined (%s)", aName, a.auditor.activeCond.src)
+		}
+
+		exp, err := a.checkExpr(cfg, expr)
+		if err != nil {
+			return err
+		}
+		a.auditor.activeCond = exp
+	} else if collectsRe.MatchString(line) {
+		aName := collectsRe.ReplaceAllString(line, "${name}")
+		aVar := collectsRe.ReplaceAllString(line, "${var}")
+		aMode := collectsRe.ReplaceAllString(line, "${mode}")
+		aN := collectsRe.ReplaceAllString(line, "${N}")
+		aExpr := collectsRe.ReplaceAllString(line, "${expr}")
+
+		var mode assignMode
+		switch aMode {
+		case "last":
+			mode = assignLastN
+		case "first":
+			mode = assignFirstN
+		case "bottom":
+			mode = assignBottomN
+		case "top":
+			mode = assignTopN
+		default:
+			return errors.Newf("unknown collection mode: %q", aMode)
+		}
+		N, err := strconv.Atoi(aN)
+		if err != nil {
+			return err
+		}
+		if N < 1 {
+			return errors.New("too few values to collect")
+		}
+
+		a := cfg.addOrGetAudienceMember(aName)
+
+		exp, err := a.checkExpr(cfg, aExpr)
+		if err != nil {
+			return err
+		}
+
+		// Add the variable. This must happen after the check,
+		// so that we are not using the variable we are writing to.
+		varName := exprVar{sigName: aVar}
+		if err := cfg.maybeAddVar(nil, varName, false /*dupOk*/); err != nil {
+			return err
+		}
+		cfg.vars[varName].isArray = true
+
+		a.auditor.assignments = append(a.auditor.assignments, assignment{
+			targetVar:  aVar,
+			expr:       exp,
+			assignMode: mode,
+			N:          N,
+		})
+	} else if computesRe.MatchString(line) {
+		aName := computesRe.ReplaceAllString(line, "${name}")
+		aVar := computesRe.ReplaceAllString(line, "${var}")
+		aExpr := computesRe.ReplaceAllString(line, "${expr}")
+
+		a := cfg.addOrGetAudienceMember(aName)
+
+		exp, err := a.checkExpr(cfg, aExpr)
+		if err != nil {
+			return err
+		}
+
+		// Add the variable. This must happen after the check,
+		// so that we are not using the variable we are writing to.
+		varName := exprVar{sigName: aVar}
+		if err := cfg.maybeAddVar(nil, varName, false /*dupOk*/); err != nil {
+			return err
+		}
+
+		a.auditor.assignments = append(a.auditor.assignments, assignment{
+			targetVar:  aVar,
+			expr:       exp,
+			assignMode: assignSingle,
+		})
 	} else {
 		return errors.New("unknown syntax")
 	}

@@ -36,6 +36,7 @@ func (ap *app) conduct(ctx context.Context) (err error) {
 	}()
 
 	// We'll log all the monitored and extracted data to a secondary logger.
+	auLogger := log.NewSecondaryLogger(ctx, nil, "audit", true /*enableGc*/, false /*forceSyncWrite*/)
 	monLogger := log.NewSecondaryLogger(ctx, nil, "spotlight", true /*enableGc*/, false /*forceSyncWrite*/)
 	dataLogger := log.NewSecondaryLogger(ctx, nil, "collector", true /*enableGc*/, false /*forceSyncWrite*/)
 	defer func() { log.Flush() }()
@@ -59,7 +60,7 @@ func (ap *app) conduct(ctx context.Context) (err error) {
 
 	// Start the audition.
 	var wgau sync.WaitGroup
-	auDone := ap.startAudition(ctx, &wgau, auChan, actionChan, moodCh, errCh)
+	auDone := ap.startAudition(ctx, &wgau, auLogger, auChan, actionChan, collectorChan, moodCh, errCh)
 	closers = append(closers, func() {
 		log.Info(ctx, "requesting the audition to stop")
 		auDone()
@@ -77,7 +78,7 @@ func (ap *app) conduct(ctx context.Context) (err error) {
 
 	// Start the spotlights.
 	var wgspot sync.WaitGroup
-	allSpotsDone := ap.startSpotlights(ctx, &wgspot, monLogger, collectorChan, auChan, errCh)
+	allSpotsDone := ap.startSpotlights(ctx, &wgspot, monLogger, auChan, errCh)
 	closers = append(closers, func() {
 		log.Info(ctx, "requesting spotlights to turn off")
 		allSpotsDone()
@@ -126,8 +127,10 @@ func (ap *app) runPrompter(
 func (ap *app) startAudition(
 	ctx context.Context,
 	wg *sync.WaitGroup,
+	auLogger *log.SecondaryLogger,
 	auChan <-chan auditableEvent,
 	actionCh chan<- actionReport,
+	collectorCh chan<- observation,
 	moodCh <-chan moodChange,
 	errCh chan<- error,
 ) (cancelFunc func()) {
@@ -137,7 +140,7 @@ func (ap *app) startAudition(
 	runWorker(auCtx, ap.stopper, func(ctx context.Context) {
 		defer wg.Done()
 		log.Info(ctx, "<begins>")
-		err := errors.WithContextTags(ap.audit(ctx, auChan, actionCh, moodCh), ctx)
+		err := errors.WithContextTags(ap.audit(ctx, auLogger, auChan, actionCh, collectorCh, moodCh), ctx)
 		if errors.Is(err, context.Canceled) {
 			// It's ok if the audition is canceled.
 			err = nil
@@ -179,7 +182,6 @@ func (ap *app) startSpotlights(
 	ctx context.Context,
 	wg *sync.WaitGroup,
 	monLogger *log.SecondaryLogger,
-	collectorChan chan<- observation,
 	auChan chan<- auditableEvent,
 	errCh chan<- error,
 ) (cancelFunc func()) {
@@ -197,7 +199,7 @@ func (ap *app) startSpotlights(
 		runWorker(spotCtx, ap.stopper, func(ctx context.Context) {
 			defer wg.Done()
 			log.Info(spotCtx, "<shining>")
-			err := errors.WithContextTags(ap.spotlight(ctx, a, monLogger, collectorChan, auChan), ctx)
+			err := errors.WithContextTags(ap.spotlight(ctx, a, monLogger, auChan), ctx)
 			if errors.Is(err, context.Canceled) {
 				// It's ok if a sportlight is canceled.
 				err = nil

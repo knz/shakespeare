@@ -161,6 +161,95 @@ var evalFunctions = map[string]govaluate.ExpressionFunction{
 	},
 }
 
+func init() {
+	// Some handy aliases.
+	evalFunctions["normalized_difference"] = evalFunctions["ndiff"]
+	evalFunctions["median"] = evalFunctions["med"]
+	evalFunctions["average"] = evalFunctions["avg"]
+}
+
+type collectFn func(a []interface{}, n int, x interface{}) ([]interface{}, error)
+
+var collectFns = map[assignMode]collectFn{
+	assignFirstN: func(a []interface{}, n int, x interface{}) ([]interface{}, error) {
+		if x == nil || len(a) >= n {
+			return a, nil
+		}
+		return append(a, x), nil
+	},
+	assignLastN: func(a []interface{}, n int, x interface{}) ([]interface{}, error) {
+		if x == nil {
+			return a, nil
+		}
+		if len(a) > n {
+			a = a[1:]
+		}
+		return append(a, x), nil
+	},
+	assignTopN: func(a []interface{}, n int, x interface{}) ([]interface{}, error) {
+		if x == nil {
+			return a, nil
+		}
+		var val float64
+		switch v := x.(type) {
+		case bool:
+			if v {
+				val = 1
+			}
+		case float64:
+			val = v
+		default:
+			// Ensure the array is returned, so that it remains unchanged in
+			// the caller.
+			return a, errors.Newf("top N: expected numeric value, got %T", x)
+		}
+		res := make([]interface{}, len(a)+1)
+		i := 0
+		for ; i < len(a) && a[i].(float64) >= val; i++ {
+			res[i] = a[i]
+		}
+		res[i] = val
+		if i < len(a) {
+			copy(res[i+1:], a[i:])
+		}
+		if len(res) > n {
+			res = res[:n-1]
+		}
+		return res, nil
+	},
+	assignBottomN: func(a []interface{}, n int, x interface{}) ([]interface{}, error) {
+		if x == nil {
+			return a, nil
+		}
+		var val float64
+		switch v := x.(type) {
+		case bool:
+			if v {
+				val = 1
+			}
+		case float64:
+			val = v
+		default:
+			// Ensure the array is returned, so that it remains unchanged in
+			// the caller.
+			return a, errors.Newf("bottom N: expected numeric value, got %T", x)
+		}
+		res := make([]interface{}, len(a)+1)
+		i := 0
+		for ; i < len(a) && a[i].(float64) <= val; i++ {
+			res[i] = a[i]
+		}
+		res[i] = val
+		if i < len(a) {
+			copy(res[i+1:], a[i:])
+		}
+		if len(res) > n {
+			res = res[:n-1]
+		}
+		return res, nil
+	},
+}
+
 func sortArray(a []interface{}) []interface{} {
 	s := sortable{a: a}
 	sort.Sort(&s)

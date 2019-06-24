@@ -167,14 +167,15 @@ func (ap *app) runLine(
 		switch step.typ {
 		case stepAmbiance:
 			ap.narrate(I, "🎊", "    (mood %s)", step.action)
-			ts := timeutil.Now()
+			now := timeutil.Now()
+			elapsed := now.Sub(ap.au.epoch).Seconds()
 			if err := a.reportMoodEvent(stepCtx, ap.stopper, moodCh,
-				moodChange{ts: ts, newMood: step.action}); err != nil {
+				moodChange{ts: elapsed, newMood: step.action}); err != nil {
 				return err
 			}
 			ev := actionReport{
 				typ:       reportMoodChange,
-				startTime: ts,
+				startTime: elapsed,
 				output:    step.action,
 			}
 			if err := a.reportActionEvent(stepCtx, ap.stopper, actionChan, ev); err != nil {
@@ -187,7 +188,7 @@ func (ap *app) runLine(
 				qc = '?'
 			}
 			ap.narrate(I, "🥁", "    %s: %s%c", a.name, step.action, qc)
-			ev, err := a.runAction(stepCtx, ap.stopper, step.action, actionChan)
+			ev, err := a.runAction(stepCtx, ap.stopper, ap.au.epoch, step.action, actionChan)
 			if err != nil {
 				return err
 			}
@@ -240,7 +241,11 @@ func (a *actor) reportMoodEvent(
 }
 
 func (a *actor) runAction(
-	ctx context.Context, stopper *stop.Stopper, action string, actionChan chan<- actionReport,
+	ctx context.Context,
+	stopper *stop.Stopper,
+	epoch time.Time,
+	action string,
+	actionChan chan<- actionReport,
 ) (actionReport, error) {
 	aCmd, ok := a.role.actionCmds[action]
 	if !ok {
@@ -278,7 +283,7 @@ func (a *actor) runAction(
 	}
 	ev := actionReport{
 		typ:       reportActionExec,
-		startTime: actStart,
+		startTime: actStart.Sub(epoch).Seconds(),
 		duration:  dur.Seconds(),
 		actor:     a.name,
 		action:    action,

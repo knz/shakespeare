@@ -2,8 +2,7 @@ package cmd
 
 import (
 	"context"
-	"fmt"
-	"html"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -15,19 +14,15 @@ import (
 )
 
 // spotlight stats the monitoring (spotlight) thread for a given actor.
-// The collected events are sent to the given collectorChan.
+// The collected events are sent to the given auChan.
 func (ap *app) spotlight(
-	ctx context.Context,
-	a *actor,
-	monLogger *log.SecondaryLogger,
-	collectorChan chan<- observation,
-	auChan chan<- auditableEvent,
+	ctx context.Context, a *actor, monLogger *log.SecondaryLogger, auChan chan<- auditableEvent,
 ) error {
 	ps, err, exitErr := a.runActorCommandWithConsumer(ctx, ap.stopper, 0, true, a.role.spotlightCmd, func(line string) error {
 		monLogger.Logf(ctx, "clamors: %q", line)
 		sigCtx := logtags.AddTag(ctx, "signals", nil)
 		line = strings.TrimSpace(line)
-		ap.detectSignals(sigCtx, a, collectorChan, auChan, line)
+		ap.detectSignals(sigCtx, monLogger, a, auChan, line)
 		return nil
 	})
 	log.Infof(ctx, "spotlight terminated (%+v)", err)
@@ -44,70 +39,90 @@ func (ap *app) spotlight(
 }
 
 // detectSignals parses a line produced by the spotlight to detect any
-// signal is contains. Detected signals are sent to the collectorChan.
+// signal is contains. Detected signals are sent to the auChan.
 func (ap *app) detectSignals(
 	ctx context.Context,
+	monLogger *log.SecondaryLogger,
 	a *actor,
-	collectorChan chan<- observation,
 	auChan chan<- auditableEvent,
 	line string,
 ) {
+	evs := map[float64]*auditableEvent{}
+	var tss []float64
+
 	for _, rp := range a.role.resParsers {
 		sink, ok := a.sinks[rp.name]
-		if !ok || (len(sink.observers) == 0 && len(sink.auditors) == 0) {
+		if !ok {
 			// No audience for this signal: don't even bother collecting the data.
 			continue
 		}
 		if !rp.re.MatchString(line) {
 			continue
 		}
-		ev := observation{
-			typ:       rp.typ,
-			observers: sink.observers,
-			auditors:  sink.auditors,
-			actorName: a.name,
-			sigName:   rp.name,
+		valHolder := auditableValue{
+			typ:     rp.typ,
+			varName: exprVar{actorName: a.name, sigName: rp.name},
 		}
+
+		var ts time.Time
 
 		// Parse the timestamp.
 		if rp.reGroup == "" {
 			// If the reGroup is empty, that means we're OK with
 			// the auto-generated "now" timestamp.
-			ev.ts = timeutil.Now()
+			ts = timeutil.Now()
 		} else {
 			var err error
 			logTime := rp.re.ReplaceAllString(line, "${"+rp.reGroup+"}")
-			ev.ts, err = time.Parse(rp.timeLayout, logTime)
+			ts, err = time.Parse(rp.timeLayout, logTime)
 			if err != nil {
-				log.Warningf(ctx, "invalid log timestamp %q in %q: %+v", logTime, line, err)
+				monLogger.Logf(ctx, "signal %s: invalid log timestamp %q in %q: %+v", rp.name, logTime, line, err)
 				continue
 			}
+		}
+
+		elapsed := ts.Sub(ap.au.epoch).Seconds()
+
+		ev, ok := evs[elapsed]
+		if !ok {
+			ev = &auditableEvent{ts: elapsed}
+			evs[elapsed] = ev
+			tss = append(tss, elapsed)
 		}
 
 		// Parse the data.
 		switch rp.typ {
 		case parseEvent:
-			evText := rp.re.ReplaceAllString(line, "${event}")
-			evText = html.EscapeString(evText)
-			ev.val = fmt.Sprintf("%q", evText)
+			valHolder.val = rp.re.ReplaceAllString(line, "${event}")
 		case parseScalar:
-			ev.val = rp.re.ReplaceAllString(line, "${scalar}")
+			valS := rp.re.ReplaceAllString(line, "${scalar}")
+			x, err := strconv.ParseFloat(valS, 64)
+			if err != nil {
+				monLogger.Logf(ctx, "signal %s: invalid scalar %q in %q: %+v", rp.name, valS, line, err)
+				continue
+			}
+			valHolder.val = x
 		case parseDelta:
 			curValS := rp.re.ReplaceAllString(line, "${delta}")
 			curVal, err := strconv.ParseFloat(curValS, 64)
 			if err != nil {
-				log.Warningf(ctx,
-					"signal %s: error parsing %q for delta: %+v",
-					ev.sigName, curValS, err)
+				monLogger.Logf(ctx, "signal %s: error parsing %q for delta: %+v", rp.name, curValS, err)
 				continue
 			}
-			ev.val = fmt.Sprintf("%f", curVal-sink.lastVal)
+			valHolder.val = curVal - sink.lastVal
 			sink.lastVal = curVal
 		}
 
-		ap.witness(ctx, "(%s's %s:) %s", ev.actorName, ev.sigName, ev.val)
+		ap.witness(ctx, "(%s's %s:) %s", a.name, rp.name, valHolder.val)
+		ev.values = append(ev.values, valHolder)
+	}
 
-		// Emit to the observers.
+	sort.Float64s(tss)
+
+	for _, ts := range tss {
+		ev := *evs[ts]
+		monLogger.Logf(ctx, "at %.2fs, found event: %+v", ts, ev)
+		// Emit events to the audition.
 		select {
 		case <-ap.stopper.ShouldQuiesce():
 			log.Info(ctx, "interrupted")
@@ -115,18 +130,7 @@ func (ap *app) detectSignals(
 		case <-ctx.Done():
 			log.Info(ctx, "canceled")
 			return
-		case collectorChan <- ev:
-			// ok
-		}
-		// Emit to the audition.
-		select {
-		case <-ap.stopper.ShouldQuiesce():
-			log.Info(ctx, "interrupted")
-			return
-		case <-ctx.Done():
-			log.Info(ctx, "canceled")
-			return
-		case auChan <- auditableEvent{ev}:
+		case auChan <- ev:
 			// ok
 		}
 	}

@@ -85,33 +85,35 @@ func (ap *app) plot(ctx context.Context) error {
 
 		// Find the timeseries to plot for the audience.
 		sigNum := 1
-		for _, sigName := range a.observer.sigNames {
-			as := a.observer.signals[sigName]
-			// Only look at the actors watched by the audience where
-			// there was actual data received.
-			for actName := range as.hasData {
-				fName := csvFileName(a.name, actName, sigName)
-				pl := plot{
-					fName: fName,
-					title: fmt.Sprintf("%s %s", actName, sigName),
-				}
-				ap.narrate(I, "📈", "observer %s found data for %s's %s: %s",
-					a.name, actName, sigName, filepath.Join(ap.cfg.dataDir, fName))
-
-				if as.drawEvents {
-					// Indicate the value used in the title.
-					pl.title = fmt.Sprintf("%s (around y=%d)", pl.title, sigNum)
-					// If the signal is an event source, we'll plot points on
-					// a horizontal line (with some jitter).
-					pl.opts = fmt.Sprintf("using 1:(%d+$3):2 with labels hypertext point pt 6 ps .5", sigNum)
-					sigNum++
-					group.numEvents++
-				} else {
-					// In the common case, we plot a line with points.
-					pl.opts = "using 1:2 with linespoints"
-				}
-				group.plots = append(group.plots, pl)
+		for _, varName := range a.observer.obsVarNames {
+			obsVar := a.observer.obsVars[varName]
+			if !obsVar.hasData {
+				// Only look at the actors watched by the audience where
+				// there was actual data received.
+				continue
 			}
+			actName := varName.actorName
+			fName := csvFileName(a.name, actName, varName.sigName)
+			pl := plot{
+				fName: fName,
+				title: fmt.Sprintf("%s %s", actName, varName.sigName),
+			}
+			ap.narrate(I, "📈", "observer %s found data for %s's %s: %s",
+				a.name, actName, varName.sigName, filepath.Join(ap.cfg.dataDir, fName))
+
+			if obsVar.drawEvents {
+				// Indicate the value used in the title.
+				pl.title = fmt.Sprintf("%s (around y=%d)", pl.title, sigNum)
+				// If the signal is an event source, we'll plot points on
+				// a horizontal line (with some jitter).
+				pl.opts = fmt.Sprintf("using 1:(%d+$3):2 with labels hypertext point pt 6 ps .5", sigNum)
+				sigNum++
+				group.numEvents++
+			} else {
+				// In the common case, we plot a line with points.
+				pl.opts = "using 1:2 with linespoints"
+			}
+			group.plots = append(group.plots, pl)
 		}
 		plotGroups = append(plotGroups, group)
 	}

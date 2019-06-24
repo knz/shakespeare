@@ -222,12 +222,6 @@ func (cfg *config) printCfg(w io.Writer) {
 		for _, an := range cfg.audienceNames {
 			fmt.Fprintf(w, "  #\n")
 			a := cfg.audience[an]
-			for _, varName := range a.observer.obsVarNames {
-				fmt.Fprintf(w, "  %s watches %s %s\n", a.name, varName.actorName, varName.sigName)
-			}
-			if a.observer.ylabel != "" {
-				fmt.Fprintf(w, "  %s measures %s\n", a.name, a.observer.ylabel)
-			}
 			if a.auditor.activeCond.src != "" {
 				if a.auditor.activeCond.src == "true" {
 					fmt.Fprintf(w, "  %s audits throughout\n", a.name)
@@ -240,6 +234,12 @@ func (cfg *config) printCfg(w io.Writer) {
 			}
 			if a.auditor.expectFsm != nil {
 				fmt.Fprintf(w, "  %s expects %s: %s\n", a.name, a.auditor.expectFsm.name, a.auditor.expectExpr.src)
+			}
+			for _, varName := range a.observer.obsVarNames {
+				fmt.Fprintf(w, "  %s watches %s\n", a.name, varName)
+			}
+			if a.observer.ylabel != "" {
+				fmt.Fprintf(w, "  %s measures %s\n", a.name, a.observer.ylabel)
 			}
 		}
 		fmt.Fprintln(w, "end")
@@ -650,7 +650,7 @@ func (v *variable) maybeAddWatcher(watcher *audienceMember) {
 	if _, ok := v.watchers[watcher.name]; ok {
 		return
 	}
-	log.Warningf(context.TODO(), "added wather %q for var %q", watcher.name, v.name)
+	log.Warningf(context.TODO(), "added watcher %q for var %q", watcher.name, v.name)
 	v.watchers[watcher.name] = watcher
 	v.watcherNames = append(v.watcherNames, watcher.name)
 }

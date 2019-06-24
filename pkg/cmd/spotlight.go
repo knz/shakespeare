@@ -113,7 +113,7 @@ func (ap *app) detectSignals(
 			sink.lastVal = curVal
 		}
 
-		ap.witness(ctx, "(%s's %s:) %s", a.name, rp.name, valHolder.val)
+		ap.witness(ctx, "(%s's %s:) %v", a.name, rp.name, valHolder.val)
 		ev.values = append(ev.values, valHolder)
 	}
 

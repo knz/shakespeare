@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"reflect"
 	"strings"
 
 	"github.com/Knetic/govaluate"
@@ -135,7 +136,7 @@ func newAudition(cfg *config) *audition {
 		curVals:       make(map[string]interface{}),
 	}
 	for aName, a := range cfg.audience {
-		if a.auditor.expectFsm != nil {
+		if a.auditor.expectFsm != nil || len(a.auditor.assignments) > 0 {
 			au.auditorStates[aName] = &auditorState{}
 		}
 	}
@@ -239,23 +240,30 @@ func (ap *app) checkEvent(
 ) error {
 	ap.au.resetAuditors()
 	ap.resetSigVars()
-	elapsed := ev.ts
-	ap.setAndActivateVar(ctx, auLog, exprVar{sigName: "t"}, elapsed)
-	ap.setAndActivateVar(ctx, auLog, exprVar{sigName: "mood"}, ap.au.curMood)
+	if err := ap.setAndActivateVar(ctx, auLog, collectorCh, ev.ts, parseScalar, exprVar{sigName: "t"}, ev.ts); err != nil {
+		return err
+	}
+	if err := ap.setAndActivateVar(ctx, auLog, collectorCh, ev.ts, parseEvent, exprVar{sigName: "mood"}, ap.au.curMood); err != nil {
+		return err
+	}
 
 	// Update the mood time/duration.
 	var moodt float64
 	if math.IsInf(ap.au.curMoodStart, 0) {
-		moodt = elapsed
+		moodt = ev.ts
 	} else {
-		moodt = elapsed - ap.au.curMoodStart
+		moodt = ev.ts - ap.au.curMoodStart
 	}
-	ap.setAndActivateVar(ctx, auLog, exprVar{sigName: "moodt"}, moodt)
+	if err := ap.setAndActivateVar(ctx, auLog, collectorCh, ev.ts, parseScalar, exprVar{sigName: "moodt"}, moodt); err != nil {
+		return err
+	}
 
 	for _, value := range ev.values {
-		ap.setAndActivateVar(ctx, auLog, value.varName, value.val)
+		if err := ap.setAndActivateVar(ctx, auLog, collectorCh, ev.ts, value.typ, value.varName, value.val); err != nil {
+			return err
+		}
 		// FIXME: only collect for activated audiences.
-		if err := ap.collectEvent(ctx, collectorCh, ev.ts, value); err != nil {
+		if err := ap.collectEvent(ctx, collectorCh, ev.ts, value.typ, value.varName, value.val); err != nil {
 			return err
 		}
 	}
@@ -268,7 +276,7 @@ func (ap *app) checkEvent(
 		}
 		am := ap.cfg.audience[audienceName]
 		auCtx := logtags.AddTag(ctx, "auditor", audienceName)
-		if err := ap.checkEventForAudience(auCtx, auLog, as, am, actionCh, ev); err != nil {
+		if err := ap.checkEventForAudience(auCtx, auLog, as, am, collectorCh, actionCh, ev); err != nil {
 			return err
 		}
 	}
@@ -277,17 +285,22 @@ func (ap *app) checkEvent(
 }
 
 func (ap *app) collectEvent(
-	ctx context.Context, collectorCh chan<- observation, ts float64, value auditableValue,
+	ctx context.Context,
+	collectorCh chan<- observation,
+	ts float64,
+	typ parserType,
+	varName exprVar,
+	val interface{},
 ) error {
-	vS, ok := value.val.(string)
+	vS, ok := val.(string)
 	if !ok {
-		vS = fmt.Sprintf("%v", value.val)
+		vS = fmt.Sprintf("%v", val)
 	}
 
 	obs := observation{
-		typ:     value.typ,
+		typ:     typ,
 		ts:      ts,
-		varName: value.varName,
+		varName: varName,
 		val:     vS,
 	}
 
@@ -321,6 +334,7 @@ func (ap *app) checkEventForAudience(
 	auLog *log.SecondaryLogger,
 	as *auditorState,
 	am *audienceMember,
+	collectorCh chan<- observation,
 	actionCh chan<- actionReport,
 	ev auditableEvent,
 ) error {
@@ -349,11 +363,11 @@ func (ap *app) checkEventForAudience(
 		}
 	}
 	if !as.auditing {
-		ap.judge(activateCtx, I, "🙈", "(%s: not auditing)", am.name)
+		// ap.judge(activateCtx, I, "🙈", "(%s: not auditing)", am.name)
 		return nil
 	}
 	// Now process the assignments.
-	if err := ap.processAssignments(ctx, auLog, as, &am.auditor); err != nil {
+	if err := ap.processAssignments(ctx, auLog, collectorCh, ev.ts, as, &am.auditor); err != nil {
 		return err
 	}
 
@@ -392,7 +406,12 @@ func (ap *app) startOfAuditPeriod(
 }
 
 func (ap *app) processAssignments(
-	baseCtx context.Context, auLog *log.SecondaryLogger, as *auditorState, am *auditor,
+	baseCtx context.Context,
+	auLog *log.SecondaryLogger,
+	collectorCh chan<- observation,
+	evTs float64,
+	as *auditorState,
+	am *auditor,
 ) error {
 	for _, va := range am.assignments {
 		ctx := logtags.AddTag(baseCtx, "assign", va.targetVar)
@@ -424,7 +443,11 @@ func (ap *app) processAssignments(
 			}
 			value = newA
 		}
-		ap.setAndActivateVar(ctx, auLog, exprVar{sigName: va.targetVar}, value)
+		typ := parseEvent
+		if _, ok := value.(float64); ok {
+			typ = parseScalar
+		}
+		ap.setAndActivateVar(ctx, auLog, collectorCh, evTs, typ, exprVar{sigName: va.targetVar}, value)
 	}
 	return nil
 }
@@ -603,22 +626,38 @@ func (au *audition) resetAuditors() {
 }
 
 func (ap *app) setAndActivateVar(
-	ctx context.Context, auLog *log.SecondaryLogger, varName exprVar, val interface{},
-) {
+	ctx context.Context,
+	auLog *log.SecondaryLogger,
+	collectorCh chan<- observation,
+	evTs float64,
+	typ parserType,
+	varName exprVar,
+	val interface{},
+) error {
 	if val == nil {
 		// No value: do nothing.
 	}
 	auLog.Logf(ctx, "%s := %v", varName, val)
-	ap.au.curVals[varName.String()] = val
+	varNameS := varName.String()
+	prevV := ap.au.curVals[varNameS]
+	ap.au.curVals[varNameS] = val
 	ap.au.curActivated[varName] = true
 	v := ap.cfg.vars[varName]
-	for w := range v.watchers {
-		as, ok := ap.au.auditorStates[w]
-		if ok && !as.activated {
-			auLog.Logf(ctx, "activating auditor %s", w)
-			as.activated = true
+	if len(v.watchers) > 0 {
+		for w := range v.watchers {
+			as, ok := ap.au.auditorStates[w]
+			if ok && !as.activated {
+				auLog.Logf(ctx, "activating auditor %s", w)
+				as.activated = true
+			}
+		}
+		if !reflect.DeepEqual(val, prevV) {
+			if err := ap.collectEvent(ctx, collectorCh, evTs, typ, varName, val); err != nil {
+				return err
+			}
 		}
 	}
+	return nil
 }
 
 var errAuditViolation = errors.New("audit violation")

@@ -196,7 +196,7 @@ func (ap *app) collect(
 		case ev := <-collectorChan:
 			ap.expandTimeRange(ev.ts)
 
-			dataLogger.Logf(ctx, "%.2f %s %s", ev.ts, ev.varName.String(), ev.val)
+			dataLogger.Logf(ctx, "%.2f %s %v", ev.ts, ev.varName.String(), ev.val)
 
 			vr, ok := ap.cfg.vars[ev.varName]
 			if !ok {
@@ -206,7 +206,9 @@ func (ap *app) collect(
 			for _, obsName := range vr.watcherNames {
 				a := vr.watchers[obsName]
 				a.observer.hasData = true
-				a.observer.obsVars[ev.varName].hasData = true
+				if ov, ok := a.observer.obsVars[ev.varName]; ok {
+					ov.hasData = true
+				}
 
 				fName := filepath.Join(ap.cfg.dataDir,
 					csvFileName(obsName, ev.varName.actorName, ev.varName.sigName))
@@ -217,7 +219,11 @@ func (ap *app) collect(
 				}
 				// shuffle is a random value between [-.25, +.25] used to randomize event plots.
 				shuffle := (.5 * rand.Float64()) - .25
-				fmt.Fprintf(w, "%.4f %q %.3f\n", ev.ts, html.EscapeString(ev.val), shuffle)
+				if ev.typ == parseEvent {
+					fmt.Fprintf(w, "%.4f %q %.3f\n", ev.ts, html.EscapeString(ev.val), shuffle)
+				} else {
+					fmt.Fprintf(w, "%.4f %v %.3f\n", ev.ts, ev.val, shuffle)
+				}
 			}
 		}
 	}

@@ -87,6 +87,7 @@ func parseSection(ctx context.Context, rd *reader, lineParser func(line string) 
 
 var audienceRe = compileRe(`^audience$`)
 var watchRe = compileRe(`^(?P<name>\S+)\s+watches\s+(?P<target>every\s+\S+|\S+)\s+(?P<signal>\S+)\s*$`)
+var watchVarRe = compileRe(`^(?P<name>\S+)\s+watches\s+(?P<varname>\S+)\s*$`)
 var measuresRe = compileRe(`^(?P<name>\S+)\s+measures\s+(?P<ylabel>.*)$`)
 var activeRe = compileRe(`^(?P<name>\S+)\s+audits\s+(?P<expr>only\s+while\s+.*|throughout)\s*$`)
 var collectsRe = compileRe(`^(?P<name>\S+)\s+collects\s+(?P<var>\S+)\s+as\s+(?P<mode>\S+)\s+(?P<N>\d+)\s+(?P<expr>.*)$`)
@@ -120,6 +121,22 @@ func (cfg *config) parseAudience(line string) error {
 				return err
 			}
 		}
+	} else if watchVarRe.MatchString(line) {
+		aName := watchVarRe.ReplaceAllString(line, "${name}")
+		target := watchVarRe.ReplaceAllString(line, "${varname}")
+
+		varName := exprVar{actorName: "", sigName: target}
+		v, ok := cfg.vars[varName]
+		if !ok {
+			return explainAlternatives(errors.Newf("variable not defined: %q", varName), "variables", cfg.vars)
+		}
+
+		a := cfg.addOrGetAudienceMember(aName)
+		v.maybeAddWatcher(a)
+		if _, ok := a.observer.obsVars[varName]; !ok {
+			a.observer.obsVars[varName] = &collectedSignal{}
+			a.observer.obsVarNames = append(a.observer.obsVarNames, varName)
+		}
 	} else if measuresRe.MatchString(line) {
 		aName := measuresRe.ReplaceAllString(line, "${name}")
 		ylabel := strings.TrimSpace(measuresRe.ReplaceAllString(line, "${ylabel}"))
@@ -131,6 +148,10 @@ func (cfg *config) parseAudience(line string) error {
 		aExpr := strings.TrimSpace(expectsRe.ReplaceAllString(line, "${expr}"))
 
 		a := cfg.addOrGetAudienceMember(aName)
+
+		if err := a.ensureAuditCond(cfg); err != nil {
+			return err
+		}
 
 		if a.auditor.expectFsm != nil {
 			return errors.New("only one 'expects' verb is supported at this point")
@@ -201,6 +222,10 @@ func (cfg *config) parseAudience(line string) error {
 
 		a := cfg.addOrGetAudienceMember(aName)
 
+		if err := a.ensureAuditCond(cfg); err != nil {
+			return err
+		}
+
 		exp, err := a.checkExpr(cfg, aExpr)
 		if err != nil {
 			return err
@@ -227,6 +252,10 @@ func (cfg *config) parseAudience(line string) error {
 
 		a := cfg.addOrGetAudienceMember(aName)
 
+		if err := a.ensureAuditCond(cfg); err != nil {
+			return err
+		}
+
 		exp, err := a.checkExpr(cfg, aExpr)
 		if err != nil {
 			return err
@@ -248,6 +277,18 @@ func (cfg *config) parseAudience(line string) error {
 		return errors.New("unknown syntax")
 	}
 
+	return nil
+}
+
+func (a *audienceMember) ensureAuditCond(cfg *config) error {
+	if a.auditor.activeCond.src == "" {
+		// Synthetize "throughout".
+		compiledExp, err := a.checkExpr(cfg, "true")
+		if err != nil {
+			return err
+		}
+		a.auditor.activeCond = compiledExp
+	}
 	return nil
 }
 

@@ -94,13 +94,16 @@ func (a *audienceMember) checkExpr(cfg *config, expSrc string) (expr, error) {
 		depVars[v] = struct{}{}
 	}
 	for v := range depVars {
-		if strings.Contains(v, ".") {
-			return expr{}, errors.WithHintf(errors.Newf("invalid syntax: %q", v),
-				"try [%s]", strings.ReplaceAll(v, ".", " "))
-		}
-
 		parts := strings.Split(v, " ")
 		if len(parts) == 1 {
+			if strings.Contains(v, ".") {
+				return expr{}, errors.WithHintf(errors.Newf("invalid syntax: %q", v),
+					"try [%s]", strings.ReplaceAll(v, ".", " "))
+			}
+			if err := checkIdent(v); err != nil {
+				return expr{}, err
+			}
+
 			varName := exprVar{actorName: "", sigName: v}
 			if _, ok := cfg.vars[varName]; !ok {
 				return expr{}, explainAlternatives(errors.Newf("variable not defined: %q", varName.String()), "variables", cfg.vars)
@@ -113,6 +116,9 @@ func (a *audienceMember) checkExpr(cfg *config, expSrc string) (expr, error) {
 		}
 		if len(parts) != 2 {
 			return expr{}, errors.Newf("invalid signal reference: %q", v)
+		}
+		if err := checkIdents(parts[0], parts[1]); err != nil {
+			return expr{}, err
 		}
 		varName := exprVar{actorName: parts[0], sigName: parts[1]}
 		actor, ok := cfg.actors[varName.actorName]

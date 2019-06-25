@@ -84,9 +84,10 @@ cast
    alice plays doctor(
 end
 ----
-parse error: <testdata>:3: unknown syntax
+parse error: <testdata>:3: not a valid identifier: "doctor("
 --
 while parsing:
 <testdata>:1     include doctor.cfg
 <testdata>:2     cast
 <testdata>:3   >    alice plays doctor(
+HINT: try this instead: doctor_

@@ -532,6 +532,9 @@ type auditViolation struct {
 func (cfg *config) selectActors(target string) (*role, []*actor, error) {
 	if strings.HasPrefix(target, "every ") {
 		roleName := strings.TrimPrefix(target, "every ")
+		if err := checkIdent(roleName); err != nil {
+			return nil, nil, err
+		}
 		r, ok := cfg.roles[roleName]
 		if !ok {
 			return nil, nil, explainAlternatives(errors.Newf("unknown role %q", roleName), "roles", cfg.roles)
@@ -544,6 +547,9 @@ func (cfg *config) selectActors(target string) (*role, []*actor, error) {
 			res = append(res, a)
 		}
 		return r, res, nil
+	}
+	if err := checkIdent(target); err != nil {
+		return nil, nil, err
 	}
 	act, ok := cfg.actors[target]
 	if !ok {

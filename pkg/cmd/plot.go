@@ -80,21 +80,6 @@ func (ap *app) plot(ctx context.Context) error {
 			}
 		}
 
-		// Find the timeserie(s) to plot for the auditor.
-		if as, ok := ap.au.auditorStates[a.name]; ok && as.hasData {
-			fName := fmt.Sprintf("audit-%s.csv", a.name)
-
-			ap.narrate(I, "📈", "observer %s found audit data: %s",
-				a.name, filepath.Join(ap.cfg.dataDir, fName))
-
-			pl := plot{fName: fName}
-
-			pl.opts = "using 1:(.87):(faces[$2+1]) with labels font ',14'  axes x1y2"
-			group.plots = append(group.plots, pl)
-			pl.opts = "using 1:(.8):3 with labels hypertext point pt 17 axes x1y2"
-			group.plots = append(group.plots, pl)
-		}
-
 		// Find the timeseries to plot for the audience.
 		sigNum := 1
 		for _, varName := range a.observer.obsVarNames {
@@ -127,6 +112,22 @@ func (ap *app) plot(ctx context.Context) error {
 			}
 			group.plots = append(group.plots, pl)
 		}
+
+		// Find the timeserie(s) to plot for the auditor.
+		if as, ok := ap.au.auditorStates[a.name]; ok && as.hasData {
+			fName := fmt.Sprintf("audit-%s.csv", a.name)
+
+			ap.narrate(I, "📈", "observer %s found audit data: %s",
+				a.name, filepath.Join(ap.cfg.dataDir, fName))
+
+			pl := plot{fName: fName}
+
+			pl.opts = "using 1:(.87):(faces[$2+1]) with labels font ',14'  axes x1y2"
+			group.plots = append(group.plots, pl)
+			pl.opts = "using 1:(.8):3 with labels hypertext point pt 17 axes x1y2"
+			group.plots = append(group.plots, pl)
+		}
+
 		plotGroups = append(plotGroups, group)
 	}
 

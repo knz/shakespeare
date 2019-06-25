@@ -201,7 +201,7 @@ func (cfg *config) printCfg(w io.Writer) {
 	fmt.Fprintln(w, "end")
 	// fmt.Fprintln(w)
 
-	if len(cfg.audience) == 0 && len(cfg.vars) == 0 {
+	if len(cfg.audience) == 0 {
 		fmt.Fprintln(w, "# no audience defined")
 	} else {
 		fmt.Fprintln(w, "audience")

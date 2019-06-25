@@ -463,3 +463,24 @@ evaluations) on every mood change and signal received.
   not changed.
 
 - `moodt`: current time relative to the start of the current mood.
+
+### Predefined functions
+
+- `ndiff(x, y)`: percentage difference of `x` relative to `y`. For example,
+  `ndiff(120, 100) == .20`
+
+- `abs(x)`: absolute value of `x`
+
+- `count(ar)`: count of values in array
+
+- `first(ar)`: first value in array, nil if empty
+
+- `last(ar)`: last value in array, nil if empty
+
+- `sorted(ar)`: sorted copy of array
+
+- `sum(ar)`: sum of values in array, nil if empty
+
+- `avg(ar)`: average of values in array, nil if empty
+
+- `med(ar)`: median of values in array, nil if empty

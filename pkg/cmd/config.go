@@ -172,10 +172,10 @@ func (cfg *config) printCfg(w io.Writer) {
 					plural = ""
 				}
 				if len(sink.observers) > 0 {
-					fmt.Fprintf(w, "  # %s %s%s are watched by audience %+v\n", a.name, sig, plural, sink.observers)
+					fmt.Fprintf(w, "  # %s %s%s are watched by audience %s\n", a.name, sig, plural, strings.Join(sink.observers, ", "))
 				}
 				if len(sink.auditors) > 0 {
-					fmt.Fprintf(w, "  # %s %s%s are checked by auditors %+v\n", a.name, sig, plural, sink.auditors)
+					fmt.Fprintf(w, "  # %s %s%s are checked by auditors %s\n", a.name, sig, plural, strings.Join(sink.auditors, ", "))
 				}
 			}
 		}
@@ -212,21 +212,16 @@ func (cfg *config) printCfg(w io.Writer) {
 				qual = "(collection)"
 			}
 			for _, watcherName := range v.watcherNames {
-				typ := "variable"
-				if vn.actorName != "" {
-					typ = "signal"
-				}
-				fmt.Fprintf(w, "  # %s %s%s triggers %s\n", typ, vn, qual, watcherName)
+				fmt.Fprintf(w, "  # %s sensitive to %s%s\n", watcherName, vn, qual)
 			}
 		}
 		for _, an := range cfg.audienceNames {
-			fmt.Fprintf(w, "  #\n")
 			a := cfg.audience[an]
 			if a.auditor.activeCond.src != "" {
 				if a.auditor.activeCond.src == "true" {
 					fmt.Fprintf(w, "  %s audits throughout\n", a.name)
 				} else {
-					fmt.Fprintf(w, "  %s audits only when %s\n", a.name, a.auditor.activeCond.src)
+					fmt.Fprintf(w, "  %s audits only while %s\n", a.name, a.auditor.activeCond.src)
 				}
 			}
 			for _, as := range a.auditor.assignments {
@@ -471,7 +466,7 @@ func (e exprVar) String() string {
 	if e.actorName == "" {
 		return e.sigName
 	}
-	return e.actorName + "." + e.sigName
+	return e.actorName + " " + e.sigName
 }
 
 type auditorState struct {

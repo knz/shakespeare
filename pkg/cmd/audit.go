@@ -94,7 +94,12 @@ func (a *audienceMember) checkExpr(cfg *config, expSrc string) (expr, error) {
 		depVars[v] = struct{}{}
 	}
 	for v := range depVars {
-		parts := strings.Split(v, ".")
+		if strings.Contains(v, ".") {
+			return expr{}, errors.WithHintf(errors.Newf("invalid syntax: %q", v),
+				"try [%s]", strings.ReplaceAll(v, ".", " "))
+		}
+
+		parts := strings.Split(v, " ")
 		if len(parts) == 1 {
 			varName := exprVar{actorName: "", sigName: v}
 			if _, ok := cfg.vars[varName]; !ok {

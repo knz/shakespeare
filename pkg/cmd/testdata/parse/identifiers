@@ -1,0 +1,193 @@
+parse
+role ::!23
+end
+----
+parse error: <testdata>:1: not a valid identifier: "::!23"
+--
+while parsing:
+<testdata>:1   > role ::!23
+HINT: try this instead: ___23
+
+parse
+role _Ô☃_
+end
+----
+role _Ô☃_
+end
+# no cast defined
+script
+  tempo 1s
+  # no stanzas defined, play will terminate immediately
+end
+# no audience defined
+
+parse
+role “Ô☃_”
+end
+----
+parse error: <testdata>:1: not a valid identifier: "“Ô☃_”"
+--
+while parsing:
+<testdata>:1   > role “Ô☃_”
+HINT: try this instead: _Ô☃__
+
+
+parse
+role a.b
+end
+----
+parse error: <testdata>:1: not a valid identifier: "a.b"
+--
+while parsing:
+<testdata>:1   > role a.b
+HINT: try this instead: a_b
+
+parse
+role a-b
+end
+----
+parse error: <testdata>:1: not a valid identifier: "a-b"
+--
+while parsing:
+<testdata>:1   > role a-b
+HINT: try this instead: a_b
+
+parse
+role 123ab
+end
+----
+parse error: <testdata>:1: not a valid identifier: "123ab"
+--
+while parsing:
+<testdata>:1   > role 123ab
+HINT: try this instead: _123ab
+
+parse
+role doctor
+  signal 123woo event at (?P<event>)
+end
+----
+parse error: <testdata>:2: not a valid identifier: "123woo"
+--
+while parsing:
+<testdata>:1     role doctor
+<testdata>:2   >   signal 123woo event at (?P<event>)
+HINT: try this instead: _123woo
+
+parse
+cast
+  123woo plays doctor
+end
+----
+parse error: <testdata>:2: not a valid identifier: "123woo"
+--
+while parsing:
+<testdata>:1     cast
+<testdata>:2   >   123woo plays doctor
+HINT: try this instead: _123woo
+
+parse
+cast
+   alice plays 123woo
+end
+----
+parse error: <testdata>:2: not a valid identifier: "123woo"
+--
+while parsing:
+<testdata>:1     cast
+<testdata>:2   >    alice plays 123woo
+HINT: try this instead: _123woo
+
+parse
+script
+  action  entails nop
+end
+----
+parse error: <testdata>:2: only ASCII letters, digits and punctuation allowed as action shorthands
+--
+while parsing:
+<testdata>:1     script
+<testdata>:2   >   action  entails nop
+
+parse
+script
+  action ☃ entails nop
+end
+----
+parse error: <testdata>:2: only ASCII characters allowed as action shorthands
+--
+while parsing:
+<testdata>:1     script
+<testdata>:2   >   action ☃ entails nop
+
+parse
+audience
+  123woo watches t
+end
+----
+parse error: <testdata>:2: not a valid identifier: "123woo"
+--
+while parsing:
+<testdata>:1     audience
+<testdata>:2   >   123woo watches t
+HINT: try this instead: _123woo
+
+parse
+audience
+  alice watches 123woo blah
+end
+----
+parse error: <testdata>:2: not a valid identifier: "123woo"
+--
+while parsing:
+<testdata>:1     audience
+<testdata>:2   >   alice watches 123woo blah
+HINT: try this instead: _123woo
+
+parse
+audience
+  alice watches blah 123woo
+end
+----
+parse error: <testdata>:2: not a valid identifier: "123woo"
+--
+while parsing:
+<testdata>:1     audience
+<testdata>:2   >   alice watches blah 123woo
+HINT: try this instead: _123woo
+
+parse
+audience
+  alice audits only when [123woo] < 0
+end
+----
+parse error: <testdata>:2: not a valid identifier: "123woo"
+--
+while parsing:
+<testdata>:1     audience
+<testdata>:2   >   alice audits only when [123woo] < 0
+HINT: try this instead: _123woo
+
+parse
+audience
+  alice audits only when [123woo blah] < 0
+end
+----
+parse error: <testdata>:2: not a valid identifier: "123woo"
+--
+while parsing:
+<testdata>:1     audience
+<testdata>:2   >   alice audits only when [123woo blah] < 0
+HINT: try this instead: _123woo
+
+parse
+audience
+  alice audits only when [blah 123woo] < 0
+end
+----
+parse error: <testdata>:2: not a valid identifier: "123woo"
+--
+while parsing:
+<testdata>:1     audience
+<testdata>:2   >   alice audits only when [blah 123woo] < 0
+HINT: try this instead: _123woo

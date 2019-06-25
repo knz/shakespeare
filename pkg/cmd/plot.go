@@ -277,7 +277,7 @@ faces[4] = ""
 	}
 	defer f3.Close()
 	ap.narrate(I, "📜", "HTML include for SVG plots: %s", fName)
-	fmt.Fprintln(f3, `<!DOCTYPE html>
+	fmt.Fprint(f3, `<!DOCTYPE html>
 <html lang="en">
   <head><meta charset="utf-8"/></head>
   <body><embed id="E" src="plot.svg"/></body>

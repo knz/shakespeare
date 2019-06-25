@@ -251,10 +251,10 @@ func (ap *app) checkEvent(
 ) error {
 	ap.au.resetAuditors()
 	ap.resetSigVars()
-	if err := ap.setAndActivateVar(ctx, auLog, collectorCh, ev.ts, parseScalar, exprVar{sigName: "t"}, ev.ts); err != nil {
+	if err := ap.setAndActivateVar(ctx, auLog, collectorCh, ev.ts, parseScalar, exprVar{sigName: "t"}, ev.ts, false); err != nil {
 		return err
 	}
-	if err := ap.setAndActivateVar(ctx, auLog, collectorCh, ev.ts, parseEvent, exprVar{sigName: "mood"}, ap.au.curMood); err != nil {
+	if err := ap.setAndActivateVar(ctx, auLog, collectorCh, ev.ts, parseEvent, exprVar{sigName: "mood"}, ap.au.curMood, false); err != nil {
 		return err
 	}
 
@@ -265,12 +265,12 @@ func (ap *app) checkEvent(
 	} else {
 		moodt = ev.ts - ap.au.curMoodStart
 	}
-	if err := ap.setAndActivateVar(ctx, auLog, collectorCh, ev.ts, parseScalar, exprVar{sigName: "moodt"}, moodt); err != nil {
+	if err := ap.setAndActivateVar(ctx, auLog, collectorCh, ev.ts, parseScalar, exprVar{sigName: "moodt"}, moodt, false); err != nil {
 		return err
 	}
 
 	for _, value := range ev.values {
-		if err := ap.setAndActivateVar(ctx, auLog, collectorCh, ev.ts, value.typ, value.varName, value.val); err != nil {
+		if err := ap.setAndActivateVar(ctx, auLog, collectorCh, ev.ts, value.typ, value.varName, value.val, false); err != nil {
 			return err
 		}
 		// FIXME: only collect for activated audiences.
@@ -458,7 +458,7 @@ func (ap *app) processAssignments(
 		if _, ok := value.(float64); ok {
 			typ = parseScalar
 		}
-		ap.setAndActivateVar(ctx, auLog, collectorCh, evTs, typ, exprVar{sigName: va.targetVar}, value)
+		ap.setAndActivateVar(ctx, auLog, collectorCh, evTs, typ, exprVar{sigName: va.targetVar}, value, true)
 	}
 	return nil
 }
@@ -644,6 +644,7 @@ func (ap *app) setAndActivateVar(
 	typ parserType,
 	varName exprVar,
 	val interface{},
+	report bool,
 ) error {
 	if val == nil {
 		// No value: do nothing.
@@ -663,6 +664,9 @@ func (ap *app) setAndActivateVar(
 			}
 		}
 		if !reflect.DeepEqual(val, prevV) {
+			if report {
+				ap.judge(ctx, I, "👉", "%s := %v", varName, val)
+			}
 			if err := ap.collectEvent(ctx, collectorCh, evTs, typ, varName, val); err != nil {
 				return err
 			}

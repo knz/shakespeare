@@ -35,11 +35,13 @@ activity over time.
 3. `shakespeare` brings the conductor on stage. The play begins. The
    conductor does the following:
 
-   - calls the spotlights to shine upon the actors (starts the monitoring processes)
-   - instructs the actors to carry out the steps defined by the script (runs action commands)
-   - calls the actors to leave the scene (runs the role cleanup commands)
+   - calls the spotlights to shine upon the actors (starts the monitoring processes).
+   - invites the prompter to the front of the stage. The prompter
+     instructs the actors to carry out the steps defined by the script
+     (runs action commands).
+   - calls the actors to leave the scene (runs the role cleanup commands).
 
-5. meanwhile, each observer in the audience scrutinizes one or more
+4. meanwhile, each observer in the audience scrutinizes one or more
    actor as revealed by their spotlight: plottable data is gathered by
    filtering the monitoring data.
 
@@ -47,8 +49,25 @@ activity over time.
    that their performance is acceptable: behavior signals are checked
    for specified acceptance criteria defined by predicates.
 
+5. during the play, the prompter reports the scenes and actions on the left
+   side of the terminal output. The observers report collected events
+   on the middle of the terminal output. Audit results, if any, are
+   shown on the right of the terminal output.
+
 6. at the end of the play, the audience reports on their
    experience (plots and test results are produced).
+   The result plots all share the timeline of the play
+   on the x-axis.
+
+   - the performed actions are displayed in the top plot.
+   - each observer then gets its own plot.
+   - on each observer plot, each of the observed signal sources (from
+     spotlights) produces a data series, and audit results are
+     overlaid on top.
+
+This overall operation is illustrated by the following diagram:
+
+![Overall operation](docs/Shakespeare.png)
 
 ## Command line parameters
 

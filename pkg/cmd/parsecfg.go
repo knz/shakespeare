@@ -104,6 +104,7 @@ var activeRe = compileRe(`^(?P<name>\S+)\s+audits\s+(?P<expr>only\s+(?:while|whe
 var collectsRe = compileRe(`^(?P<name>\S+)\s+collects\s+(?P<var>\S+)\s+as\s+(?P<mode>\S+)\s+(?P<N>\d+)\s+(?P<expr>.*)$`)
 var computesRe = compileRe(`^(?P<name>\S+)\s+computes\s+(?P<var>\S+)\s+as\s+(?P<expr>.*)$`)
 var expectsRe = compileRe(`^(?P<name>\S+)\s+expects\s+(?P<when>[a-z]+[a-z ]*[a-z])\s*:\s*(?P<expr>.*)$`)
+var noPlotRe = compileRe(`^(?P<name>\S+)\s+only\s+helps\s*$`)
 
 func (cfg *config) parseAudience(line string) error {
 	if watchRe.MatchString(line) {
@@ -164,6 +165,13 @@ func (cfg *config) parseAudience(line string) error {
 		ylabel := strings.TrimSpace(measuresRe.ReplaceAllString(line, "${ylabel}"))
 		a := cfg.addOrGetAudienceMember(aName)
 		a.observer.ylabel = ylabel
+	} else if noPlotRe.MatchString(line) {
+		aName := noPlotRe.ReplaceAllString(line, "${name}")
+		if err := checkIdent(aName); err != nil {
+			return err
+		}
+		a := cfg.addOrGetAudienceMember(aName)
+		a.observer.disablePlot = true
 	} else if expectsRe.MatchString(line) {
 		aName := expectsRe.ReplaceAllString(line, "${name}")
 		aWhen := expectsRe.ReplaceAllString(line, "${when}")

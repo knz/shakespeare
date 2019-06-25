@@ -34,6 +34,8 @@ type config struct {
 	artifactsDir string
 	// The path to the unix shell used to execute script commands.
 	shellPath string
+	// The path to the gnuplot command to generate plots.
+	gnuplotPath string
 	// The list of directory to search for includes.
 	includePath []string
 	// Whether to displays emoji.
@@ -77,7 +79,16 @@ type config struct {
 }
 
 func (cfg *config) initArgs(ctx context.Context) error {
-	cfg.shellPath = os.Getenv("SHELL")
+	if sh, ok := os.LookupEnv("SHELL"); ok {
+		cfg.shellPath = sh
+	} else {
+		cfg.shellPath = "/bin/bash"
+	}
+	if gp, ok := os.LookupEnv("GNUPLOT"); ok {
+		cfg.gnuplotPath = gp
+	} else {
+		cfg.gnuplotPath = "gnuplot"
+	}
 	pflag.StringVarP(&cfg.dataDir, "output-dir", "o", ".", "output data directory")
 	pflag.BoolVarP(&cfg.doPrint, "print-cfg", "p", false, "print out the parsed configuration")
 	pflag.BoolVarP(&cfg.parseOnly, "dry-run", "n", false, "do not execute anything, just check the configuration")

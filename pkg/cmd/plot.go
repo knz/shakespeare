@@ -280,7 +280,9 @@ faces[4] = ""
 	fmt.Fprint(f3, `<!DOCTYPE html>
 <html lang="en">
   <head><meta charset="utf-8"/></head>
-  <body><embed id="E" src="plot.svg"/></body>
+	<body><div style="margin-left: auto; margin-right: auto; max-width: 1024px">
+	  <embed id="E" src="plot.svg"/>
+	</div></body>
 </html>
 `)
 

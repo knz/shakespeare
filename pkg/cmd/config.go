@@ -236,6 +236,9 @@ func (cfg *config) printCfg(w io.Writer) {
 			if a.observer.ylabel != "" {
 				fmt.Fprintf(w, "  %s measures %s\n", a.name, a.observer.ylabel)
 			}
+			if a.observer.disablePlot {
+				fmt.Fprintf(w, "  %s only helps\n", a.name)
+			}
 		}
 		fmt.Fprintln(w, "end")
 	}
@@ -377,6 +380,7 @@ type observer struct {
 	obsVars     map[exprVar]*collectedSignal
 	obsVarNames []exprVar
 	ylabel      string
+	disablePlot bool
 	// hasData indicates whether data was received for this audience.
 	hasData bool
 }

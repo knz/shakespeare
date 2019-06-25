@@ -58,8 +58,8 @@ func (ap *app) plot(ctx context.Context) error {
 	// Analyze the collected data, and prepare the plot specifications.
 	for _, audienceName := range ap.cfg.audienceNames {
 		a := ap.cfg.audience[audienceName]
-		if !a.observer.hasData {
-			// No data for this audience, nothing to do.
+		if !a.observer.hasData || a.observer.disablePlot {
+			// No data for this audience, or plot disabled, nothing to do.
 			continue
 		}
 		// This audience has at least one plot. Prepare the group.

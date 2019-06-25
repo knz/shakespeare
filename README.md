@@ -52,15 +52,24 @@ activity over time.
 
 ## Command line parameters
 
-| Parameter                         | Default              | Description                                                                                          |
-|-----------------------------------|----------------------|------------------------------------------------------------------------------------------------------|
-| `-o`, `--output-dir`              | `.`                  | Directory where to generate artifacts, output data files and the plot script.                        |
-| `-S`, `--stop-at-first-violation` | false                | Stop the play as soon as an auditor detects a violation.                                             |
-| `-p`, `--print-cfg`               | false                | Print configuration after parsing and compilation.                                                   |
-| `-n`, `--dry-run`                 | false                | Stop after parsing the configuration and compiling the steps (do not actually execute the script).   |
-| `-q`, `--quiet`                   | false                | Run quietly.                                                                                         |
-| `--log-dir`                       | `logs` in output dir | If non-empty, copy the logs to that directory.                                                       |
-| `--logtostderr`                   | INFO                 | Copy every log message at or above this threshold to stderr (use NONE to disable reports to stderr). |
+| Parameter                         | Default              | Description                                                                                         |
+|-----------------------------------|----------------------|-----------------------------------------------------------------------------------------------------|
+| `-o`, `--output-dir`              | `.`                  | Directory where to generate artifacts, output data files and the plot script.                       |
+| `-S`, `--stop-at-first-violation` | false                | Stop the play as soon as an auditor detects a violation.                                            |
+| `-p`, `--print-cfg`               | false                | Print configuration after parsing and compilation.                                                  |
+| `-n`, `--dry-run`                 | false                | Stop after parsing the configuration and compiling the steps (do not actually execute the script).  |
+| `-q`, `--quiet`                   | false                | Run quietly.                                                                                        |
+| `-I`, `--search-dir`              | .                    | Directory to search for included configurations.                                                    |
+| `--ascii-only`                    | false                | Avoid printing out special unicode characters.                                                      |
+| `--log-dir`                       | `logs` in output dir | If non-empty, copy the logs to that directory.                                                      |
+| `--logtostderr`                   | NONE                 | Copy every log message at or above this threshold to stderr (choices: INFO, WARNING, ERROR, FATAL). |
+
+## Environment variables
+
+| Variable  | Default     | Description                                                                 |
+|-----------|-------------|-----------------------------------------------------------------------------|
+| `SHELL`   | `/bin/bash` | Shell to use to execute commands. A bourne-compatible shell is recommended. |
+| `GNUPLOT` | `gnuplot`   | [Gnuplot](http://gnuplot.info) command to use to generate plots.            |
 
 ## Example: traffic and red lights
 

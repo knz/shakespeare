@@ -21,7 +21,9 @@ script
   # no stanzas defined, play will terminate immediately
 end
 audience
-  condice watches alice cures
+  # signal alice.cures triggers condice
+  #
+  condice watches alice.cures
 end
 
 parse
@@ -49,7 +51,11 @@ script
   # no stanzas defined, play will terminate immediately
 end
 audience
-  condice watches every doctor cures
+  # signal alice.cures triggers condice
+  # signal bob.cures triggers condice
+  #
+  condice watches alice.cures
+  condice watches bob.cures
 end
 
 parse
@@ -78,8 +84,11 @@ script
   # no stanzas defined, play will terminate immediately
 end
 audience
-  condice watches alice cures
-  condice watches bob cures
+  # signal alice.cures triggers condice
+  # signal bob.cures triggers condice
+  #
+  condice watches alice.cures
+  condice watches bob.cures
 end
 
 parse
@@ -106,7 +115,9 @@ script
   # no stanzas defined, play will terminate immediately
 end
 audience
-  condice watches alice cures
+  # signal alice.cures triggers condice
+  #
+  condice watches alice.cures
   condice measures milliseconds
 end
 

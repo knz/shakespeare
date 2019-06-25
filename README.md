@@ -22,7 +22,7 @@ activity over time.
      - *spotlights* that shine upon the actors during a play, to extract observable data;
      - an *audience* of observers during the play;
    - optionally, to verify the behavior:
-     - *auditors* that check whether the actors perform well.
+     - some observers can also be *auditors* that check whether the actors perform well.
 
 2. `shakespeare` reads the configuration from its standard input and
    compiles the script to a *sequence of scenes* for the actors to
@@ -43,11 +43,11 @@ activity over time.
    actor as revealed by their spotlight: plottable data is gathered by
    filtering the monitoring data.
 
-5. meanwhile, each auditor scrutinizes the actors and checks that
-   their performance is acceptable: behavior signals are checked
+   observers that are also auditors scrutinize the actors and check
+   that their performance is acceptable: behavior signals are checked
    for specified acceptance criteria defined by predicates.
 
-6. at the end of the play, the audience and auditors report on their
+6. at the end of the play, the audience reports on their
    experience (plots and test results are produced).
 
 ## Command line parameters

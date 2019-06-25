@@ -23,7 +23,7 @@ the manual:
   redirections, etc.
 
 - `<expr>` denotes a [boolean or scalar
-  expression](#Expression-evaluation) (currently based off the
+  expression](#Expressions) (currently based off the
   [`govaluate` expression
   language](https://github.com/Knetic/govaluate)).
 
@@ -41,7 +41,7 @@ Additionally, `shakespeare` supports:
 
 ## Roles configuration
 
-One or more roles definitions is expected. 
+One or more roles definitions is expected.
 A role definition defines a behavior template (blue print) for zero or
 more characters in a play.
 
@@ -274,21 +274,47 @@ The audience is defined as follows:
 
 ```
 audience
+   # optional activation period: when the observer also audits
+   [ <name> audits {only while <expr> | throughout} ]
+
+   # zero or more derived scalar values
+   [ <name> computes <var> as <expr> ] ...
+
+   # zero or more aggregations
+   [ <name> collects <var> as <aggregation> <expr> ] ...
+
+   # optional audit predicate
+   [ <name> expects <modality>: <expr> ]
+
    # zero or more watch specifications
-   [ <name> watches <selector> <name> ] ...
+   [ <name> watches {<var> | <selector> <name>} ] ...
 
    # optional y-axis labels
    [ <name> measures <label> ] ...
+
+   # disable plot generation
+   [ <name> only helps ]
 end
 ```
 
 Each specification inside the `audience` section refers to an *observer* name at the beginning of the line, followed by either:
 
-- `measures` and an arbitrary string (until the end of the line),
-  which defines a label for the y-axis of the generated plot.
+- `audits` and an audit period consisting of either "`throughout`", or
+  `only when` followed by a predicate expression.
+
+- `computes` followed by a variable name, `as` and an expression.
+
+- `collects` followed by a variable name, `as`, an aggregator (see below), and an expression.
+
+- `expects` followed by a modality (see below), a colon, and an expression.
 
 - `watches` followed by an actor selector, followed by the name of a
   signal for the actor's role.
+
+- `measures` and an arbitrary string (until the end of the line),
+  which defines a label for the y-axis of the generated plot.
+
+- just the keywords `only helps`.
 
 As in [script configurations](#Script-configuration) above, an actor
 selector is either:
@@ -296,6 +322,15 @@ selector is either:
 - `<name>`: a reference to a single actor/character.
 - `every <name>`: a reference to all actors playing the given role.
 
+Aggregators are either:
+
+- `first <N>`
+- `last <N>`
+- `top <N>`
+- `bottom <N>`
+
+Modalities are either: `always`, `never`, `once`, `twice`, `thrice`,
+`not always`, `eventually`, `eventually always`, `always eventually`.
 
 ### Semantics
 
@@ -304,14 +339,68 @@ Constraints:
 - the signal name on each watch specification must be valid for that
   actor's roles (or the role of all selected actors with `every`).
 
-Behavior:
+- the signals and variables used in expressions for `expects`,
+  `collects`, `computes` and `audits` must be defined before use.
+
+Behavior for auditors:
+
+- An observer is also an auditor if it has a `computes`, `collects` or `expects` clause.
+
+- *Activation periods*:
+
+  - Auditors only work (either compute, collect or expect) during their
+    activation periods. The activation period begins when the `audits` expression
+    becomes true, and ends when it becomes false.
+
+  - During one activation period, the auditor expects the `expects`
+    predicate to evaluate to true and non-true according to the
+    modality. For example, `expects always` expects the predicate to
+    always be true. `expects once` expects the preedicate to become true
+    exactly once. etc.
+
+  - If there are multiple activation periods, the `expects` modality resets
+    at the beginning of each period.
+
+- *Variables*:
+
+  - Auditors can also compute or collect data into *variables*. Variables
+    are preserved across activation periods.
+
+  - Variables are visible to/reusable by other auditors and observers defined
+    afterwards.
+
+  - Any audience member can also observe (via `watches`) a computed
+    variable, which brings it to the observer's plot.
+
+  - The non-nil result of a `computes` expression is stored in the variable as-is.
+    In comparison, the result of a `collects` expression is aggregated
+    into an array, and the array stored in the variable.
+    nil results are ignored.
+
+  - Array variable are suitable as input for array functions, see
+    [Expressions](#Expressions) below.
+
+- *Dataflow sensitivity*: the expression for `audits`, `computes`,
+  `collects` or `expects` is only evaluated when all its
+  input dependencies hold:
+
+    - all the signals that they depend on have generated a value, and
+    - all of the variables they depend on were just assigned.
+
+  (When a `computes` or `collects` clause stores a value in a variable
+  that a later expression depends on, such that all its dependencies
+  bewcome satisfied, it can be evaluated in the same activation. This
+  behavior intends to mimic the traditional behavior of dependent
+  computations in a spreadsheet.)
+
+Behavior for data observation:
 
 - When `shakespeare` completes a play, it generates a
   [Gnuplot](http://www.gnuplot.info/) script that generates output
-  plots. The user is responsible for executing the `gnuplot` command,
-  for example `cd data ; gnuplot runme.gp`.
+  plots.
 
-- Each unique observer name defines a separate plot box in the output.
+- Each observer that does not specify `only helps` defines a separate
+  plot box in the output.
 
 - Each plot's x-axis is time.
 
@@ -327,15 +416,18 @@ Behavior:
 
 - Each plot's y-axis is labeled with the `measures` specification, if present.
 
+- Audit events (from `expects` clauses) are plotted near the top.
+
 - The moods are used to define color bands in the background of all observer plots.
 
-## Expression evaluation
+## Expressions
 
 The expression syntax is detailed in the [govaluate manual](https://github.com/Knetic/govaluate/blob/master/MANUAL.md).
 
-Summary:
+### Syntax summary
 
 - just 3 atomic types: booleans, strings and floats.
+- can use identifiers either directly when simple, or enclosed between `[...]` when containing special characters.
 - dates/timestamps in strings auto-casted to float (unix time).
 - operators:
   - scalar arithmetic `+` `-` `/` `%` `*`, also `**` (exponentiation)
@@ -344,9 +436,30 @@ Summary:
   - string concatenation `+`
   - regexp match `=~` `!=`
   - short circuit evaluation `&&` `||`
-  - ternary conditional `? :` and `??`
+  - ternary conditional `? :`
+  - nil choice `??`
   - bitwise arithmetic on the rounded value of the float: `&` `|` `^` `~` `>>` `<<`
 - non-homogeneous arrays:
-  - literal `(a, b, c, ...)`
+  - literal `(a, b, c, ...)`.
   - membership `x IN array`
 - function application `f(x, y, z...)`
+
+### Signal references
+
+An expression can refer to an actor signal with the following syntax:
+`[<actor> <signal>]`.
+
+This dependency is satisfied (and thus triggers dependent evaluations)
+every time the signal is received from that actor.
+
+### Predefined variables
+
+The predefined variables are updated (and thus triggers dependent
+evaluations) on every mood change and signal received.
+
+- `t`: current time relative to start of scenario.
+
+- `mood`: current mood. Note that it updates even when the mood has
+  not changed.
+
+- `moodt`: current time relative to the start of the current mood.

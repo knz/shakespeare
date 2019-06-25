@@ -354,7 +354,7 @@ func (ap *app) checkEventForAudience(
 	atEnd := false
 	if auditing != as.auditing {
 		if auditing {
-			ap.judge(activateCtx, I, "", "(%s: auditing)", am.name)
+			ap.judge(activateCtx, I, "", "%s starts auditing", am.name)
 			ap.startOfAuditPeriod(activateCtx, auLog, am.name, as, &am.auditor)
 		} else {
 			// We're on the ending event.
@@ -380,7 +380,7 @@ func (ap *app) checkEventForAudience(
 		if err := ap.auditCheckEnd(ctx, auLog, ev.ts, am.name, as, &am.auditor, actionCh); err != nil {
 			return err
 		}
-		ap.judge(ctx, I, "🙈", "(%s: stops auditing)", am.name)
+		ap.judge(ctx, I, "🙈", "%s stops auditing", am.name)
 		auLog.Logf(ctx, "audit stopped")
 		as.auditing = false
 	}

@@ -175,9 +175,7 @@ func (s *Stopper) Recover(ctx context.Context) {
 			s.onPanic(r)
 			return
 		}
-		// if sv := settings.TODO(); sv != nil {
-		//	log.ReportPanic(ctx, sv, r, 1)
-		//}
+		log.ReportPanic(ctx, r)
 		panic(r)
 	}
 }

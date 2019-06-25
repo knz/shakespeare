@@ -46,6 +46,18 @@ func Run() (err error) {
 		return errors.WithDetail(err, "(while initializing the logging subsystem)")
 	}
 
+	// After this point, if a panic occurs on the main thread it will be hidden
+	// when logging to file is enabled and no log messages are configured
+	// to appear on stderr.
+	// Ensure we reveal the panic on stderr too.
+	// (This is not needed for workers -- the stopper does this reporting already)
+	defer func() {
+		if r := recover(); r != nil {
+			log.ReportPanic(ctx, r)
+			panic(r)
+		}
+	}()
+
 	// Read the scenario.
 	rd, err := newReader(ctx, file, cfg.includePath)
 	if err != nil {

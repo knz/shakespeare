@@ -89,7 +89,7 @@ var audienceRe = compileRe(`^audience$`)
 var watchRe = compileRe(`^(?P<name>\S+)\s+watches\s+(?P<target>every\s+\S+|\S+)\s+(?P<signal>\S+)\s*$`)
 var watchVarRe = compileRe(`^(?P<name>\S+)\s+watches\s+(?P<varname>\S+)\s*$`)
 var measuresRe = compileRe(`^(?P<name>\S+)\s+measures\s+(?P<ylabel>.*)$`)
-var activeRe = compileRe(`^(?P<name>\S+)\s+audits\s+(?P<expr>only\s+while\s+.*|throughout)\s*$`)
+var activeRe = compileRe(`^(?P<name>\S+)\s+audits\s+(?P<expr>only\s+(?:while|when)\s+.*|throughout)\s*$`)
 var collectsRe = compileRe(`^(?P<name>\S+)\s+collects\s+(?P<var>\S+)\s+as\s+(?P<mode>\S+)\s+(?P<N>\d+)\s+(?P<expr>.*)$`)
 var computesRe = compileRe(`^(?P<name>\S+)\s+computes\s+(?P<var>\S+)\s+as\s+(?P<expr>.*)$`)
 var expectsRe = compileRe(`^(?P<name>\S+)\s+expects\s+(?P<when>[a-z]+[a-z ]*[a-z])\s*:\s*(?P<expr>.*)$`)
@@ -175,7 +175,11 @@ func (cfg *config) parseAudience(line string) error {
 		switch {
 		case strings.HasPrefix(aWhen, "only"):
 			expr = strings.TrimSpace(strings.TrimPrefix(aWhen, "only"))
-			expr = strings.TrimSpace(strings.TrimPrefix(expr, "while"))
+			if strings.HasPrefix(expr, "while") {
+				expr = strings.TrimSpace(strings.TrimPrefix(expr, "while"))
+			} else {
+				expr = strings.TrimSpace(strings.TrimPrefix(expr, "when"))
+			}
 		case strings.HasPrefix(aWhen, "throughout"):
 			expr = "true"
 		default:
@@ -559,7 +563,7 @@ func explainAlternatives(err error, name string, theMap interface{}) error {
 	}
 	keyS := make([]string, len(keys))
 	for i, k := range keys {
-		keyS[i] = k.String()
+		keyS[i] = fmt.Sprintf("%v", k)
 	}
 	return explainAlternativesList(err, name, keyS...)
 }

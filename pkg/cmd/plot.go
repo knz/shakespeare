@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"os/exec"
 	"path/filepath"
 
 	"github.com/cockroachdb/logtags"
@@ -131,153 +132,165 @@ func (ap *app) plot(ctx context.Context) error {
 
 	// We'll write to two file named "plot.gp" and "runme.gp".
 	// The user will be responsible for running gnuplot on the latter.
-	fName := filepath.Join(ap.cfg.dataDir, "plot.gp")
-	f, err := os.Create(fName)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	ap.narrate(I, "📜", "per-plot script: %s", fName)
 
-	fmt.Fprintf(f, "# auto-generated file.\n# See 'runme.gp' to actually generate plots.\n")
+	if err := func() error {
+		fName := filepath.Join(ap.cfg.dataDir, "plot.gp")
+		f, err := os.Create(fName)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		ap.narrate(I, "📜", "per-plot script: %s", fName)
 
-	// Common plot definitions.
+		fmt.Fprintf(f, "# auto-generated file.\n# See 'runme.gp' to actually generate plots.\n")
 
-	// Our text labels may contain underscores, we don't want to have
-	// them handled as subscripts (math notation).
-	fmt.Fprintf(f, "set termoption noenhanced\n")
+		// Common plot definitions.
 
-	// We want multiple plots sharing the same objects (overlays).
-	fmt.Fprintf(f, "set multiplot layout %d,1\n", len(plotGroups)+1)
+		// Our text labels may contain underscores, we don't want to have
+		// them handled as subscripts (math notation).
+		fmt.Fprintf(f, "set termoption noenhanced\n")
 
-	// Auditor faces.
-	fmt.Fprintf(f, `array faces[4]
+		// We want multiple plots sharing the same objects (overlays).
+		fmt.Fprintf(f, "set multiplot layout %d,1\n", len(plotGroups)+1)
+
+		// Auditor faces.
+		fmt.Fprintf(f, `array faces[4]
 faces[1] = "😺"
 faces[2] = "🙀"
 faces[3] = "😿"
 faces[4] = ""
 `)
 
-	// We force the x range to be the same for all the plots.
-	// If we did not do that, each plot may get a different x range
-	// (adjusted automatically based on the data collected for that plot).
-	fmt.Fprintf(f, "set xrange [%f:%f]\n", ap.minTime, ap.maxTime)
-	if ap.maxTime < 10 {
-		fmt.Fprintf(f, "set xtics out 1\n")
-		fmt.Fprintf(f, "set mxtics 2\n")
-	} else {
-		fmt.Fprintf(f, "set xtics out 5\n")
-		fmt.Fprintf(f, "set mxtics 5\n")
-	}
-	// Generate the action plot. we do this before generating the mood
-	// overlays, since these are part of the "audience" observations.
-	numActiveActors := 0
-	for _, a := range ap.cfg.actors {
-		if a.hasData {
-			numActiveActors++
-		}
-	}
-	fmt.Fprintf(f, "set title 'actions'\n")
-	fmt.Fprintf(f, "set yrange [0:%d]\n", numActiveActors+1)
-	fmt.Fprintf(f, "set ytics 1\n")
-	fmt.Fprintf(f, "set ylabel ''\n")
-	fmt.Fprintf(f, "set y2range [0:1]\n")
-	fmt.Fprintf(f, "set grid ytics\n")
-	fmt.Fprintf(f, "plot \\\n")
-	plotNum := 1
-	for _, actorName := range ap.cfg.actorNames {
-		a := ap.cfg.actors[actorName]
-		if !a.hasData {
-			continue
-		}
-		fmt.Fprintf(f, "  '%s.csv' using 1:(%d):1:($1+$2):(%d-0.25):(%d+0.25):(65536*($4 > 0 ? 255 : 0)+256*($4 > 0 ? 0 : 255)) "+
-			"with boxxyerror notitle fs solid 1.0 fc rgbcolor variable, \\\n",
-			actorName, plotNum, plotNum, plotNum)
-		fmt.Fprintf(f, "  '%s.csv' using 1:(%d+0.25):3 with labels t '%s events (at y=%d)', \\\n",
-			actorName, plotNum, actorName, plotNum)
-		fmt.Fprintf(f, "  '%s.csv' using ($1+$2):(%d-0.25):5 with labels hypertext point pt 6 ps .5 notitle",
-			actorName, plotNum)
-		if plotNum < numActiveActors {
-			fmt.Fprintf(f, ", \\")
-		}
-		fmt.Fprintln(f)
-		plotNum++
-	}
-
-	// For event plots, ensure that the event dots do not overlap.
-	// Note: this is disabled for now, because "labels hypertext" does not
-	// implement the jitter option. Instead, we use a shuffle value
-	// to move the event points randomly along the y axis.
-	//
-	// fmt.Fprintln(f, "set jitter overlap 1 spread .25 vertical")
-
-	// Generate the mood overlays.
-	for i, amb := range ap.au.moodPeriods {
-		xstart := "graph 0"
-		if !math.IsInf(amb.startTime, 0) {
-			xstart = fmt.Sprintf("first %f", amb.startTime)
-		}
-		xend := "graph 1"
-		if !math.IsInf(amb.endTime, 0) {
-			xend = fmt.Sprintf("first %f", amb.endTime)
-		}
-		fmt.Fprintf(f, "set object %d rectangle from %s, graph 0 to %s, graph 1 fs solid 0.3 fc \"%s\"\n", i+1, xstart, xend, amb.mood)
-	}
-
-	// Plot the curves.
-	for _, pg := range plotGroups {
-		fmt.Fprintf(f, "set title %q\n", pg.title)
-		if pg.numEvents > 0 {
-			fmt.Fprintf(f, "set yrange [%d:%d]\n", 0, pg.numEvents+1)
-			fmt.Fprintf(f, "set grid ytics\n")
-			fmt.Fprintf(f, "set ytics 1\n")
+		// We force the x range to be the same for all the plots.
+		// If we did not do that, each plot may get a different x range
+		// (adjusted automatically based on the data collected for that plot).
+		fmt.Fprintf(f, "set xrange [%f:%f]\n", ap.minTime, ap.maxTime)
+		if ap.maxTime < 10 {
+			fmt.Fprintf(f, "set xtics out 1\n")
+			fmt.Fprintf(f, "set mxtics 2\n")
 		} else {
-			fmt.Fprintf(f, "set yrange [*:*]\n")
-			fmt.Fprintf(f, "set grid noytics\n")
-			fmt.Fprintf(f, "set ytics auto\n")
+			fmt.Fprintf(f, "set xtics out 5\n")
+			fmt.Fprintf(f, "set mxtics 5\n")
 		}
-		fmt.Fprintf(f, "set ylabel %q\n", pg.ylabel)
-		fmt.Fprintln(f, `plot \`)
-		for i, pl := range pg.plots {
-			fmt.Fprintf(f, "   '%s' %s t %q", pl.fName, pl.opts, pl.title)
-			if i < len(pg.plots)-1 {
-				fmt.Fprint(f, `, \`)
+		// Generate the action plot. we do this before generating the mood
+		// overlays, since these are part of the "audience" observations.
+		numActiveActors := 0
+		for _, a := range ap.cfg.actors {
+			if a.hasData {
+				numActiveActors++
+			}
+		}
+		fmt.Fprintf(f, "set title 'actions'\n")
+		fmt.Fprintf(f, "set yrange [0:%d]\n", numActiveActors+1)
+		fmt.Fprintf(f, "set ytics 1\n")
+		fmt.Fprintf(f, "set ylabel ''\n")
+		fmt.Fprintf(f, "set y2range [0:1]\n")
+		fmt.Fprintf(f, "set grid ytics\n")
+		fmt.Fprintf(f, "plot \\\n")
+		plotNum := 1
+		for _, actorName := range ap.cfg.actorNames {
+			a := ap.cfg.actors[actorName]
+			if !a.hasData {
+				continue
+			}
+			fmt.Fprintf(f, "  '%s.csv' using 1:(%d):1:($1+$2):(%d-0.25):(%d+0.25):(65536*($4 > 0 ? 255 : 0)+256*($4 > 0 ? 0 : 255)) "+
+				"with boxxyerror notitle fs solid 1.0 fc rgbcolor variable, \\\n",
+				actorName, plotNum, plotNum, plotNum)
+			fmt.Fprintf(f, "  '%s.csv' using 1:(%d+0.25):3 with labels t '%s events (at y=%d)', \\\n",
+				actorName, plotNum, actorName, plotNum)
+			fmt.Fprintf(f, "  '%s.csv' using ($1+$2):(%d-0.25):5 with labels hypertext point pt 6 ps .5 notitle",
+				actorName, plotNum)
+			if plotNum < numActiveActors {
+				fmt.Fprintf(f, ", \\")
 			}
 			fmt.Fprintln(f)
+			plotNum++
 		}
-	}
 
-	// End the plot set.
-	for i := range ap.au.moodPeriods {
-		fmt.Fprintf(f, "unset object %d\n", i+1)
-	}
-	fmt.Fprintf(f, "unset multiplot\n")
+		// For event plots, ensure that the event dots do not overlap.
+		// Note: this is disabled for now, because "labels hypertext" does not
+		// implement the jitter option. Instead, we use a shuffle value
+		// to move the event points randomly along the y axis.
+		//
+		// fmt.Fprintln(f, "set jitter overlap 1 spread .25 vertical")
 
-	fName = filepath.Join(ap.cfg.dataDir, "runme.gp")
-	f2, err := os.Create(fName)
-	if err != nil {
+		// Generate the mood overlays.
+		for i, amb := range ap.au.moodPeriods {
+			xstart := "graph 0"
+			if !math.IsInf(amb.startTime, 0) {
+				xstart = fmt.Sprintf("first %f", amb.startTime)
+			}
+			xend := "graph 1"
+			if !math.IsInf(amb.endTime, 0) {
+				xend = fmt.Sprintf("first %f", amb.endTime)
+			}
+			fmt.Fprintf(f, "set object %d rectangle from %s, graph 0 to %s, graph 1 fs solid 0.3 fc \"%s\"\n", i+1, xstart, xend, amb.mood)
+		}
+
+		// Plot the curves.
+		for _, pg := range plotGroups {
+			fmt.Fprintf(f, "set title %q\n", pg.title)
+			if pg.numEvents > 0 {
+				fmt.Fprintf(f, "set yrange [%d:%d]\n", 0, pg.numEvents+1)
+				fmt.Fprintf(f, "set grid ytics\n")
+				fmt.Fprintf(f, "set ytics 1\n")
+			} else {
+				fmt.Fprintf(f, "set yrange [*:*]\n")
+				fmt.Fprintf(f, "set grid noytics\n")
+				fmt.Fprintf(f, "set ytics auto\n")
+			}
+			fmt.Fprintf(f, "set ylabel %q\n", pg.ylabel)
+			fmt.Fprintln(f, `plot \`)
+			for i, pl := range pg.plots {
+				fmt.Fprintf(f, "   '%s' %s t %q", pl.fName, pl.opts, pl.title)
+				if i < len(pg.plots)-1 {
+					fmt.Fprint(f, `, \`)
+				}
+				fmt.Fprintln(f)
+			}
+		}
+
+		// End the plot set.
+		for i := range ap.au.moodPeriods {
+			fmt.Fprintf(f, "unset object %d\n", i+1)
+		}
+		fmt.Fprintf(f, "unset multiplot\n")
+		return nil
+	}(); err != nil {
 		return err
 	}
-	defer f2.Close()
-	ap.narrate(I, "📜", "plot-all script: %s", fName)
 
-	// We'll generate PDF.
-	fmt.Fprintf(f2, "# auto-generated file.\n# Run 'gnuplot runme.gp' to actually generate plots.\n")
-	fmt.Fprintf(f2, "set term pdf color size 7,%d font \",6\"\n", 2*(len(plotGroups)+1))
-	fmt.Fprintf(f2, "set output 'plot.pdf'\n")
-	fmt.Fprintf(f2, "load 'plot.gp'\n")
-	fmt.Fprintf(f2, "set term svg mouse standalone size 600,%d dynamic font \",6\"\n", 200*(len(plotGroups)+1))
-	fmt.Fprintf(f2, "set output 'plot.svg'\n")
-	fmt.Fprintf(f2, "load 'plot.gp'\n")
+	if err := func() error {
+		fName := filepath.Join(ap.cfg.dataDir, "runme.gp")
+		f, err := os.Create(fName)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		ap.narrate(I, "📜", "plot-all script: %s", fName)
 
-	fName = filepath.Join(ap.cfg.dataDir, "plot.html")
-	f3, err := os.Create(fName)
-	if err != nil {
+		// We'll generate PDF.
+		fmt.Fprintf(f, "# auto-generated file.\n# Run 'gnuplot runme.gp' to actually generate plots.\n")
+		fmt.Fprintf(f, "set term pdf color size 7,%d font \",6\"\n", 2*(len(plotGroups)+1))
+		fmt.Fprintf(f, "set output 'plot.pdf'\n")
+		fmt.Fprintf(f, "load 'plot.gp'\n")
+		fmt.Fprintf(f, "set term svg mouse standalone size 600,%d dynamic font \",6\"\n", 200*(len(plotGroups)+1))
+		fmt.Fprintf(f, "set output 'plot.svg'\n")
+		fmt.Fprintf(f, "load 'plot.gp'\n")
+		return nil
+	}(); err != nil {
 		return err
 	}
-	defer f3.Close()
-	ap.narrate(I, "📜", "HTML include for SVG plots: %s", fName)
-	fmt.Fprint(f3, `<!DOCTYPE html>
+
+	if err := func() error {
+		fName := filepath.Join(ap.cfg.dataDir, "plot.html")
+		f, err := os.Create(fName)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		ap.narrate(I, "📄", "HTML include for SVG plots: %s", fName)
+		fmt.Fprint(f, `<!DOCTYPE html>
 <html lang="en">
   <head><meta charset="utf-8"/></head>
 	<body><div style="margin-left: auto; margin-right: auto; max-width: 1024px">
@@ -285,8 +298,25 @@ faces[4] = ""
 	</div></body>
 </html>
 `)
+		return nil
+	}(); err != nil {
+		return err
+	}
 
+	ap.maybeRunGnuplot(ctx)
 	log.Info(ctx, "done")
-
 	return nil
+}
+
+func (ap *app) maybeRunGnuplot(ctx context.Context) {
+	cmd := exec.CommandContext(ctx, ap.cfg.gnuplotPath, "runme.gp")
+	cmd.Dir = ap.cfg.dataDir
+	res, err := cmd.CombinedOutput()
+	log.Infof(ctx, "gnuplot:\n%s\n-- %v / %s", string(res), err, cmd.ProcessState)
+	if err != nil {
+		ap.narrate(W, "⚠️", "you will need to run gnuplot manually: cd %s; %s runme.gp", ap.cfg.dataDir, ap.cfg.gnuplotPath)
+	} else {
+		ap.narrate(I, "📄", "SVG plot: %s", filepath.Join(ap.cfg.dataDir, "plot.svg"))
+		ap.narrate(I, "📄", "PDF plot: %s", filepath.Join(ap.cfg.dataDir, "plot.pdf"))
+	}
 }

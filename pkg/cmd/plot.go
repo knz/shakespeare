@@ -187,25 +187,29 @@ faces[4] = ""
 		fmt.Fprintf(f, "set ylabel ''\n")
 		fmt.Fprintf(f, "set y2range [0:1]\n")
 		fmt.Fprintf(f, "set grid ytics\n")
-		fmt.Fprintf(f, "plot \\\n")
-		plotNum := 1
-		for _, actorName := range ap.cfg.actorNames {
-			a := ap.cfg.actors[actorName]
-			if !a.hasData {
-				continue
+		if numActiveActors == 0 {
+			fmt.Fprintf(f, "plot .5 t 'nothingness!'\n")
+		} else {
+			fmt.Fprintf(f, "plot \\\n")
+			plotNum := 1
+			for _, actorName := range ap.cfg.actorNames {
+				a := ap.cfg.actors[actorName]
+				if !a.hasData {
+					continue
+				}
+				fmt.Fprintf(f, "  '%s.csv' using 1:(%d):1:($1+$2):(%d-0.25):(%d+0.25):(65536*($4 > 0 ? 255 : 0)+256*($4 > 0 ? 0 : 255)) "+
+					"with boxxyerror notitle fs solid 1.0 fc rgbcolor variable, \\\n",
+					actorName, plotNum, plotNum, plotNum)
+				fmt.Fprintf(f, "  '%s.csv' using 1:(%d+0.25):3 with labels t '%s events (at y=%d)', \\\n",
+					actorName, plotNum, actorName, plotNum)
+				fmt.Fprintf(f, "  '%s.csv' using ($1+$2):(%d-0.25):5 with labels hypertext point pt 6 ps .5 notitle",
+					actorName, plotNum)
+				if plotNum < numActiveActors {
+					fmt.Fprintf(f, ", \\")
+				}
+				fmt.Fprintln(f)
+				plotNum++
 			}
-			fmt.Fprintf(f, "  '%s.csv' using 1:(%d):1:($1+$2):(%d-0.25):(%d+0.25):(65536*($4 > 0 ? 255 : 0)+256*($4 > 0 ? 0 : 255)) "+
-				"with boxxyerror notitle fs solid 1.0 fc rgbcolor variable, \\\n",
-				actorName, plotNum, plotNum, plotNum)
-			fmt.Fprintf(f, "  '%s.csv' using 1:(%d+0.25):3 with labels t '%s events (at y=%d)', \\\n",
-				actorName, plotNum, actorName, plotNum)
-			fmt.Fprintf(f, "  '%s.csv' using ($1+$2):(%d-0.25):5 with labels hypertext point pt 6 ps .5 notitle",
-				actorName, plotNum)
-			if plotNum < numActiveActors {
-				fmt.Fprintf(f, ", \\")
-			}
-			fmt.Fprintln(f)
-			plotNum++
 		}
 
 		// For event plots, ensure that the event dots do not overlap.

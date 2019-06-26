@@ -147,124 +147,153 @@ func newConfig() *config {
 }
 
 // printCfg prints the current configuration.
-func (cfg *config) printCfg(w io.Writer) {
+func (cfg *config) printCfg(w io.Writer, skipComments, annot bool) {
+	fkw, fsn, fan, frn, facn, fann, fmod := fid, fid, fid, fid, fid, fid, fid
+	if annot {
+		fkw = fw("kw")   // keyword
+		fsn = fw("sn")   // sig name
+		fan = fw("an")   // actor name
+		frn = fw("rn")   // role name
+		facn = fw("acn") // action name
+		fann = fw("ann") // audience name
+		fmod = fw("mod") // modality
+	}
 	for _, title := range cfg.titleStrings {
-		fmt.Fprintln(w, "title", title)
+		fmt.Fprintln(w, fkw("title"), title)
 	}
 	for _, author := range cfg.authors {
-		fmt.Fprintln(w, "author", author)
+		fmt.Fprintln(w, fkw("author"), author)
 	}
 	if len(cfg.roles) == 0 {
-		fmt.Fprintln(w, "# no roles defined")
+		if !skipComments {
+			fmt.Fprintln(w, "# no roles defined")
+		}
 	} else {
 		for _, rn := range cfg.roleNames {
 			r := cfg.roles[rn]
-			fmt.Fprintf(w, "role %s\n", r.name)
+			fmt.Fprintf(w, "%s %s\n", fkw("role"), frn(r.name))
 			if r.cleanupCmd != "" {
-				fmt.Fprintf(w, "  cleanup %s\n", r.cleanupCmd)
+				fmt.Fprintf(w, "  %s %s\n", fkw("cleanup"), r.cleanupCmd)
 			}
 			if r.spotlightCmd != "" {
-				fmt.Fprintf(w, "  spotlight %s\n", r.spotlightCmd)
+				fmt.Fprintf(w, "  %s %s\n", fkw("spotlight"), r.spotlightCmd)
 			}
 			for _, rp := range r.sigParsers {
-				fmt.Fprintf(w, "  signal %s\n", rp.String())
+				fmt.Fprintf(w, "  %s %s\n", fkw("signal"), rp.fmt(fsn, fkw))
 			}
 			for _, actName := range r.actionNames {
 				a := r.actionCmds[actName]
-				fmt.Fprintf(w, "  :%s %s\n", actName, a)
+				fmt.Fprintf(w, "  :%s %s\n", facn(actName), a)
 			}
-			fmt.Fprintln(w, "end")
+			fmt.Fprintln(w, fkw("end"))
 			// fmt.Fprintln(w)
 		}
 	}
 	if len(cfg.actors) == 0 {
-		fmt.Fprintln(w, "# no cast defined")
+		if !skipComments {
+			fmt.Fprintln(w, "# no cast defined")
+		}
 	} else {
-		fmt.Fprintln(w, "cast")
+		fmt.Fprintln(w, fkw("cast"))
 		for _, an := range cfg.actorNames {
 			a := cfg.actors[an]
-			fmt.Fprintf(w, "  %s plays %s", a.name, a.role.name)
+			fmt.Fprintf(w, "  %s %s %s", fan(a.name), fkw("plays"), frn(a.role.name))
 			if a.extraEnv != "" {
 				fmt.Fprintf(w, "(%s)", a.extraEnv)
 			}
 			fmt.Fprintln(w)
-			fmt.Fprintf(w, "  # %s plays from working directory %s\n", a.name, a.workDir)
+			if !skipComments {
+				fmt.Fprintf(w, "  # %s plays from working directory %s\n", fan(a.name), a.workDir)
+			}
 			for _, sig := range a.sinkNames {
 				sink := a.sinks[sig]
 				plural := "s"
 				if strings.HasSuffix(sig, "s") {
 					plural = ""
 				}
-				if len(sink.observers) > 0 {
-					fmt.Fprintf(w, "  # %s %s%s are watched by audience %s\n", a.name, sig, plural, strings.Join(sink.observers, ", "))
-				}
-				if len(sink.auditors) > 0 {
-					fmt.Fprintf(w, "  # %s %s%s are checked by auditors %s\n", a.name, sig, plural, strings.Join(sink.auditors, ", "))
+				if !skipComments {
+					if len(sink.observers) > 0 {
+						fmt.Fprintf(w, "  # %s %s%s are watched by audience %s\n", fan(a.name), fsn(sig), plural, strings.Join(sink.observers, ", "))
+					}
 				}
 			}
 		}
-		fmt.Fprintln(w, "end")
+		fmt.Fprintln(w, fkw("end"))
 		// fmt.Fprintln(w)
 	}
 
-	fmt.Fprintln(w, "script")
-	fmt.Fprintf(w, "  tempo %s\n", cfg.tempo)
+	fmt.Fprintln(w, fkw("script"))
+	fmt.Fprintf(w, "  %s %s\n", fkw("tempo"), cfg.tempo)
 	for _, aan := range cfg.actionChars {
 		aa := cfg.actions[aan]
 		for _, a := range aa {
-			fmt.Fprintf(w, "  action %s entails %s\n", a.name, a.String())
+			fmt.Fprintf(w, "  %s %s %s %s\n", fkw("action"), a.name, fkw("entails"), a.fmt(fkw, facn))
 		}
 	}
 	if len(cfg.stanzas) == 0 {
-		fmt.Fprintln(w, "  # no stanzas defined, play will terminate immediately")
+		if !skipComments {
+			fmt.Fprintln(w, "  # no stanzas defined, play will terminate immediately")
+		}
 	} else {
 		for _, stanza := range cfg.stanzas {
-			fmt.Fprintf(w, "  prompt %-10s %s\n", stanza.actor.name, stanza.script)
+			fmt.Fprintf(w, "  %s %-10s %s\n", fkw("prompt"), fan(stanza.actor.name), stanza.script)
 		}
 	}
-	fmt.Fprintln(w, "end")
+	fmt.Fprintln(w, fkw("end"))
 	// fmt.Fprintln(w)
 
 	if len(cfg.audience) == 0 {
-		fmt.Fprintln(w, "# no audience defined")
+		if !skipComments {
+			fmt.Fprintln(w, "# no audience defined")
+		}
 	} else {
-		fmt.Fprintln(w, "audience")
-		for _, vn := range cfg.varNames {
-			v := cfg.vars[vn]
-			qual := ""
-			if v.isArray {
-				qual = "(collection)"
-			}
-			for _, watcherName := range v.watcherNames {
-				fmt.Fprintf(w, "  # %s sensitive to %s%s\n", watcherName, vn, qual)
+		fmt.Fprintln(w, fkw("audience"))
+		if !skipComments {
+			for _, vn := range cfg.varNames {
+				v := cfg.vars[vn]
+				qual := ""
+				if v.isArray {
+					qual = "(collection)"
+				}
+				for _, watcherName := range v.watcherNames {
+					fmt.Fprintf(w, "  # %s sensitive to %s%s\n", fann(watcherName), vn.fmt(fan, fsn), qual)
+				}
 			}
 		}
 		for _, an := range cfg.audienceNames {
 			a := cfg.audience[an]
 			if a.auditor.activeCond.src != "" {
 				if a.auditor.activeCond.src == "true" {
-					fmt.Fprintf(w, "  %s audits throughout\n", a.name)
+					fmt.Fprintf(w, "  %s %s\n", fann(a.name), fkw("audits throughout"))
 				} else {
-					fmt.Fprintf(w, "  %s audits only while %s\n", a.name, a.auditor.activeCond.src)
+					fmt.Fprintf(w, "  %s %s %s\n", fann(a.name), fkw("audits only while"), a.auditor.activeCond.src)
 				}
 			}
 			for _, as := range a.auditor.assignments {
-				fmt.Fprintf(w, "  %s %s\n", a.name, as.String())
+				fmt.Fprintf(w, "  %s %s\n", fann(a.name), as.fmt(fkw, fsn, fmod))
 			}
 			if a.auditor.expectFsm != nil {
-				fmt.Fprintf(w, "  %s expects %s: %s\n", a.name, a.auditor.expectFsm.name, a.auditor.expectExpr.src)
+				fmt.Fprintf(w, "  %s %s %s: %s\n", fann(a.name), fkw("expects"), fmod(a.auditor.expectFsm.name), a.auditor.expectExpr.src)
 			}
 			for _, varName := range a.observer.obsVarNames {
-				fmt.Fprintf(w, "  %s watches %s\n", a.name, varName)
+				fmt.Fprintf(w, "  %s %s %s\n", fann(a.name), fkw("watches"), varName.fmt(fan, fsn))
 			}
 			if a.observer.ylabel != "" {
-				fmt.Fprintf(w, "  %s measures %s\n", a.name, a.observer.ylabel)
+				fmt.Fprintf(w, "  %s %s %s\n", fann(a.name), fkw("measures"), a.observer.ylabel)
 			}
 			if a.observer.disablePlot {
-				fmt.Fprintf(w, "  %s only helps\n", a.name)
+				fmt.Fprintf(w, "  %s %s\n", fann(a.name), fkw("only helps"))
 			}
 		}
-		fmt.Fprintln(w, "end")
+		fmt.Fprintln(w, fkw("end"))
+	}
+}
+
+func fid(n string) string { return n }
+
+func fw(cat string) func(string) string {
+	return func(n string) string {
+		return fmt.Sprintf("<span class=%s>%s</span>", cat, n)
 	}
 }
 
@@ -320,14 +349,14 @@ const (
 	parseDelta
 )
 
-func (p *resultParser) String() string {
+func (p *resultParser) fmt(fsn, fkw func(string) string) string {
 	switch p.typ {
 	case parseEvent:
-		return fmt.Sprintf("%s event at %s", p.name, p.re.String())
+		return fmt.Sprintf("%s %s %s", fsn(p.name), fkw("event at"), p.re.String())
 	case parseScalar:
-		return fmt.Sprintf("%s scalar at %s", p.name, p.re.String())
+		return fmt.Sprintf("%s %s %s", fsn(p.name), fkw("scalar at"), p.re.String())
 	case parseDelta:
-		return fmt.Sprintf("%s delta at %s", p.name, p.re.String())
+		return fmt.Sprintf("%s %s %s", fsn(p.name), fkw("delta at"), p.re.String())
 	}
 	return "<???parser>"
 }
@@ -354,8 +383,6 @@ type actor struct {
 type sink struct {
 	// observers refers to names of audience instances.
 	observers []string
-	// auditors refers to names of auditor instances.
-	auditors []string
 	// lastVal is the last value received, for deltas.
 	lastVal float64
 }
@@ -369,18 +396,18 @@ type action struct {
 	failOk bool
 }
 
-func (a *action) String() string {
+func (a *action) fmt(fkw, facn func(string) string) string {
 	switch a.typ {
 	case nopAction:
-		return "nop"
+		return fkw("nop")
 	case ambianceAction:
-		return fmt.Sprintf("mood %s", a.act)
+		return fmt.Sprintf("%s %s", fkw("mood"), a.act)
 	case doAction:
 		qual := ""
 		if a.failOk {
 			qual = "?"
 		}
-		return fmt.Sprintf(":%s%s", a.act, qual)
+		return fmt.Sprintf(":%s%s", facn(a.act), qual)
 	}
 	return "<action???>"
 }
@@ -475,6 +502,26 @@ func (s *assignment) String() string {
 	return buf.String()
 }
 
+func (s *assignment) fmt(fkw, fsn, fmod func(string) string) string {
+	var buf bytes.Buffer
+	var mode string
+	switch s.assignMode {
+	case assignSingle:
+		fmt.Fprintf(&buf, "%s %s %s %s", fkw("computes"), fsn(s.targetVar), fkw("as"), s.expr.src)
+		return buf.String()
+	case assignFirstN:
+		mode = "first"
+	case assignLastN:
+		mode = "last"
+	case assignTopN:
+		mode = "top"
+	case assignBottomN:
+		mode = "bottom"
+	}
+	fmt.Fprintf(&buf, "%s %s %s %s %d %s", fkw("collects"), fsn(s.targetVar), fkw("as"), fmod(mode), s.N, s.expr.src)
+	return buf.String()
+}
+
 type assignMode int
 
 const (
@@ -495,6 +542,13 @@ func (e exprVar) String() string {
 		return e.sigName
 	}
 	return e.actorName + " " + e.sigName
+}
+
+func (e exprVar) fmt(fan, fsn func(string) string) string {
+	if e.actorName == "" {
+		return fsn(e.sigName)
+	}
+	return fan(e.actorName) + " " + fsn(e.sigName)
 }
 
 type auditorState struct {

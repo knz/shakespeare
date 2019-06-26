@@ -59,7 +59,13 @@ func (cfg *config) compile() error {
 }
 
 // printSteps prints the generated steps.
-func (cfg *config) printSteps(w io.Writer) {
+func (cfg *config) printSteps(w io.Writer, annot bool) {
+	fkw, fan, facn := fid, fid, fid
+	if annot {
+		fkw = fw("kw")   // keyword
+		fan = fw("an")   // actor name
+		facn = fw("acn") // action name
+	}
 	fmt.Fprintln(w, "# play")
 	for i, s := range cfg.play {
 		if s.waitUntil != 0 && (i == len(cfg.play)-1 || len(s.concurrentLines) > 0) {
@@ -78,9 +84,9 @@ func (cfg *config) printSteps(w io.Writer) {
 					if step.failOk {
 						actChar = '?'
 					}
-					fmt.Fprintf(w, "#  %s: %s%c\n", line.actor.name, step.action, actChar)
+					fmt.Fprintf(w, "#  %s: %s%c\n", fan(line.actor.name), facn(step.action), actChar)
 				case stepAmbiance:
-					fmt.Fprintf(w, "#  (mood: %s)\n", step.action)
+					fmt.Fprintf(w, "#  (%s: %s)\n", fkw("mood"), step.action)
 				}
 			}
 		}

@@ -15,7 +15,7 @@ import (
 	"github.com/knz/shakespeare/pkg/crdb/log"
 )
 
-func (ap *app) plot(ctx context.Context) error {
+func (ap *app) plot(ctx context.Context, foundFailure bool) error {
 	ctx = logtags.AddTag(ctx, "plotter", nil)
 	log.Info(ctx, "generating scripts")
 
@@ -307,7 +307,20 @@ faces[4] = ""
 		if len(ap.cfg.authors) > 0 {
 			fmt.Fprintf(f, "<meta name='author' content='%s' />\n", html.EscapeString(joinAnd(ap.cfg.authors)))
 		}
-		fmt.Fprintln(f, `<style type='text/css'>h1,h3,p{text-align: center;}</style></head><body>`)
+		fmt.Fprintln(f, `<link href="https://fonts.googleapis.com/css?family=Nova+Mono&display=swap" rel="stylesheet">`)
+		fmt.Fprintln(f, `<link href="https://fonts.googleapis.com/css?family=Pinyon+Script&display=swap" rel="stylesheet">`)
+		fmt.Fprintln(f, `<style type='text/css'>
+h1,h3,p{text-align: center;}
+p{font-family:'Pinyon Script',cursive;}
+pre{font-family: 'Nova Mono', monospace;}
+.kw{font-weight:bold;}
+.rn{color:blue;font-style:italic;}
+.acn{color:blue;font-style:italic;font-weight:bold;}
+.sn{color:green;font-style:italic;}
+.an{color:purple;font-style:italic;}
+.ann{color:orange;font-style:italic;}
+.mod{font-style:italic;}
+</style></head><body>`)
 		if len(ap.cfg.titleStrings) > 0 {
 			fmt.Fprintf(f, "<h1>A tale of %s</h1>\n", html.EscapeString(joinAnd(ap.cfg.titleStrings)))
 		}
@@ -315,7 +328,17 @@ faces[4] = ""
 			fmt.Fprintf(f, "<h3>Written by %s</h3>\n", html.EscapeString(joinAnd(ap.cfg.authors)))
 		}
 		fmt.Fprintf(f, "<p>%s<p>\n", formatDatePretty(ap.au.epoch))
+		if foundFailure {
+			fmt.Fprintln(f, "<p>Avert your eyes! For this tale, alas, does not end well.<p>")
+		} else {
+			fmt.Fprintln(f, "<p>Rejoice! This tale ends well.<p>")
+		}
 		fmt.Fprintln(f, `<div style="margin-left: auto; margin-right: auto; max-width: 1024px"><embed id="E" src="plot.svg"/></div>`)
+		fmt.Fprintln(f, "<p>For the curious eye, the full book for this play:</p>")
+		fmt.Fprintln(f, "<div style='margin-left: auto; margin-right: auto; max-width: 800px'><pre style='font-size: small'>")
+		ap.cfg.printCfg(f, true /*skipComs*/, true /*annot*/)
+		ap.cfg.printSteps(f, true /*annot*/)
+		fmt.Fprintln(f, "</pre></div>")
 		fmt.Fprintln(f, "<p><em><small>a report produced by <a href='https://github.com/knz/shakespeare'>Shakespeare</a></small></em></p>")
 		fmt.Fprintln(f, `</body></html>`)
 		return nil

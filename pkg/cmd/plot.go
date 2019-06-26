@@ -310,9 +310,9 @@ faces[4] = ""
 		fmt.Fprintln(f, `<link href="https://fonts.googleapis.com/css?family=Nova+Mono&display=swap" rel="stylesheet">`)
 		fmt.Fprintln(f, `<link href="https://fonts.googleapis.com/css?family=Pinyon+Script&display=swap" rel="stylesheet">`)
 		fmt.Fprintln(f, `<style type='text/css'>
-h1,h3,p{text-align: center;}
-p{font-family:'Pinyon Script',cursive;}
-pre{font-family: 'Nova Mono', monospace;}
+h1,h3,p,ul{text-align: center;}
+p,li{font-family:'Pinyon Script',cursive;}
+pre,code{font-family: 'Nova Mono', monospace;}
 .kw{font-weight:bold;}
 .rn{color:blue;font-style:italic;}
 .acn{color:blue;font-style:italic;font-weight:bold;}
@@ -334,6 +334,18 @@ pre{font-family: 'Nova Mono', monospace;}
 			fmt.Fprintln(f, "<p>Rejoice! This tale ends well.<p>")
 		}
 		fmt.Fprintln(f, `<div style="margin-left: auto; margin-right: auto; max-width: 1024px"><embed id="E" src="plot.svg"/></div>`)
+		if len(ap.cfg.seeAlso) > 0 {
+			fmt.Fprintln(f, "<p>Attention! You may want to know:</p><ul>")
+			for _, seeAlso := range ap.cfg.seeAlso {
+				h := html.EscapeString(seeAlso)
+				if strings.Contains(seeAlso, "://") {
+					fmt.Fprintf(f, `<li><a href='%s'><small><code>%s</code></small></a></li>`, h, h)
+				} else {
+					fmt.Fprintf(f, `<li>%s</li>`, h)
+				}
+			}
+			fmt.Fprintln(f, "</ul>")
+		}
 		fmt.Fprintln(f, "<p>For the curious eye, the full book for this play:</p>")
 		fmt.Fprintln(f, "<div style='margin-left: auto; margin-right: auto; max-width: 800px'><pre style='font-size: small'>")
 		ap.cfg.printCfg(f, true /*skipComs*/, true /*annot*/)

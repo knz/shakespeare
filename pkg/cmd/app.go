@@ -167,6 +167,9 @@ func (ap *app) intro() {
 	if len(ap.cfg.authors) > 0 {
 		ap.narrate(I, "🧙", "brought to you by %s", joinAnd(ap.cfg.authors))
 	}
+	for _, seeAlso := range ap.cfg.seeAlso {
+		ap.narrate(I, "🛎️", "attention! %s", seeAlso)
+	}
 	if len(ap.cfg.actorNames) > 0 {
 		playedRoles := make(map[string]struct{})
 		for _, a := range ap.cfg.actors {

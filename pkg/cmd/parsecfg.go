@@ -37,6 +37,8 @@ func (cfg *config) parseCfg(ctx context.Context, rd *reader) error {
 
 		if strings.HasPrefix(line, "title ") {
 			cfg.titleStrings = append(cfg.titleStrings, strings.TrimSpace(strings.TrimPrefix(line, "title ")))
+		} else if strings.HasPrefix(line, "attention ") {
+			cfg.seeAlso = append(cfg.seeAlso, strings.TrimSpace(strings.TrimPrefix(line, "attention ")))
 		} else if strings.HasPrefix(line, "author ") {
 			cfg.authors = append(cfg.authors, strings.TrimSpace(strings.TrimPrefix(line, "author ")))
 		} else if roleRe.MatchString(line) {

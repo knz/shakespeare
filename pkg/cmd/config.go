@@ -48,6 +48,9 @@ type config struct {
 	// authors is the list of author strings encountered in the configuration
 	authors []string
 
+	// seeAlso is the list of "see also" strings encountered in the configuration
+	seeAlso []string
+
 	// roles is the set of roles defined by the configuration.
 	// This is populated during parsing.
 	roles     map[string]*role
@@ -163,6 +166,9 @@ func (cfg *config) printCfg(w io.Writer, skipComments, annot bool) {
 	}
 	for _, author := range cfg.authors {
 		fmt.Fprintln(w, fkw("author"), author)
+	}
+	for _, seeAlso := range cfg.seeAlso {
+		fmt.Fprintln(w, fkw("attention"), seeAlso)
 	}
 	if len(cfg.roles) == 0 {
 		if !skipComments {

@@ -90,8 +90,12 @@ Here are the possible top level elements of a configuration:
   `audience...end` sections. This is useful to e.g. add concerns for
   an auditor throughout separate included files.
 - `include <file>`: include the named file at this point.
-- `title ...`: a title string. There may be multiple title strings throughout the configuration.
-- `author ...`: an author string. There may be multiple author strings throughout the configuration.
+- `title ...`: a title string.
+- `author ...`: an author string.
+- `attention ...`: a "see also" annotation.
+
+Tip: there may be multiple author, title and "see also" strings throughout
+the configuration. They are combined in the results.
 
 Tip: use `shakespeare -n -p` to print out the final configuration
 after all directives have been processed.

@@ -35,7 +35,11 @@ func (cfg *config) parseCfg(ctx context.Context, rd *reader) error {
 			continue
 		}
 
-		if roleRe.MatchString(line) {
+		if strings.HasPrefix(line, "title ") {
+			cfg.titleStrings = append(cfg.titleStrings, strings.TrimSpace(strings.TrimPrefix(line, "title ")))
+		} else if strings.HasPrefix(line, "author ") {
+			cfg.authors = append(cfg.authors, strings.TrimSpace(strings.TrimPrefix(line, "author ")))
+		} else if roleRe.MatchString(line) {
 			// The "role" syntax is special because the role name
 			// is listed in the heading line.
 			roleName := roleRe.ReplaceAllString(line, "${rolename}")

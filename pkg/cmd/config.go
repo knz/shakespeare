@@ -41,6 +41,13 @@ type config struct {
 	// Whether to displays emoji.
 	asciiOnly bool
 
+	// titleStrings is the list of title strings encountered
+	// in the configuration.
+	titleStrings []string
+
+	// authors is the list of author strings encountered in the configuration
+	authors []string
+
 	// roles is the set of roles defined by the configuration.
 	// This is populated during parsing.
 	roles     map[string]*role
@@ -141,6 +148,12 @@ func newConfig() *config {
 
 // printCfg prints the current configuration.
 func (cfg *config) printCfg(w io.Writer) {
+	for _, title := range cfg.titleStrings {
+		fmt.Fprintln(w, "title", title)
+	}
+	for _, author := range cfg.authors {
+		fmt.Fprintln(w, "author", author)
+	}
 	if len(cfg.roles) == 0 {
 		fmt.Fprintln(w, "# no roles defined")
 	} else {

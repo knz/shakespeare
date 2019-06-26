@@ -2,6 +2,7 @@
 
 - Configuration:
   - [Common syntax elements](#Common-syntax-elements)
+  - [Overall structure of a configuration](#Overall-structure-of-a-configuration)
   - [Roles](#Roles-configuration)
   - [Cast](#Cast-configuration)
   - [Script](#Script-configuration)
@@ -39,9 +40,64 @@ Additionally, `shakespeare` supports:
   by arbitrary characters (possibly spanning multiple lines with
   `\`). These are ignored.
 
+## Overall structure of a configuration
+
+The minimum valid configuration is an empty file. However an empty
+file also specifies an empty script, and thus instructs `shakespeare`
+to terminate immediately.
+
+For `shakespeare` to actually "do something", there must be a script
+with at least some actions. The script must involves actors, so at
+least one actor must be defined. Each actor plays a role, so at least
+one role must be defined.
+
+The definitions for roles, actors (the cast), script and audience can
+be interleaved, although something can only be used after it has been
+defined. For example, the following configuration is valid:
+
+```
+role doctor
+end
+cast
+  alice plays doctor
+end
+
+role patient
+end
+cast
+  david plays patient
+end
+```
+
+Whereas this is invalid:
+
+```
+cast
+  # this fails with "role doctor is not defined"
+  alice plays doctor
+end
+role doctor
+end
+```
+
+Here are the possible top level elements of a configuration:
+
+- `role ... end`: a definition for one role.
+- `cast ... end`: some definitions for the cast.
+- `script ... end`: some definitions for the script.
+- `audience ... end`: some definitions for the audience. Note that the
+  definition lines for one audience member can span multiple
+  `audience...end` sections. This is useful to e.g. add concerns for
+  an auditor throughout separate included files.
+- `include <file>`: include the named file at this point.
+- `title ...`: a title string. There may be multiple title strings throughout the configuration.
+- `author ...`: an author string. There may be multiple author strings throughout the configuration.
+
+Tip: use `shakespeare -n -p` to print out the final configuration
+after all directives have been processed.
+
 ## Roles configuration
 
-One or more roles definitions is expected.
 A role definition defines a behavior template (blue print) for zero or
 more characters in a play.
 

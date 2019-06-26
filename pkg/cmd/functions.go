@@ -8,6 +8,25 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+func scalarFunction(name string, fn func(float64) (float64, error)) govaluate.ExpressionFunction {
+	return func(args ...interface{}) (interface{}, error) {
+		if len(args) == 0 {
+			return nil, nil
+		}
+		if len(args) != 1 {
+			return nil, errors.Newf("%s: expected 1 argument, got %d", name, len(args))
+		}
+		if args[0] == nil {
+			return nil, nil
+		}
+		x, ok := args[0].(float64)
+		if !ok {
+			return nil, errors.Newf("%s: expected scalar, got: %T", name, args[0])
+		}
+		return fn(x)
+	}
+}
+
 var evalFunctions = map[string]govaluate.ExpressionFunction{
 	// Normalized difference of two scalars.
 	// ndiff(x, y) = N  means "the value x differs from y by +/- N%"
@@ -31,19 +50,22 @@ var evalFunctions = map[string]govaluate.ExpressionFunction{
 	},
 
 	// Absolute value.
-	"abs": func(args ...interface{}) (interface{}, error) {
-		if len(args) != 1 {
-			return nil, errors.Newf("abs: expected 1 argument, got %d", len(args))
-		}
-		if args[0] == nil {
-			return nil, nil
-		}
-		x, ok := args[0].(float64)
-		if !ok {
-			return nil, errors.Newf("abs: expected scalar, got: %T", args[0])
-		}
-		return math.Abs(x), nil
-	},
+	"abs": scalarFunction("abs", func(x float64) (float64, error) { return math.Abs(x), nil }),
+
+	// Ceiling.
+	"ceil": scalarFunction("ceil", func(x float64) (float64, error) { return math.Ceil(x), nil }),
+
+	// Floor.
+	"floor": scalarFunction("floor", func(x float64) (float64, error) { return math.Floor(x), nil }),
+
+	// Round.
+	"round": scalarFunction("round", func(x float64) (float64, error) { return math.Round(x), nil }),
+
+	// Natural logarithm.
+	"log": scalarFunction("log", func(x float64) (float64, error) { return math.Log(x), nil }),
+
+	// Square root.
+	"sqrt": scalarFunction("sqrt", func(x float64) (float64, error) { return math.Sqrt(x), nil }),
 
 	// Count of array.
 	"count": func(args ...interface{}) (interface{}, error) {
@@ -98,6 +120,70 @@ var evalFunctions = map[string]govaluate.ExpressionFunction{
 			return nil, nil
 		}
 		return sum, nil
+	},
+
+	// Minimum of array. nil if no element. Only works with scalars/bools.
+	"min": func(args ...interface{}) (interface{}, error) {
+		min := math.Inf(1)
+		count := 0
+		for _, v := range args {
+			if v == nil {
+				continue
+			}
+			switch x := v.(type) {
+			case float64:
+				if x < min {
+					min = x
+				}
+			case bool:
+				val := 0.0
+				if x {
+					val = 1.0
+				}
+				if val < min {
+					min = val
+				}
+			default:
+				return nil, errors.Newf("min: unknown value type: %T", v)
+			}
+			count++
+		}
+		if count == 0 {
+			return nil, nil
+		}
+		return min, nil
+	},
+
+	// Maximum of array. nil if no element. Only works with scalars/bools.
+	"max": func(args ...interface{}) (interface{}, error) {
+		max := math.Inf(-1)
+		count := 0
+		for _, v := range args {
+			if v == nil {
+				continue
+			}
+			switch x := v.(type) {
+			case float64:
+				if x > max {
+					max = x
+				}
+			case bool:
+				val := 0.0
+				if x {
+					val = 1.0
+				}
+				if val > max {
+					max = val
+				}
+			default:
+				return nil, errors.Newf("max: unknown value type: %T", v)
+			}
+			count++
+		}
+		if count == 0 {
+			return nil, nil
+		}
+		return max, nil
 	},
 
 	// Average of array. nil if no element.

@@ -471,6 +471,16 @@ evaluations) on every mood change and signal received.
 
 - `abs(x)`: absolute value of `x`
 
+- `floor(x)`: floor of `x`
+
+- `ceil(x)`: ceiling of `x`
+
+- `round(x)`: nearest integer to `x`, rounding away from zero
+
+- `log(x)`: natural logarithm of `x`. Produces NaN for zero or negative arguments.
+
+- `sqrt(x)`: square root of `x`. Produces NaN for negative arguments.
+
 - `count(ar)`: count of values in array
 
 - `first(ar)`: first value in array, nil if empty
@@ -484,3 +494,5 @@ evaluations) on every mood change and signal received.
 - `avg(ar)`: average of values in array, nil if empty
 
 - `med(ar)`: median of values in array, nil if empty
+
+- `min(ar)`, `max(ar)`: minimum and maximum values in array, nil if empty.

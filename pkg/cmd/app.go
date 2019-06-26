@@ -161,14 +161,31 @@ func (ap *app) judge(ctx context.Context, u urgency, sym, format string, args ..
 }
 
 func (ap *app) intro() {
+	if len(ap.cfg.titleStrings) > 0 {
+		ap.narrate(I, "❦", "hear, hear, a tale of %s", joinAnd(ap.cfg.titleStrings))
+	}
+	if len(ap.cfg.authors) > 0 {
+		ap.narrate(I, "🧙", "brought to you by %s", joinAnd(ap.cfg.authors))
+	}
 	playedRoles := make(map[string]struct{})
 	for _, a := range ap.cfg.actors {
 		playedRoles[a.role.name] = struct{}{}
 	}
-	ap.narrate(I, "👏", "welcome a cast of %d actors, playing %d roles",
+	ap.narrate(I, "👏", "please welcome a cast of %d actors, playing %d roles",
 		len(ap.cfg.actors), len(playedRoles))
 	ap.narrate(I, "🎭", "dramatis personæ: %s", strings.Join(ap.cfg.actorNames, ", "))
 	ap.narrate(I, "🎶", "the play is starting; expected duration: %s", ap.cfg.tempo*time.Duration(len(ap.cfg.play)))
 }
 
 var isTerminal = func() bool { return isatty.IsTerminal(os.Stdout.Fd()) }()
+
+func joinAnd(s []string) string {
+	switch len(s) {
+	case 0:
+		return ""
+	case 1:
+		return s[0]
+	default:
+		return strings.Join(s[:len(s)-1], ", ") + " and " + s[len(s)-1]
+	}
+}

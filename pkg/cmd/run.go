@@ -72,7 +72,7 @@ func Run() (err error) {
 	}
 
 	if cfg.doPrint {
-		cfg.printCfg(os.Stdout)
+		cfg.printCfg(os.Stdout, false /*skipComs*/, false /*annot*/)
 		fmt.Println()
 	}
 
@@ -83,7 +83,7 @@ func Run() (err error) {
 	}
 
 	if cfg.doPrint {
-		cfg.printSteps(os.Stdout)
+		cfg.printSteps(os.Stdout, false /*annot*/)
 	}
 
 	if cfg.parseOnly {
@@ -124,7 +124,7 @@ func Run() (err error) {
 	}
 
 	// Generate the plots.
-	plotErr := ap.plot(ctx)
+	plotErr := ap.plot(ctx, err != nil)
 	if plotErr != nil {
 		log.Errorf(ctx, "plot error: %+v", plotErr)
 		plotErr = errors.WithDetail(plotErr, "(while plotting the data)")

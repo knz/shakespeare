@@ -167,13 +167,17 @@ func (ap *app) intro() {
 	if len(ap.cfg.authors) > 0 {
 		ap.narrate(I, "🧙", "brought to you by %s", joinAnd(ap.cfg.authors))
 	}
-	playedRoles := make(map[string]struct{})
-	for _, a := range ap.cfg.actors {
-		playedRoles[a.role.name] = struct{}{}
+	if len(ap.cfg.actorNames) > 0 {
+		playedRoles := make(map[string]struct{})
+		for _, a := range ap.cfg.actors {
+			playedRoles[a.role.name] = struct{}{}
+		}
+		ap.narrate(I, "👏", "please welcome a cast of %d actors, playing %d roles",
+			len(ap.cfg.actors), len(playedRoles))
 	}
-	ap.narrate(I, "👏", "please welcome a cast of %d actors, playing %d roles",
-		len(ap.cfg.actors), len(playedRoles))
-	ap.narrate(I, "🎭", "dramatis personæ: %s", strings.Join(ap.cfg.actorNames, ", "))
+	if len(ap.cfg.actorNames) > 0 {
+		ap.narrate(I, "🎭", "dramatis personæ: %s", strings.Join(ap.cfg.actorNames, ", "))
+	}
 	ap.narrate(I, "🎶", "the play is starting; expected duration: %s", ap.cfg.tempo*time.Duration(len(ap.cfg.play)))
 }
 

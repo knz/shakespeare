@@ -5,6 +5,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"html"
 	"io"
 	"os"
 	"path/filepath"
@@ -151,7 +152,7 @@ func newConfig() *config {
 
 // printCfg prints the current configuration.
 func (cfg *config) printCfg(w io.Writer, skipComments, annot bool) {
-	fkw, fsn, fan, frn, facn, fann, fmod := fid, fid, fid, fid, fid, fid, fid
+	fkw, fsn, fan, frn, facn, fann, fmod, fre, fsh := fid, fid, fid, fid, fid, fid, fid, fid, fid
 	if annot {
 		fkw = fw("kw")   // keyword
 		fsn = fw("sn")   // sig name
@@ -160,6 +161,8 @@ func (cfg *config) printCfg(w io.Writer, skipComments, annot bool) {
 		facn = fw("acn") // action name
 		fann = fw("ann") // audience name
 		fmod = fw("mod") // modality
+		fre = fw("re")   // regexp
+		fsh = fw("sh")   // shell script
 	}
 	for _, title := range cfg.titleStrings {
 		fmt.Fprintln(w, fkw("title"), title)
@@ -179,17 +182,17 @@ func (cfg *config) printCfg(w io.Writer, skipComments, annot bool) {
 			r := cfg.roles[rn]
 			fmt.Fprintf(w, "%s %s\n", fkw("role"), frn(r.name))
 			if r.cleanupCmd != "" {
-				fmt.Fprintf(w, "  %s %s\n", fkw("cleanup"), r.cleanupCmd)
+				fmt.Fprintf(w, "  %s %s\n", fkw("cleanup"), fsh(string(r.cleanupCmd)))
 			}
 			if r.spotlightCmd != "" {
-				fmt.Fprintf(w, "  %s %s\n", fkw("spotlight"), r.spotlightCmd)
+				fmt.Fprintf(w, "  %s %s\n", fkw("spotlight"), fsh(string(r.spotlightCmd)))
 			}
 			for _, rp := range r.sigParsers {
-				fmt.Fprintf(w, "  %s %s\n", fkw("signal"), rp.fmt(fsn, fkw))
+				fmt.Fprintf(w, "  %s %s\n", fkw("signal"), rp.fmt(fsn, fkw, fre))
 			}
 			for _, actName := range r.actionNames {
-				a := r.actionCmds[actName]
-				fmt.Fprintf(w, "  :%s %s\n", facn(actName), a)
+				cmd := r.actionCmds[actName]
+				fmt.Fprintf(w, "  :%s %s\n", facn(actName), fsh(string(cmd)))
 			}
 			fmt.Fprintln(w, fkw("end"))
 			// fmt.Fprintln(w)
@@ -205,7 +208,7 @@ func (cfg *config) printCfg(w io.Writer, skipComments, annot bool) {
 			a := cfg.actors[an]
 			fmt.Fprintf(w, "  %s %s %s", fan(a.name), fkw("plays"), frn(a.role.name))
 			if a.extraEnv != "" {
-				fmt.Fprintf(w, "(%s)", a.extraEnv)
+				fmt.Fprintf(w, "(%s)", fsh(a.extraEnv))
 			}
 			fmt.Fprintln(w)
 			if !skipComments {
@@ -272,14 +275,14 @@ func (cfg *config) printCfg(w io.Writer, skipComments, annot bool) {
 				if a.auditor.activeCond.src == "true" {
 					fmt.Fprintf(w, "  %s %s\n", fann(a.name), fkw("audits throughout"))
 				} else {
-					fmt.Fprintf(w, "  %s %s %s\n", fann(a.name), fkw("audits only while"), a.auditor.activeCond.src)
+					fmt.Fprintf(w, "  %s %s %s\n", fann(a.name), fkw("audits only while"), fre(a.auditor.activeCond.src))
 				}
 			}
 			for _, as := range a.auditor.assignments {
-				fmt.Fprintf(w, "  %s %s\n", fann(a.name), as.fmt(fkw, fsn, fmod))
+				fmt.Fprintf(w, "  %s %s\n", fann(a.name), as.fmt(fkw, fsn, fmod, fre))
 			}
 			if a.auditor.expectFsm != nil {
-				fmt.Fprintf(w, "  %s %s %s: %s\n", fann(a.name), fkw("expects"), fmod(a.auditor.expectFsm.name), a.auditor.expectExpr.src)
+				fmt.Fprintf(w, "  %s %s %s: %s\n", fann(a.name), fkw("expects"), fmod(a.auditor.expectFsm.name), fre(a.auditor.expectExpr.src))
 			}
 			for _, varName := range a.observer.obsVarNames {
 				fmt.Fprintf(w, "  %s %s %s\n", fann(a.name), fkw("watches"), varName.fmt(fan, fsn))
@@ -299,7 +302,7 @@ func fid(n string) string { return n }
 
 func fw(cat string) func(string) string {
 	return func(n string) string {
-		return fmt.Sprintf("<span class=%s>%s</span>", cat, n)
+		return fmt.Sprintf("<span class=%s>%s</span>", cat, html.EscapeString(n))
 	}
 }
 
@@ -355,14 +358,14 @@ const (
 	parseDelta
 )
 
-func (p *resultParser) fmt(fsn, fkw func(string) string) string {
+func (p *resultParser) fmt(fsn, fkw, fre func(string) string) string {
 	switch p.typ {
 	case parseEvent:
-		return fmt.Sprintf("%s %s %s", fsn(p.name), fkw("event at"), p.re.String())
+		return fmt.Sprintf("%s %s %s", fsn(p.name), fkw("event at"), fre(p.re.String()))
 	case parseScalar:
-		return fmt.Sprintf("%s %s %s", fsn(p.name), fkw("scalar at"), p.re.String())
+		return fmt.Sprintf("%s %s %s", fsn(p.name), fkw("scalar at"), fre(p.re.String()))
 	case parseDelta:
-		return fmt.Sprintf("%s %s %s", fsn(p.name), fkw("delta at"), p.re.String())
+		return fmt.Sprintf("%s %s %s", fsn(p.name), fkw("delta at"), fre(p.re.String()))
 	}
 	return "<???parser>"
 }
@@ -508,12 +511,12 @@ func (s *assignment) String() string {
 	return buf.String()
 }
 
-func (s *assignment) fmt(fkw, fsn, fmod func(string) string) string {
+func (s *assignment) fmt(fkw, fsn, fmod, fre func(string) string) string {
 	var buf bytes.Buffer
 	var mode string
 	switch s.assignMode {
 	case assignSingle:
-		fmt.Fprintf(&buf, "%s %s %s %s", fkw("computes"), fsn(s.targetVar), fkw("as"), s.expr.src)
+		fmt.Fprintf(&buf, "%s %s %s %s", fkw("computes"), fsn(s.targetVar), fkw("as"), fre(s.expr.src))
 		return buf.String()
 	case assignFirstN:
 		mode = "first"
@@ -524,7 +527,7 @@ func (s *assignment) fmt(fkw, fsn, fmod func(string) string) string {
 	case assignBottomN:
 		mode = "bottom"
 	}
-	fmt.Fprintf(&buf, "%s %s %s %s %d %s", fkw("collects"), fsn(s.targetVar), fkw("as"), fmod(mode), s.N, s.expr.src)
+	fmt.Fprintf(&buf, "%s %s %s %s %d %s", fkw("collects"), fsn(s.targetVar), fkw("as"), fmod(mode), s.N, fre(s.expr.src))
 	return buf.String()
 }
 

@@ -316,9 +316,11 @@ pre,code{font-family: 'Nova Mono', monospace;}
 .kw{font-weight:bold;}
 .rn{color:blue;font-style:italic;}
 .acn{color:blue;font-style:italic;font-weight:bold;}
-.sn{color:green;font-style:italic;}
+.sn{color:darkgreen;font-style:italic;}
 .an{color:purple;font-style:italic;}
 .ann{color:orange;font-style:italic;}
+.sh{color:#444;}
+.re{color:green;}
 .mod{font-style:italic;}
 </style></head><body>`)
 		if len(ap.cfg.titleStrings) > 0 {

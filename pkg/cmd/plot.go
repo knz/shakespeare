@@ -3,10 +3,13 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"html"
 	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
+	"time"
 
 	"github.com/cockroachdb/logtags"
 	"github.com/knz/shakespeare/pkg/crdb/log"
@@ -295,14 +298,26 @@ faces[4] = ""
 		}
 		defer f.Close()
 		ap.narrate(I, "📄", "HTML include for SVG plots: %s", fName)
-		fmt.Fprint(f, `<!DOCTYPE html>
-<html lang="en">
-  <head><meta charset="utf-8"/></head>
-	<body><div style="margin-left: auto; margin-right: auto; max-width: 1024px">
-	  <embed id="E" src="plot.svg"/>
-	</div></body>
-</html>
-`)
+		fmt.Fprintln(f, `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/>`)
+		fmt.Fprint(f, "<title>shakespeare report")
+		if len(ap.cfg.titleStrings) > 0 {
+			fmt.Fprintf(f, ": a tale of %s", html.EscapeString(joinAnd(ap.cfg.titleStrings)))
+		}
+		fmt.Fprintln(f, `</title>`)
+		if len(ap.cfg.authors) > 0 {
+			fmt.Fprintf(f, "<meta name='author' content='%s' />\n", html.EscapeString(joinAnd(ap.cfg.authors)))
+		}
+		fmt.Fprintln(f, `<style type='text/css'>h1,h3,p{text-align: center;}</style></head><body>`)
+		if len(ap.cfg.titleStrings) > 0 {
+			fmt.Fprintf(f, "<h1>A tale of %s</h1>\n", html.EscapeString(joinAnd(ap.cfg.titleStrings)))
+		}
+		if len(ap.cfg.authors) > 0 {
+			fmt.Fprintf(f, "<h3>Written by %s</h3>\n", html.EscapeString(joinAnd(ap.cfg.authors)))
+		}
+		fmt.Fprintf(f, "<p>%s<p>\n", formatDatePretty(ap.au.epoch))
+		fmt.Fprintln(f, `<div style="margin-left: auto; margin-right: auto; max-width: 1024px"><embed id="E" src="plot.svg"/></div>`)
+		fmt.Fprintln(f, "<p><em><small>a report produced by <a href='https://github.com/knz/shakespeare'>Shakespeare</a></small></em></p>")
+		fmt.Fprintln(f, `</body></html>`)
 		return nil
 	}(); err != nil {
 		return err
@@ -324,4 +339,27 @@ func (ap *app) maybeRunGnuplot(ctx context.Context) {
 		ap.narrate(I, "📄", "SVG plot: %s", filepath.Join(ap.cfg.dataDir, "plot.svg"))
 		ap.narrate(I, "📄", "PDF plot: %s", filepath.Join(ap.cfg.dataDir, "plot.pdf"))
 	}
+}
+
+func formatDatePretty(t time.Time) string {
+	day := t.Format("2")
+	switch {
+	case strings.HasSuffix(day, "1"):
+		day += "st"
+	case strings.HasSuffix(day, "2"):
+		day += "nd"
+	case strings.HasSuffix(day, "3"):
+		day += "rd"
+	default:
+		day += "th"
+	}
+
+	hour := t.Format("<a title='UTC'>15:06</a>")
+
+	return fmt.Sprintf("The day was a %s, %s the %s in the glorious year of %s; at %s on that fateful day, the story began...",
+		t.Format("Monday"),
+		t.Format("January"),
+		day,
+		t.Format("2006"),
+		hour)
 }

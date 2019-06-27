@@ -132,6 +132,13 @@ twice   good   twice  bad    notyet
 good    bad    good   good   notyet
 bad     bad    bad    bad    good
 `},
+		{&atMostOnceFsm, `# at most once
+        t      f      end    reset
+notyet* once   notyet good   notyet
+once    bad    once   good   notyet
+good    good   good   good   notyet
+bad     bad    bad    bad    once
+`},
 	}
 
 	sp := regexp.MustCompile(`(\s+)`)

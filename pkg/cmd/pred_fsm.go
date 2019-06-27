@@ -57,6 +57,7 @@ var automata = func() map[string]*fsm {
 		&onceFsm,
 		&twiceFsm,
 		&thriceFsm,
+		&atMostOnceFsm,
 	} {
 		r[f.name] = f
 	}
@@ -85,6 +86,19 @@ var twiceFsm = fsm{
 		1: []int{2, 1, 3, 0}, // once
 		2: []int{3, 2, 2, 0}, // good
 		3: []int{3, 3, 3, 2}, // bad
+	},
+}
+
+var atMostOnceFsm = fsm{
+	name:       "at most once",
+	startState: 0,
+	stateNames: []string{"notyet", "once", "good", "bad"},
+	labels:     []string{"t", "f", "end", "reset"},
+	edges: [][]int{
+		0: []int{1, 0, 2, 0}, // notyet
+		1: []int{3, 1, 2, 0}, // once
+		2: []int{2, 2, 2, 0}, // good
+		3: []int{3, 3, 3, 1}, // bad
 	},
 }
 

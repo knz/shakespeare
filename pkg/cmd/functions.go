@@ -267,7 +267,7 @@ var collectFns = map[assignMode]collectFn{
 		if x == nil {
 			return a, nil
 		}
-		if len(a) > n {
+		if len(a) >= n {
 			a = a[1:]
 		}
 		return append(a, x), nil
@@ -299,7 +299,7 @@ var collectFns = map[assignMode]collectFn{
 			copy(res[i+1:], a[i:])
 		}
 		if len(res) > n {
-			res = res[:n-1]
+			res = res[:n]
 		}
 		return res, nil
 	},
@@ -330,7 +330,7 @@ var collectFns = map[assignMode]collectFn{
 			copy(res[i+1:], a[i:])
 		}
 		if len(res) > n {
-			res = res[:n-1]
+			res = res[:n]
 		}
 		return res, nil
 	},

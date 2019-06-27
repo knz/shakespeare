@@ -23,64 +23,67 @@ func (ap *app) prompt(
 	surpriseDur := 2 * ap.cfg.tempo.Seconds()
 
 	// Play.
-	for i, scene := range ap.cfg.play {
-		sceneNum := i + 1
-		sceneCtx := logtags.AddTag(ctx, "scene", sceneNum)
+	for _, act := range ap.cfg.play {
+		// FIXME: reset timeout.
+		for i, scene := range act {
+			sceneNum := i + 1
+			sceneCtx := logtags.AddTag(ctx, "scene", sceneNum)
 
-		// log.Info(sceneCtx, showRunning(ap.stopper))
+			// log.Info(sceneCtx, showRunning(ap.stopper))
 
-		// Determine the amount of time to wait before the start of the
-		// next scene.
-		elapsed := timeutil.Now().Sub(ap.au.epoch)
-		toWait := scene.waitUntil - elapsed
-		if toWait > 0 {
-			log.Infof(sceneCtx, "at %.4fs, waiting for %.4fs", elapsed.Seconds(), toWait.Seconds())
-		}
-
-		// Now wait for that time. Note: we have to fire a timer in any
-		// case, to have something to select on - we need a select to also
-		// test the context cancellation or stopper.ShouldQuiesce().
-		tm := time.After(toWait)
-		select {
-		case <-ap.stopper.ShouldQuiesce():
-			log.Info(sceneCtx, "terminated")
-			return nil
-		case <-ctx.Done():
-			log.Info(sceneCtx, "interrupted")
-			return wrapCtxErr(ctx)
-		case <-tm:
-			// Wait.
-		}
-
-		if scene.isEmpty() {
-			// Nothing to do further in this scene.
-			continue
-		}
-
-		extraMsg := ""
-		if toWait < 0 {
-			extraMsg = fmt.Sprintf(", running %.4fs behind schedule", -toWait.Seconds())
-		}
-
-		sceneTime := timeutil.Now()
-		elapsed = sceneTime.Sub(ap.au.epoch)
-		ap.narrate(I, "", "scene %d (~%ds in%s):", sceneNum, int(elapsed.Seconds()), extraMsg)
-
-		// Now run the scene.
-		err := ap.runScene(sceneCtx, scene.concurrentLines, actionChan, moodCh)
-
-		// In any case, make a statement about the duration.
-		if ap.cfg.tempo != 0 {
-			sceneDur := timeutil.Now().Sub(sceneTime).Seconds()
-			if sceneDur >= surpriseDur {
-				ap.narrate(W, "😮", "woah! scene %d lasted %.1fx longer than expected!",
-					sceneNum, sceneDur/ap.cfg.tempo.Seconds())
+			// Determine the amount of time to wait before the start of the
+			// next scene.
+			elapsed := timeutil.Now().Sub(ap.au.epoch)
+			toWait := scene.waitUntil - elapsed
+			if toWait > 0 {
+				log.Infof(sceneCtx, "at %.4fs, waiting for %.4fs", elapsed.Seconds(), toWait.Seconds())
 			}
-		}
 
-		// If there was an error, return it.
-		if err != nil {
-			return errors.WithContextTags(err, ctx)
+			// Now wait for that time. Note: we have to fire a timer in any
+			// case, to have something to select on - we need a select to also
+			// test the context cancellation or stopper.ShouldQuiesce().
+			tm := time.After(toWait)
+			select {
+			case <-ap.stopper.ShouldQuiesce():
+				log.Info(sceneCtx, "terminated")
+				return nil
+			case <-ctx.Done():
+				log.Info(sceneCtx, "interrupted")
+				return wrapCtxErr(ctx)
+			case <-tm:
+				// Wait.
+			}
+
+			if scene.isEmpty() {
+				// Nothing to do further in this scene.
+				continue
+			}
+
+			extraMsg := ""
+			if toWait < 0 {
+				extraMsg = fmt.Sprintf(", running %.4fs behind schedule", -toWait.Seconds())
+			}
+
+			sceneTime := timeutil.Now()
+			elapsed = sceneTime.Sub(ap.au.epoch)
+			ap.narrate(I, "", "scene %d (~%ds in%s):", sceneNum, int(elapsed.Seconds()), extraMsg)
+
+			// Now run the scene.
+			err := ap.runScene(sceneCtx, scene.concurrentLines, actionChan, moodCh)
+
+			// In any case, make a statement about the duration.
+			if ap.cfg.tempo != 0 {
+				sceneDur := timeutil.Now().Sub(sceneTime).Seconds()
+				if sceneDur >= surpriseDur {
+					ap.narrate(W, "😮", "woah! scene %d lasted %.1fx longer than expected!",
+						sceneNum, sceneDur/ap.cfg.tempo.Seconds())
+				}
+			}
+
+			// If there was an error, return it.
+			if err != nil {
+				return errors.WithContextTags(err, ctx)
+			}
 		}
 	}
 

@@ -77,7 +77,7 @@ func Run() (err error) {
 	}
 
 	// Generate the steps.
-	if err = cfg.compile(); err != nil {
+	if err = cfg.compileV1(); err != nil {
 		log.Errorf(ctx, "compile error: %+v", err)
 		return errors.WithDetail(err, "(while compiling the script)")
 	}

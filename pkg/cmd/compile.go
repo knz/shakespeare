@@ -6,9 +6,9 @@ import (
 	"time"
 )
 
-// compile transforms a programmatic description
+// compileV1 transforms a programmatic description
 // of a play (using stanzas) into an explicit list of steps.
-func (cfg *config) compile() error {
+func (cfg *config) compileV1() error {
 	// Compute the maximum script length.
 	scriptLen := 0
 	for _, s := range cfg.stanzas {
@@ -18,21 +18,21 @@ func (cfg *config) compile() error {
 	}
 
 	// We know how long the play is going to be.
-	cfg.play = make([]scene, scriptLen+1)
+	play := make([]scene, scriptLen+1)
 
 	// Compile the script.
 	atTime := time.Duration(0)
 	for i := 0; i < scriptLen; i++ {
-		thisAct := &cfg.play[i]
-		thisAct.waitUntil = atTime
+		thisScene := &play[i]
+		thisScene.waitUntil = atTime
 		for _, s := range cfg.stanzas {
 			script := s.script
 			if i >= len(script) {
 				continue
 			}
 
-			thisAct.concurrentLines = append(thisAct.concurrentLines, scriptLine{actor: s.actor})
-			curLine := &thisAct.concurrentLines[len(thisAct.concurrentLines)-1]
+			thisScene.concurrentLines = append(thisScene.concurrentLines, scriptLine{actor: s.actor})
+			curLine := &thisScene.concurrentLines[len(thisScene.concurrentLines)-1]
 
 			aChar := script[i]
 			acts := cfg.actions[aChar]
@@ -49,12 +49,15 @@ func (cfg *config) compile() error {
 			}
 			if len(curLine.steps) == 0 {
 				// No steps actually generated (or only nops). Erase the last line.
-				thisAct.concurrentLines = thisAct.concurrentLines[:len(thisAct.concurrentLines)-1]
+				thisScene.concurrentLines = thisScene.concurrentLines[:len(thisScene.concurrentLines)-1]
 			}
 		}
 		atTime += cfg.tempo
 	}
-	cfg.play[len(cfg.play)-1].waitUntil = atTime
+	play[len(play)-1].waitUntil = atTime
+
+	cfg.play = [][]scene{play}
+
 	return nil
 }
 
@@ -67,26 +70,29 @@ func (cfg *config) printSteps(w io.Writer, annot bool) {
 		facn = fw("acn") // action name
 	}
 	fmt.Fprintln(w, "# play")
-	for i, s := range cfg.play {
-		if s.waitUntil != 0 && (i == len(cfg.play)-1 || len(s.concurrentLines) > 0) {
-			fmt.Fprintf(w, "#  (wait until %s)\n", s.waitUntil)
-		}
-		comma := ""
-		for _, line := range s.concurrentLines {
-			if len(line.steps) > 0 {
-				fmt.Fprint(w, comma)
-				comma = "#  (meanwhile)\n"
+	for k, act := range cfg.play {
+		fmt.Fprintf(w, "# -- ACT %d --\n", k+1)
+		for i, s := range act {
+			if s.waitUntil != 0 && (i == len(act)-1 || len(s.concurrentLines) > 0) {
+				fmt.Fprintf(w, "#  (wait until %s)\n", s.waitUntil)
 			}
-			for _, step := range line.steps {
-				switch step.typ {
-				case stepDo:
-					actChar := '!'
-					if step.failOk {
-						actChar = '?'
+			comma := ""
+			for _, line := range s.concurrentLines {
+				if len(line.steps) > 0 {
+					fmt.Fprint(w, comma)
+					comma = "#  (meanwhile)\n"
+				}
+				for _, step := range line.steps {
+					switch step.typ {
+					case stepDo:
+						actChar := '!'
+						if step.failOk {
+							actChar = '?'
+						}
+						fmt.Fprintf(w, "#  %s: %s%c\n", fan(line.actor.name), facn(step.action), actChar)
+					case stepAmbiance:
+						fmt.Fprintf(w, "#  (%s: %s)\n", fkw("mood"), step.action)
 					}
-					fmt.Fprintf(w, "#  %s: %s%c\n", fan(line.actor.name), facn(step.action), actChar)
-				case stepAmbiance:
-					fmt.Fprintf(w, "#  (%s: %s)\n", fkw("mood"), step.action)
 				}
 			}
 		}

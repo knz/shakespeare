@@ -30,12 +30,12 @@ func TestParse(t *testing.T) {
 				return fmt.Sprintf("parse error: %s\n", renderError(err))
 			}
 			var out bytes.Buffer
-			cfg.printCfg(&out)
+			cfg.printCfg(&out, false, false)
 			if len(cfg.stanzas) > 0 {
-				if err := cfg.compile(); err != nil {
+				if err := cfg.compileV1(); err != nil {
 					return fmt.Sprintf("compile error: %s\n", renderError(err))
 				}
-				cfg.printSteps(&out)
+				cfg.printSteps(&out, false)
 			}
 
 			if out.String() != d.Expected {
@@ -54,13 +54,13 @@ func TestParse(t *testing.T) {
 				t.Fatalf("reparse error: %s\n", renderError(err))
 			}
 			var out2 bytes.Buffer
-			cfg.printCfg(&out2)
+			cfg.printCfg(&out2, false, false)
 
 			if len(cfg.stanzas) > 0 {
-				if err := cfg.compile(); err != nil {
+				if err := cfg.compileV1(); err != nil {
 					t.Fatalf("compile error after reparse: %s\n", renderError(err))
 				}
-				cfg.printSteps(&out2)
+				cfg.printSteps(&out2, false)
 			}
 			if out.String() != out2.String() {
 				t.Errorf("parse/print is not idempotent; got:\n  %s\nexpected:\n  %s",

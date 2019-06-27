@@ -67,14 +67,15 @@ type config struct {
 	actions     map[byte][]*action
 	actionChars []byte
 
-	// stanzas defines the programmatic play scenario.
+	// stanzas defines the programmatic play scenario,
+	// using the "old" format (V1).
 	// This is populated during parsing, and transformed
-	// into steps during compile().
+	// into steps during compileV1().
 	stanzas []stanza
 
 	// play is the list of actions to play.
 	// This is populated by compile().
-	play []scene
+	play [][]scene
 
 	// tempo is the interval at which the stanzas are played.
 	// This is populated during parsing, and used during compile().

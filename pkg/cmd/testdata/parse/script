@@ -102,6 +102,7 @@ script
 end
 # no audience defined
 # play
+# -- ACT 1 --
 #  bob: cure!
 #  (wait until 1s)
 #  alice: cure!

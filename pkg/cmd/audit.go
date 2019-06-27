@@ -20,6 +20,12 @@ type moodChange struct {
 	newMood string
 }
 
+type actChange struct {
+	ts float64
+	// act number of starting act
+	actNum int
+}
+
 type auditableEvent struct {
 	ts     float64
 	values []auditableValue
@@ -38,6 +44,7 @@ func (ap *app) audit(
 	actionCh chan<- actionReport,
 	collectorCh chan<- observation,
 	moodChan <-chan moodChange,
+	actChan <-chan actChange,
 ) (err error) {
 	// Initialize the auditors that depend on the mood and
 	// perhaps time.
@@ -62,6 +69,11 @@ func (ap *app) audit(
 		case <-ctx.Done():
 			log.Info(ctx, "interrupted")
 			return wrapCtxErr(ctx)
+
+		case ev := <-actChan:
+			if err = ap.collectAndAuditActChange(ctx, auLog, ev); err != nil {
+				return err
+			}
 
 		case ev := <-moodChan:
 			if err = ap.collectAndAuditMood(ctx, auLog, actionCh, collectorCh, ev.ts, ev.newMood); err != nil {
@@ -190,6 +202,13 @@ func (ap *app) checkFinal(
 	}
 	atBegin := math.IsInf(au.curMoodStart, 0)
 	return ap.processMoodChange(ctx, auLog, actionCh, collectorCh, atBegin, true /*atEnd*/, elapsed, "clear")
+}
+
+func (ap *app) collectAndAuditActChange(
+	ctx context.Context, auLog *log.SecondaryLogger, ev actChange,
+) error {
+	ap.au.actChanges = append(ap.au.actChanges, ev)
+	return nil
 }
 
 func (ap *app) collectAndAuditMood(

@@ -633,6 +633,7 @@ type audition struct {
 	curMood         string
 	curMoodStart    float64
 	moodPeriods     []moodPeriod
+	actChanges      []actChange
 	auditorStates   map[string]*auditorState
 	curActivated    map[exprVar]bool
 	curVals         map[string]interface{}

@@ -16,7 +16,10 @@ import (
 
 // prompt directs the actors to perform actions in accordance with the script.
 func (ap *app) prompt(
-	ctx context.Context, actionChan chan<- actionReport, moodCh chan<- moodChange,
+	ctx context.Context,
+	actionChan chan<- actionReport,
+	moodCh chan<- moodChange,
+	actCh chan<- actChange,
 ) error {
 	// surpriseDur is the duration of a scene beyond which the prompter
 	// will express surprise.
@@ -27,7 +30,10 @@ func (ap *app) prompt(
 		actNum := j + 1
 		actCtx := logtags.AddTag(ctx, "act", actNum)
 		actStart := timeutil.Now()
-		ap.narrate(I, "🎬", "act %d starts", actNum)
+		if err := ap.signalActChange(actCtx, actCh, actStart, actNum); err != nil {
+			return err
+		}
+
 		for i, scene := range act {
 			sceneNum := i + 1
 			sceneCtx := logtags.AddTag(actCtx, "scene", sceneNum)
@@ -218,6 +224,25 @@ func (ap *app) runLine(
 				return reportErr
 			}
 		}
+	}
+	return nil
+}
+
+func (ap *app) signalActChange(
+	ctx context.Context, actCh chan<- actChange, actStart time.Time, actNum int,
+) error {
+	ap.narrate(I, "🎬", "act %d starts", actNum)
+	elapsed := actStart.Sub(ap.au.epoch).Seconds()
+	ev := actChange{ts: elapsed, actNum: actNum}
+	select {
+	case <-ap.stopper.ShouldQuiesce():
+		log.Info(ctx, "terminated")
+		return nil
+	case <-ctx.Done():
+		log.Info(ctx, "interrupted")
+		return wrapCtxErr(ctx)
+	case actCh <- ev:
+		// ok
 	}
 	return nil
 }

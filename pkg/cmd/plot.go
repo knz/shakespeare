@@ -176,6 +176,13 @@ faces[4] = ""
 			fmt.Fprintf(f, "set xtics out 5\n")
 			fmt.Fprintf(f, "set mxtics 5\n")
 		}
+
+		// Generate the act boundaries.
+		for i := 1; i < len(ap.au.actChanges); i++ {
+			ts := ap.au.actChanges[i].ts
+			fmt.Fprintf(f, "set arrow from %f, graph 0 to %f, graph 1 front nohead lc 'blue'\n", ts, ts)
+		}
+
 		// Generate the action plot. we do this before generating the mood
 		// overlays, since these are part of the "audience" observations.
 		numActiveActors := 0
@@ -262,7 +269,8 @@ faces[4] = ""
 		for i := range ap.au.moodPeriods {
 			fmt.Fprintf(f, "unset object %d\n", i+1)
 		}
-		fmt.Fprintf(f, "unset multiplot\n")
+		fmt.Fprintln(f, "unset arrow")
+		fmt.Fprintln(f, "unset multiplot")
 		return nil
 	}(); err != nil {
 		return err

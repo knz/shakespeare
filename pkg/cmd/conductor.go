@@ -60,10 +60,11 @@ func (ap *app) conduct(ctx context.Context) (err error) {
 	auChan := make(chan auditableEvent, len(ap.cfg.actors))
 	actionChan := make(chan actionReport, len(ap.cfg.actors))
 	moodCh := make(chan moodChange, 1)
+	actCh := make(chan actChange, 1)
 
 	// Start the audition.
 	var wgau sync.WaitGroup
-	auDone := ap.startAudition(ctx, &wgau, auLogger, auChan, actionChan, collectorChan, moodCh, errCh)
+	auDone := ap.startAudition(ctx, &wgau, auLogger, auChan, actionChan, collectorChan, moodCh, actCh, errCh)
 	closers = append(closers, func() {
 		log.Info(ctx, "requesting the audition to stop")
 		auDone()
@@ -90,7 +91,7 @@ func (ap *app) conduct(ctx context.Context) (err error) {
 
 	// Start the prompter.
 	var wgPrompt sync.WaitGroup
-	promptDone := ap.runPrompter(ctx, &wgPrompt, actionChan, moodCh, errCh)
+	promptDone := ap.runPrompter(ctx, &wgPrompt, actionChan, moodCh, actCh, errCh)
 	closers = append(closers, func() {
 		log.Info(ctx, "requesting the prompter to exit")
 		promptDone()
@@ -107,6 +108,7 @@ func (ap *app) runPrompter(
 	wg *sync.WaitGroup,
 	actionChan chan<- actionReport,
 	moodCh chan<- moodChange,
+	actCh chan<- actChange,
 	errCh chan<- error,
 ) func() {
 	promptCtx, promptDone := context.WithCancel(ctx)
@@ -115,7 +117,7 @@ func (ap *app) runPrompter(
 	runWorker(promptCtx, ap.stopper, func(ctx context.Context) {
 		defer wg.Done()
 		log.Info(ctx, "<intrat>")
-		err := errors.WithContextTags(ap.prompt(ctx, actionChan, moodCh), ctx)
+		err := errors.WithContextTags(ap.prompt(ctx, actionChan, moodCh, actCh), ctx)
 		if errors.Is(err, context.Canceled) {
 			// It's ok if the prompt is canceled.
 			err = nil
@@ -135,6 +137,7 @@ func (ap *app) startAudition(
 	actionCh chan<- actionReport,
 	collectorCh chan<- observation,
 	moodCh <-chan moodChange,
+	actCh <-chan actChange,
 	errCh chan<- error,
 ) (cancelFunc func()) {
 	auCtx, auDone := context.WithCancel(ctx)
@@ -143,7 +146,7 @@ func (ap *app) startAudition(
 	runWorker(auCtx, ap.stopper, func(ctx context.Context) {
 		defer wg.Done()
 		log.Info(ctx, "<begins>")
-		err := errors.WithContextTags(ap.audit(ctx, auLogger, auChan, actionCh, collectorCh, moodCh), ctx)
+		err := errors.WithContextTags(ap.audit(ctx, auLogger, auChan, actionCh, collectorCh, moodCh, actCh), ctx)
 		if errors.Is(err, context.Canceled) {
 			// It's ok if the audition is canceled.
 			err = nil

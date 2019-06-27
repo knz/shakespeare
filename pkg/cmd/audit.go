@@ -665,8 +665,9 @@ func (ap *app) setAndActivateVar(
 	val interface{},
 	report bool,
 ) error {
-	if val == nil {
+	if val == nil || val == interface{}(nil) {
 		// No value: do nothing.
+		return nil
 	}
 	auLog.Logf(ctx, "%s := %v", varName, val)
 	varNameS := varName.String()

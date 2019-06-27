@@ -66,17 +66,16 @@ The configuration to specify this looks like this:
 
 ```
 script
-   ...
-  prompt myroad  ....c...c..c..c..c..c..c...
-  prompt mylight ..r...g...r...g...r...g....
+  ...
+  storyline ....c...c..c..c..c..c..c...
+  storyline ..r...g...r...g...r...g....
 end
 ```
 
 Each `prompt` specification provides a *script line* to execute for an actor.
 
-This particular configuration tells `myroad` to perform action `c` at
-various times. Likewise, `mylight` is to perform actions `r` and `g`
-at various times.
+This particular configuration invokes scenes `c`, `r` and `g` at
+various times.
 
 Each column across all lines in the script correspond to one
 scene. The actions from all lines inside a single scene (column) are
@@ -88,17 +87,16 @@ Therefore, in the script above, generally the `c`, `r` and `g` actions
 are specified to occur separately over time, except for the 4th
 occurrence of `c` which can occur concurrently with `g`.
 
-In this script, the action letters `c`, `r` and `g` are not yet defined.
+In this script, the scene letters `c`, `r` and `g` are not yet defined.
 We do this by specifying these letters as follows:
 
 ```
 script
   ...
-  action . entails nop
-  action c entails :car
-  action r entails :red
-  action g entails :green
-  prompt ...
+  scene c entails for myroad: car
+  scene r entails for mylight: red
+  scene g entails for mylight: green
+  storyline ...
 end
 ```
 
@@ -112,12 +110,11 @@ In this example, we'll perform scenes at a minimum of 100ms intervals:
 ```
 script
   tempo 100ms
-  action . entails nop
-  action c entails :car
-  action r entails :red
-  action g entails :green
-  prompt myroad  ....c...c..c..c..c..c..c...
-  prompt mylight ..r...g...r...g...r...g....
+  scene c entails for myroad: car
+  scene r entails for mylight: red
+  scene g entails for mylight: green
+  storyline ....c...c..c..c..c..c..c...
+  storyline ..r...g...r...g...r...g....
 end
 ```
 

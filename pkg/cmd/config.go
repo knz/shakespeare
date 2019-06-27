@@ -62,7 +62,8 @@ type config struct {
 	actors     map[string]*actor
 	actorNames []string
 
-	// actions is the set of actions defined by the configuration.
+	// actions is the set of actions defined by the configuration,
+	// using the "old" format (V1).
 	// This is populated during parsing.
 	actions     map[byte][]*action
 	actionChars []byte
@@ -72,6 +73,14 @@ type config struct {
 	// This is populated during parsing, and transformed
 	// into steps during compileV1().
 	stanzas []stanza
+
+	// sceneSpecs is the set of scenes defined by the configuration,
+	// using the "new" format (V2).
+	// This is populated during parsing.
+	sceneSpecs     map[byte]*sceneSpec
+	sceneSpecChars []byte
+	// storyLine is the list of act specifications.
+	storyLine []string
 
 	// play is the list of actions to play.
 	// This is populated by compile().
@@ -137,13 +146,14 @@ type audienceMember struct {
 // newConfig creates a config with defaults.
 func newConfig() *config {
 	cfg := &config{
-		roles:    make(map[string]*role),
-		actors:   make(map[string]*actor),
-		actions:  make(map[byte][]*action),
-		stanzas:  nil,
-		tempo:    time.Second,
-		audience: make(map[string]*audienceMember),
-		vars:     make(map[exprVar]*variable),
+		roles:      make(map[string]*role),
+		actors:     make(map[string]*actor),
+		actions:    make(map[byte][]*action),
+		sceneSpecs: make(map[byte]*sceneSpec),
+		stanzas:    nil,
+		tempo:      time.Second,
+		audience:   make(map[string]*audienceMember),
+		vars:       make(map[exprVar]*variable),
 	}
 	cfg.maybeAddVar(nil, exprVar{sigName: "t"}, false)
 	cfg.maybeAddVar(nil, exprVar{sigName: "mood"}, false)
@@ -240,13 +250,35 @@ func (cfg *config) printCfg(w io.Writer, skipComments, annot bool) {
 			fmt.Fprintf(w, "  %s %s %s %s\n", fkw("action"), a.name, fkw("entails"), a.fmt(fkw, facn))
 		}
 	}
-	if len(cfg.stanzas) == 0 {
+	for _, aan := range cfg.sceneSpecChars {
+		sc := cfg.sceneSpecs[aan]
+		for _, ag := range sc.entails {
+			fmt.Fprintf(w, "  %s %s %s %s: ", fkw("scene"), sc.name, fkw("entails for"), fan(ag.actor.name))
+			comma := ""
+			for _, a := range ag.actions {
+				fmt.Fprint(w, comma)
+				comma = "; "
+				fmt.Fprint(w, facn(a))
+			}
+			fmt.Fprintln(w)
+		}
+		if sc.moodStart != "" {
+			fmt.Fprintf(w, "  %s %s %s %s\n", fkw("scene"), sc.name, fkw("mood starts"), sc.moodStart)
+		}
+		if sc.moodEnd != "" {
+			fmt.Fprintf(w, "  %s %s %s %s\n", fkw("scene"), sc.name, fkw("mood ends"), sc.moodEnd)
+		}
+	}
+	if len(cfg.stanzas) == 0 && len(cfg.storyLine) == 0 {
 		if !skipComments {
 			fmt.Fprintln(w, "  # no stanzas defined, play will terminate immediately")
 		}
 	} else {
 		for _, stanza := range cfg.stanzas {
 			fmt.Fprintf(w, "  %s %-10s %s\n", fkw("prompt"), fan(stanza.actor.name), stanza.script)
+		}
+		if len(cfg.storyLine) > 0 {
+			fmt.Fprintf(w, "  %s %s\n", fkw("storyline"), strings.Join(cfg.storyLine, " "))
 		}
 	}
 	fmt.Fprintln(w, fkw("end"))
@@ -746,4 +778,60 @@ func (v *variable) maybeAddWatcher(watcher *audienceMember) {
 	log.Warningf(context.TODO(), "added watcher %q for var %q", watcher.name, v.name)
 	v.watchers[watcher.name] = watcher
 	v.watcherNames = append(v.watcherNames, watcher.name)
+}
+
+func (cfg *config) maybeAddSceneSpec(shortHand string) *sceneSpec {
+	b := shortHand[0]
+	if sc, ok := cfg.sceneSpecs[b]; ok {
+		return sc
+	}
+	sc := &sceneSpec{name: shortHand}
+	cfg.sceneSpecs[b] = sc
+	cfg.sceneSpecChars = append(cfg.sceneSpecChars, b)
+	return sc
+}
+
+func (cfg *config) validateStoryLine(storyLine string) ([]string, error) {
+	parts := strings.Split(storyLine, " ")
+	newParts := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.ReplaceAll(strings.TrimSpace(part), "_", "")
+		if part == "" {
+			continue
+		}
+		for i := 0; i < len(part); i++ {
+			actNum := len(newParts) + 1
+			scChar := part[i]
+			switch scChar {
+			case ' ', '.':
+				continue
+			case '+':
+				if i == 0 {
+					return nil, errors.Newf("in act %d: cannot use + at beginning of act", actNum)
+				}
+				if i == len(part)-1 {
+					return nil, errors.Newf("in act %d: cannot use + at end of act", actNum)
+				}
+				if part[i-1] == '+' {
+					return nil, errors.Newf("in act %d: sequence ++ is invalid", actNum)
+				}
+			default:
+				if _, ok := cfg.sceneSpecs[scChar]; !ok {
+					return nil, explainAlternativesList(
+						errors.Newf("in act %d, scene %c not defined", actNum, scChar),
+						"scenes", bytesToStrings(cfg.sceneSpecChars)...)
+				}
+			}
+		}
+		newParts = append(newParts, part)
+	}
+	return newParts, nil
+}
+
+func bytesToStrings(bs []byte) []string {
+	res := make([]string, len(bs))
+	for i, b := range bs {
+		res[i] = fmt.Sprintf("%c", b)
+	}
+	return res
 }

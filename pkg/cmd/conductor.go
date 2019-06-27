@@ -50,6 +50,9 @@ func (ap *app) conduct(ctx context.Context) (err error) {
 	// closers contains the functions that terminate the workers.
 	var closers []func()
 	defer func() {
+		if r := recover(); r != nil {
+			panic(r)
+		}
 		err = collectErrors(ctx, closers, errCh, "play")
 	}()
 
@@ -222,6 +225,9 @@ func (ap *app) runForAllActors(
 	errCh := make(chan error, len(ap.cfg.actors)+1)
 
 	defer func() {
+		if r := recover(); r != nil {
+			panic(r)
+		}
 		// At the end of the scene, make runScene() return the collected
 		// errors.
 		err = collectErrors(ctx, nil, errCh, prefix)

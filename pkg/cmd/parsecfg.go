@@ -518,11 +518,19 @@ func (cfg *config) parseActors(line string) error {
 
 var scriptRe = compileRe(`^script$`)
 var tempoRe = compileRe(`^tempo\s+(?P<dur>.*)$`)
+
+// V1 rules
 var actionRe = compileRe(`^action\s+(?P<char>\S)\s+entails\s+(?P<chardef>.*)$`)
 var doRe = compileRe(`^:(?P<action>\S+)$`)
 var nopRe = compileRe(`^nop$`)
 var ambianceRe = compileRe(`^mood\s+(?P<mood>\S+)$`)
 var stanzaRe = compileRe(`^prompt\s+(?P<target>every\s+\S+|\S+)\s+(?P<stanza>.*)$`)
+
+// V2 rules
+var entailsRe = compileRe(`scene\s+(?P<char>\S)\s+entails\s+for\s+(?P<target>every\s+\S+|\S+)\s*:\s*(?P<actions>.*)$`)
+var moodChangeRe = compileRe(`scene\s+(?P<char>\S)\s+mood\s+(?P<when>starts|ends)\s+(?P<mood>\S+)\s*$`)
+var storyLineRe = compileRe(`storyline\s+(?P<storyline>.*)\s*$`)
+var editRe = compileRe(`edit\s+(?P<editcmd>.*)$`)
 
 func (cfg *config) parseScript(line string) error {
 	if actionRe.MatchString(line) {
@@ -616,10 +624,111 @@ func (cfg *config) parseScript(line string) error {
 				script: script,
 			})
 		}
+	} else if storyLineRe.MatchString(line) {
+		storyLine := strings.TrimSpace(storyLineRe.ReplaceAllString(line, "${storyline}"))
+		st, err := cfg.validateStoryLine(storyLine)
+		if err != nil {
+			return err
+		}
+		cfg.storyLine = combineStoryLines(cfg.storyLine, st)
+		log.Infof(context.Background(), "combined storylines: %s", strings.Join(cfg.storyLine, " "))
+	} else if editRe.MatchString(line) {
+		editcmd := strings.TrimSpace(editRe.ReplaceAllString(line, "${editcmd}"))
+		if len(editcmd) < 4 || editcmd[0] != 's' {
+			return errors.WithHint(errors.New("invalid syntax"), "try edit s/.../.../")
+		}
+		splitChar := editcmd[1:2]
+		parts := strings.SplitN(editcmd, splitChar, 4)
+		if len(parts) < 4 || (parts[3] != "" && parts[3] != "g") {
+			errors.WithHint(errors.New("invalid syntax"), "try edit s/.../.../")
+		}
+		orig, repl := parts[1], parts[2]
+		origRe, err := regexp.Compile(orig)
+		if err != nil {
+			return errors.Wrapf(err, "compiling regexp %q", orig)
+		}
+		newStoryLine := origRe.ReplaceAllString(strings.Join(cfg.storyLine, " "), repl)
+		st, err := cfg.validateStoryLine(newStoryLine)
+		if err != nil {
+			return errors.WithDetailf(err, "storyline after edit: %s", newStoryLine)
+		}
+		cfg.storyLine = st
+	} else if moodChangeRe.MatchString(line) {
+		aMood := moodChangeRe.ReplaceAllString(line, "${mood}")
+		aWhen := moodChangeRe.ReplaceAllString(line, "${when}")
+		scShorthand := moodChangeRe.ReplaceAllString(line, "${char}")
+		_, err := validateShorthand(scShorthand)
+		if err != nil {
+			return err
+		}
+
+		if err := checkIdent(aMood); err != nil {
+			return err
+		}
+
+		sc := cfg.maybeAddSceneSpec(scShorthand)
+		if aWhen == "starts" {
+			sc.moodStart = aMood
+		} else {
+			sc.moodEnd = aMood
+		}
+	} else if entailsRe.MatchString(line) {
+		target := entailsRe.ReplaceAllString(line, "${target}")
+		actActions := entailsRe.ReplaceAllString(line, "${actions}")
+		scShorthand := entailsRe.ReplaceAllString(line, "${char}")
+		_, err := validateShorthand(scShorthand)
+		if err != nil {
+			return err
+		}
+
+		r, foundActors, err := cfg.selectActors(target)
+		if err != nil {
+			return err
+		}
+		if len(foundActors) == 0 {
+			log.Warningf(context.TODO(), "there is no actor playing role %q to play this script: %s", r.name, line)
+			return nil
+		}
+
+		parts := strings.Split(actActions, ";")
+		actions := make([]string, 0, len(parts))
+		for _, part := range parts {
+			part = strings.TrimSpace(part)
+			if part == "" {
+				continue
+			}
+			if strings.HasSuffix(part, "?") {
+				part = part[:len(part)-1]
+			}
+			if _, ok := r.actionCmds[part]; !ok {
+				return explainAlternatives(errors.Newf("action :%s is not defined for role %q", part, r.name),
+					fmt.Sprintf("actions for role %s", r.name), r.actionCmds)
+			}
+			actions = append(actions, part)
+		}
+
+		sc := cfg.maybeAddSceneSpec(scShorthand)
+		for _, actor := range foundActors {
+			sc.entails = append(sc.entails, actionGroup{
+				actor:   actor,
+				actions: actions,
+			})
+		}
 	} else {
 		return errors.New("unknown syntax")
 	}
 	return nil
+}
+
+func validateShorthand(actShorthand string) (byte, error) {
+	if len(actShorthand) != 1 {
+		return 0, errors.New("only ASCII characters allowed as action shorthands")
+	}
+	actChar := actShorthand[0]
+	if !unicode.In(rune(actChar), unicode.L, unicode.N) {
+		return 0, errors.New("only ASCII letters, digits and punctuation allowed as action shorthands")
+	}
+	return actChar, nil
 }
 
 func parseAuditWhen(when string) (*fsm, error) {
@@ -633,9 +742,6 @@ func parseAuditWhen(when string) (*fsm, error) {
 
 func explainAlternatives(err error, name string, theMap interface{}) error {
 	keys := reflect.ValueOf(theMap).MapKeys()
-	if len(keys) == 0 {
-		return errors.WithHintf(err, "no %s defined yet", name)
-	}
 	keyS := make([]string, len(keys))
 	for i, k := range keys {
 		keyS[i] = fmt.Sprintf("%v", k)
@@ -644,6 +750,9 @@ func explainAlternatives(err error, name string, theMap interface{}) error {
 }
 
 func explainAlternativesList(err error, name string, values ...string) error {
+	if len(values) == 0 {
+		return errors.WithHintf(err, "no %s defined yet", name)
+	}
 	sort.Strings(values)
 	return errors.WithHintf(err,
 		"available %s: %s", name, strings.Join(values, ", "))
@@ -681,4 +790,65 @@ func identify(r rune) rune {
 		return r
 	}
 	return '_'
+}
+
+func combineStoryLines(line1, line2 []string) []string {
+	res := make([]string, len(line1))
+	i := 0
+	for ; i < len(line1); i++ {
+		if i >= len(line2) {
+			res[i] = line1[i]
+			continue
+		}
+		res[i] = combineActs(line1[i], line2[i])
+	}
+	for ; i < len(line2); i++ {
+		res = append(res, line2[i])
+	}
+	return res
+}
+
+func combineActs(act1, act2 string) string {
+	var res strings.Builder
+	i1 := 0
+	i2 := 0
+	for i1 < len(act1) {
+		var s1, s2 string
+		s1, i1 = extractAction(act1, i1)
+		s2, i2 = extractAction(act2, i2)
+		if s1 == "." {
+			if s2 != "" {
+				res.WriteString(s2)
+			} else {
+				res.WriteByte('.')
+			}
+		} else {
+			res.WriteString(s1)
+			if s2 != "" && s2 != "." {
+				res.WriteByte('+')
+				res.WriteString(s2)
+			}
+		}
+	}
+	for ; i2 < len(act2); i2++ {
+		res.WriteByte(act2[i2])
+	}
+	return res.String()
+}
+
+func extractAction(act1 string, i1 int) (string, int) {
+	if i1 >= len(act1) {
+		return "", i1
+	}
+	s1 := []byte{act1[i1]}
+	end1 := i1 + 1
+	for end1+1 < len(act1) {
+		if act1[end1] != '+' {
+			break
+		}
+		s1 = append(s1, '+', act1[end1+1])
+		i1 += 2
+		end1 += 2
+	}
+	return string(s1), end1
 }

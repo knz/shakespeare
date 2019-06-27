@@ -1,3 +1,7 @@
+###
+### tempo checks
+###
+
 parse
 script
   tempo .001s
@@ -11,8 +15,6 @@ script
 end
 # no audience defined
 
-
-
 parse
 script
   tempo unknown
@@ -24,63 +26,40 @@ while parsing:
 <testdata>:1     script
 <testdata>:2   >   tempo unknown
 
+###
+### Mood change syntax
+###
 
 parse
 script
-   action a entails nop; nop
-   action b entails :something
-   action c entails mood red
+  scene a mood ends red
+  scene a mood starts blue
+  scene b mood starts orange
 end
 ----
 # no roles defined
 # no cast defined
 script
   tempo 1s
-  action a entails nop
-  action a entails nop
-  action b entails :something
-  action c entails mood red
+  scene a mood starts blue
+  scene a mood ends red
+  scene b mood starts orange
   # no stanzas defined, play will terminate immediately
 end
 # no audience defined
 
-
-parse
-script
-   action a entails unknown
-end
-----
-parse error: <testdata>:2: unknown action syntax: action a entails unknown
---
-while parsing:
-<testdata>:1     script
-<testdata>:2   >    action a entails unknown
-
+###
+### Mood start vs end
+###
 
 parse
 include doctor.cfg
 include medical_cast.cfg
 script
-   prompt every doctor .....
-end
-----
-parse error: <testdata>:4: script action '.' not defined
---
-while parsing:
-<testdata>:2     include medical_cast.cfg
-<testdata>:3     script
-<testdata>:4   >    prompt every doctor .....
-HINT: no script actions defined yet
-
-
-parse
-include doctor.cfg
-include medical_cast.cfg
-script
-  action . entails nop
-  action c entails :cure
-  prompt alice .c..c..
-  prompt bob   c...c.
+  scene a entails for alice: cure
+  scene a mood starts red
+  scene a mood ends blue
+  storyline aa
 end
 ----
 role doctor
@@ -95,87 +74,374 @@ cast
 end
 script
   tempo 1s
-  action . entails nop
-  action c entails :cure
-  prompt alice      .c..c..
-  prompt bob        c...c.
+  scene a entails for alice: cure
+  scene a mood starts red
+  scene a mood ends blue
+  storyline aa
 end
 # no audience defined
 # play
-# -- ACT 1 --
-#  bob: cure!
-#  (wait until 1s)
-#  alice: cure!
-#  (wait until 4s)
-#  alice: cure!
-#  (meanwhile)
-#  bob: cure!
-#  (wait until 7s)
+# -- ACT 1: aa --
+# 1:  (mood: red)
+# 2:  alice: cure!
+# 3:  (mood: blue)
+# 4:  (wait until 1s)
+# 4:  (mood: red)
+# 5:  alice: cure!
+# 6:  (mood: blue)
+# 7:  (wait until 2s)
 # end
-
-
-parse
-script
-  action . entails nop
-  prompt every doctor ......
-end
-----
-parse error: <testdata>:3: unknown role "doctor"
---
-while parsing:
-<testdata>:1     script
-<testdata>:2       action . entails nop
-<testdata>:3   >   prompt every doctor ......
-HINT: no roles defined yet
-
 
 parse
 include doctor.cfg
+include medical_cast.cfg
 script
-  action . entails nop
-  prompt every doctor ......
+  scene a entails for alice: cure
+  scene a mood starts red
+  scene a mood ends blue
+  storyline a.a
 end
 ----
 role doctor
   signal cures event at (?P<ts_now>)(?P<event>.*)
   :cure echo cured
 end
+cast
+  alice plays doctor
+  # alice plays from working directory alice
+  bob plays doctor(with_a_hat)
+  # bob plays from working directory bob
+end
+script
+  tempo 1s
+  scene a entails for alice: cure
+  scene a mood starts red
+  scene a mood ends blue
+  storyline a.a
+end
+# no audience defined
+# play
+# -- ACT 1: a.a --
+# 1:  (mood: red)
+# 2:  alice: cure!
+# 3:  (mood: blue)
+# 4:  (wait until 2s)
+# 4:  (mood: red)
+# 5:  alice: cure!
+# 6:  (mood: blue)
+# 7:  (wait until 3s)
+# end
+
+
+parse
+include doctor.cfg
+include medical_cast.cfg
+script
+  scene a entails for alice: cure
+  scene a mood starts red
+  scene a mood ends blue
+  scene b entails for bob: cure
+  scene b mood starts green
+  scene b mood ends orange
+  storyline a+b
+end
+----
+role doctor
+  signal cures event at (?P<ts_now>)(?P<event>.*)
+  :cure echo cured
+end
+cast
+  alice plays doctor
+  # alice plays from working directory alice
+  bob plays doctor(with_a_hat)
+  # bob plays from working directory bob
+end
+script
+  tempo 1s
+  scene a entails for alice: cure
+  scene a mood starts red
+  scene a mood ends blue
+  scene b entails for bob: cure
+  scene b mood starts green
+  scene b mood ends orange
+  storyline a+b
+end
+# no audience defined
+# play
+# -- ACT 1: a+b --
+# 1:  (mood: red)
+# 2:  alice: cure!
+# 2:  (meanwhile)
+# 2:  bob: cure!
+# 3:  (mood: orange)
+# 4:  (wait until 1s)
+# end
+
+
+###
+### Storyline combination
+###
+
+parse
+script
+  scene a mood starts red
+  storyline .a
+  storyline a.
+end
+----
+# no roles defined
 # no cast defined
 script
   tempo 1s
-  action . entails nop
-  # no stanzas defined, play will terminate immediately
+  scene a mood starts red
+  storyline aa
 end
 # no audience defined
+# play
+# -- ACT 1: aa --
+# 1:  (mood: red)
+# 2:  (wait until 1s)
+# 2:  (mood: red)
+# 3:  (wait until 2s)
+# end
 
+parse
+script
+  scene a mood starts red
+  storyline a
+  storyline a
+end
+----
+# no roles defined
+# no cast defined
+script
+  tempo 1s
+  scene a mood starts red
+  storyline a+a
+end
+# no audience defined
+# play
+# -- ACT 1: a+a --
+# 1:  (mood: red)
+# 2:  (wait until 1s)
+# end
+
+parse
+script
+  scene a mood starts red
+  storyline a aa
+  storyline aa a
+end
+----
+# no roles defined
+# no cast defined
+script
+  tempo 1s
+  scene a mood starts red
+  storyline a+aa a+aa
+end
+# no audience defined
+# play
+# -- ACT 1: a+aa --
+# 1:  (mood: red)
+# 2:  (wait until 1s)
+# 2:  (mood: red)
+# 3:  (wait until 2s)
+# -- ACT 2: a+aa --
+# 1:  (mood: red)
+# 2:  (wait until 1s)
+# 2:  (mood: red)
+# 3:  (wait until 2s)
+# end
+
+parse
+script
+  scene a mood starts red
+  storyline . a
+  storyline a .
+end
+----
+# no roles defined
+# no cast defined
+script
+  tempo 1s
+  scene a mood starts red
+  storyline a a
+end
+# no audience defined
+# play
+# -- ACT 1: a --
+# 1:  (mood: red)
+# 2:  (wait until 1s)
+# -- ACT 2: a --
+# 1:  (mood: red)
+# 2:  (wait until 1s)
+# end
+
+parse
+script
+  scene a mood starts red
+  scene a mood ends red
+  scene b mood starts blue
+  scene b mood ends blue
+  scene c mood starts yellow
+  scene c mood ends yellow
+  storyline c__c a+b  bc
+  storyline a+b  c__c .a+b
+end
+----
+# no roles defined
+# no cast defined
+script
+  tempo 1s
+  scene a mood starts red
+  scene a mood ends red
+  scene b mood starts blue
+  scene b mood ends blue
+  scene c mood starts yellow
+  scene c mood ends yellow
+  storyline c+a+bc a+b+cc bc+a+b
+end
+# no audience defined
+# play
+# -- ACT 1: c+a+bc --
+# 1:  (mood: yellow)
+# 2:  (mood: blue)
+# 3:  (wait until 1s)
+# 3:  (mood: yellow)
+# 4:  (mood: yellow)
+# 5:  (wait until 2s)
+# -- ACT 2: a+b+cc --
+# 1:  (mood: red)
+# 2:  (mood: yellow)
+# 3:  (wait until 1s)
+# 3:  (mood: yellow)
+# 4:  (mood: yellow)
+# 5:  (wait until 2s)
+# -- ACT 3: bc+a+b --
+# 1:  (mood: blue)
+# 2:  (mood: blue)
+# 3:  (wait until 1s)
+# 3:  (mood: yellow)
+# 4:  (mood: blue)
+# 5:  (wait until 2s)
+# end
 
 parse
 include doctor.cfg
 include medical_cast.cfg
 script
-  action . entails :unknownact
-  prompt alice  .....
+  scene a entails for every doctor: cure
+  scene b entails for alice: cure
+  scene b mood starts blue
+  storyline .a.b. .a+b.
 end
 ----
-parse error: <testdata>:5: action :unknownact (used in script action '.') is not defined for role "doctor"
---
-while parsing:
-<testdata>:3     script
-<testdata>:4       action . entails :unknownact
-<testdata>:5   >   prompt alice  .....
-HINT: available actions for role doctor: cure
+role doctor
+  signal cures event at (?P<ts_now>)(?P<event>.*)
+  :cure echo cured
+end
+cast
+  alice plays doctor
+  # alice plays from working directory alice
+  bob plays doctor(with_a_hat)
+  # bob plays from working directory bob
+end
+script
+  tempo 1s
+  scene a entails for alice: cure
+  scene a entails for bob: cure
+  scene b entails for alice: cure
+  scene b mood starts blue
+  storyline .a.b. .a+b.
+end
+# no audience defined
+# play
+# -- ACT 1: .a.b. --
+# 1:  (wait until 1s)
+# 1:  alice: cure!
+# 1:  (meanwhile)
+# 1:  bob: cure!
+# 2:  (wait until 3s)
+# 2:  (mood: blue)
+# 3:  alice: cure!
+# 4:  (wait until 5s)
+# -- ACT 2: .a+b. --
+# 1:  (wait until 1s)
+# 1:  (mood: blue)
+# 2:  alice: cure!
+# 2:  (meanwhile)
+# 2:  bob: cure!
+# 2:  (meanwhile)
+# 2:  alice: cure!
+# 3:  (wait until 3s)
+# end
+
+###
+### storyline errors
+###
 
 parse
-include doctor.cfg
-include medical_cast.cfg
 script
-  prompt alice  woo
+  storyline x
 end
 ----
-parse error: <testdata>:4: script action 'w' not defined
+parse error: <testdata>:2: in act 1, scene x not defined
 --
 while parsing:
-<testdata>:2     include medical_cast.cfg
-<testdata>:3     script
-<testdata>:4   >   prompt alice  woo
-HINT: no script actions defined yet
+<testdata>:1     script
+<testdata>:2   >   storyline x
+HINT: no scenes defined yet
+
+parse
+script
+  scene b mood starts blue
+  storyline x
+end
+----
+parse error: <testdata>:3: in act 1, scene x not defined
+--
+while parsing:
+<testdata>:1     script
+<testdata>:2       scene b mood starts blue
+<testdata>:3   >   storyline x
+HINT: available scenes: b
+
+parse
+script
+  scene b mood starts blue
+  storyline b b+
+end
+----
+parse error: <testdata>:3: in act 2: cannot use + at end of act
+--
+while parsing:
+<testdata>:1     script
+<testdata>:2       scene b mood starts blue
+<testdata>:3   >   storyline b b+
+
+parse
+script
+  scene b mood starts blue
+  storyline b +b
+end
+----
+parse error: <testdata>:3: in act 2: cannot use + at beginning of act
+--
+while parsing:
+<testdata>:1     script
+<testdata>:2       scene b mood starts blue
+<testdata>:3   >   storyline b +b
+
+parse
+script
+  scene b mood starts blue
+  storyline b b++b
+end
+----
+parse error: <testdata>:3: in act 2: sequence ++ is invalid
+--
+while parsing:
+<testdata>:1     script
+<testdata>:2       scene b mood starts blue
+<testdata>:3   >   storyline b b++b

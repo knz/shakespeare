@@ -3,27 +3,136 @@ package cmd
 import (
 	"fmt"
 	"io"
+	"strings"
 	"time"
+
+	"github.com/cockroachdb/errors"
 )
+
+type sceneSpec struct {
+	name      string
+	entails   []actionGroup
+	moodStart string
+	moodEnd   string
+}
+
+type actionGroup struct {
+	actor   *actor
+	actions []string
+}
+
+func (cfg *config) compileV2() error {
+	if len(cfg.storyLine) == 0 {
+		return nil
+	}
+
+	nopScene := &sceneSpec{name: "."}
+	cfg.play = nil
+	for _, script := range cfg.storyLine {
+		actLen := len(script)
+		thisAct := make([]scene, 0, actLen+1)
+		atTime := time.Duration(0)
+
+		moodStart, moodEnd := "", ""
+		thisScene := scene{}
+
+		for scriptIdx := 0; scriptIdx < len(script); scriptIdx++ {
+			scChar := script[scriptIdx]
+			var sc *sceneSpec
+			switch scChar {
+			case '.':
+				// nop: empty scene
+				sc = nopScene
+			case '+', '_':
+				return errors.AssertionFailedf("unexpected %c at position %d in: %s", scChar, scriptIdx, script)
+			default:
+				sc = cfg.sceneSpecs[scChar]
+			}
+
+			if sc.moodStart != "" && moodStart == "" {
+				moodStart = sc.moodStart
+			}
+			if sc.moodEnd != "" {
+				moodEnd = sc.moodEnd
+			}
+
+			for _, entail := range sc.entails {
+				thisScene.concurrentLines = append(thisScene.concurrentLines, scriptLine{actor: entail.actor})
+				curLine := &thisScene.concurrentLines[len(thisScene.concurrentLines)-1]
+
+				for _, act := range entail.actions {
+					failOk := false
+					if strings.HasSuffix(act, "?") {
+						act = strings.TrimSuffix(act, "?")
+						failOk = true
+					}
+					curLine.steps = append(curLine.steps,
+						step{typ: stepDo, action: act, failOk: failOk})
+				}
+				if len(curLine.steps) == 0 {
+					// No steps actually generated. Erase the last line.
+					thisScene.concurrentLines = thisScene.concurrentLines[:len(thisScene.concurrentLines)-1]
+				}
+			}
+
+			if scriptIdx < len(script)-1 && script[scriptIdx+1] == '+' {
+				// More concurrent actions.
+				scriptIdx++
+				continue
+			}
+
+			// End of scene.
+			if moodStart != "" {
+				// Inject an empty scene with just a mood change in the act at this time.
+				s := scene{
+					waitUntil:       atTime,
+					concurrentLines: []scriptLine{scriptLine{steps: []step{step{typ: stepAmbiance, action: moodStart}}}},
+				}
+				thisAct = append(thisAct, s)
+				moodStart = ""
+			}
+			thisScene.waitUntil = atTime
+			atTime += cfg.tempo
+			if !thisScene.isEmpty() {
+				thisAct = append(thisAct, thisScene)
+				thisScene = scene{}
+			}
+			if moodEnd != "" {
+				// Inject an empty scene with just a mood change in the act at this time.
+				s := scene{
+					waitUntil:       0,
+					concurrentLines: []scriptLine{scriptLine{steps: []step{step{typ: stepAmbiance, action: moodEnd}}}},
+				}
+				thisAct = append(thisAct, s)
+				moodEnd = ""
+			}
+		}
+
+		// Wait at end of act for remaining time.
+		thisAct = append(thisAct, scene{waitUntil: atTime})
+		cfg.play = append(cfg.play, thisAct)
+	}
+	return nil
+}
 
 // compileV1 transforms a programmatic description
 // of a play (using stanzas) into an explicit list of steps.
 func (cfg *config) compileV1() error {
-	// Compute the maximum script length.
-	scriptLen := 0
+	// Compute the maximum act length.
+	actLen := 0
 	for _, s := range cfg.stanzas {
-		if len(s.script) > scriptLen {
-			scriptLen = len(s.script)
+		if len(s.script) > actLen {
+			actLen = len(s.script)
 		}
 	}
 
 	// We know how long the play is going to be.
-	play := make([]scene, scriptLen+1)
+	thisAct := make([]scene, actLen+1)
 
 	// Compile the script.
 	atTime := time.Duration(0)
-	for i := 0; i < scriptLen; i++ {
-		thisScene := &play[i]
+	for i := 0; i < actLen; i++ {
+		thisScene := &thisAct[i]
 		thisScene.waitUntil = atTime
 		for _, s := range cfg.stanzas {
 			script := s.script
@@ -54,9 +163,9 @@ func (cfg *config) compileV1() error {
 		}
 		atTime += cfg.tempo
 	}
-	play[len(play)-1].waitUntil = atTime
+	thisAct[len(thisAct)-1].waitUntil = atTime
 
-	cfg.play = [][]scene{play}
+	cfg.play = [][]scene{thisAct}
 
 	return nil
 }
@@ -71,16 +180,24 @@ func (cfg *config) printSteps(w io.Writer, annot bool) {
 	}
 	fmt.Fprintln(w, "# play")
 	for k, act := range cfg.play {
-		fmt.Fprintf(w, "# -- ACT %d --\n", k+1)
+		var st string
+		if k < len(cfg.storyLine) {
+			st = fmt.Sprintf(": %s", cfg.storyLine[k])
+		}
+		fmt.Fprintf(w, "# -- ACT %d%s --\n", k+1, st)
+		atTime := time.Duration(0)
 		for i, s := range act {
-			if s.waitUntil != 0 && (i == len(act)-1 || len(s.concurrentLines) > 0) {
-				fmt.Fprintf(w, "#  (wait until %s)\n", s.waitUntil)
+			if s.waitUntil != 0 {
+				if i == len(act)-1 || (s.waitUntil != atTime && !s.isEmpty()) {
+					fmt.Fprintf(w, "# %2d:  (wait until %s)\n", i+1, s.waitUntil)
+				}
+				atTime = s.waitUntil
 			}
 			comma := ""
 			for _, line := range s.concurrentLines {
 				if len(line.steps) > 0 {
 					fmt.Fprint(w, comma)
-					comma = "#  (meanwhile)\n"
+					comma = fmt.Sprintf("# %2d:  (meanwhile)\n", i+1)
 				}
 				for _, step := range line.steps {
 					switch step.typ {
@@ -89,9 +206,9 @@ func (cfg *config) printSteps(w io.Writer, annot bool) {
 						if step.failOk {
 							actChar = '?'
 						}
-						fmt.Fprintf(w, "#  %s: %s%c\n", fan(line.actor.name), facn(step.action), actChar)
+						fmt.Fprintf(w, "# %2d:  %s: %s%c\n", i+1, fan(line.actor.name), facn(step.action), actChar)
 					case stepAmbiance:
-						fmt.Fprintf(w, "#  (%s: %s)\n", fkw("mood"), step.action)
+						fmt.Fprintf(w, "# %2d:  (%s: %s)\n", i+1, fkw("mood"), step.action)
 					}
 				}
 			}

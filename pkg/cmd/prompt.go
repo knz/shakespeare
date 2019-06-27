@@ -23,20 +23,26 @@ func (ap *app) prompt(
 	surpriseDur := 2 * ap.cfg.tempo.Seconds()
 
 	// Play.
-	for _, act := range ap.cfg.play {
-		// FIXME: reset timeout.
+	for j, act := range ap.cfg.play {
+		actNum := j + 1
+		actCtx := logtags.AddTag(ctx, "act", actNum)
+		actStart := timeutil.Now()
+		ap.narrate(I, "🎬", "act %d starts", actNum)
 		for i, scene := range act {
 			sceneNum := i + 1
-			sceneCtx := logtags.AddTag(ctx, "scene", sceneNum)
+			sceneCtx := logtags.AddTag(actCtx, "scene", sceneNum)
 
 			// log.Info(sceneCtx, showRunning(ap.stopper))
 
 			// Determine the amount of time to wait before the start of the
 			// next scene.
-			elapsed := timeutil.Now().Sub(ap.au.epoch)
-			toWait := scene.waitUntil - elapsed
-			if toWait > 0 {
-				log.Infof(sceneCtx, "at %.4fs, waiting for %.4fs", elapsed.Seconds(), toWait.Seconds())
+			var toWait time.Duration
+			if scene.waitUntil != 0 {
+				elapsed := timeutil.Now().Sub(actStart)
+				toWait = scene.waitUntil - elapsed
+				if toWait > 0 {
+					log.Infof(sceneCtx, "at %.4fs, waiting for %.4fs", elapsed.Seconds(), toWait.Seconds())
+				}
 			}
 
 			// Now wait for that time. Note: we have to fire a timer in any
@@ -60,13 +66,15 @@ func (ap *app) prompt(
 			}
 
 			extraMsg := ""
-			if toWait < 0 {
+			if toWait < -time.Duration(1)*time.Millisecond {
 				extraMsg = fmt.Sprintf(", running %.4fs behind schedule", -toWait.Seconds())
 			}
 
 			sceneTime := timeutil.Now()
-			elapsed = sceneTime.Sub(ap.au.epoch)
-			ap.narrate(I, "", "scene %d (~%ds in%s):", sceneNum, int(elapsed.Seconds()), extraMsg)
+			elapsedTotal := sceneTime.Sub(ap.au.epoch)
+			elapsedAct := sceneTime.Sub(actStart)
+			ap.narrate(I, "", "act %d, scene %d (~%ds total, ~%ds in act%s):",
+				actNum, sceneNum, int(elapsedTotal.Seconds()), int(elapsedAct.Seconds()), extraMsg)
 
 			// Now run the scene.
 			err := ap.runScene(sceneCtx, scene.concurrentLines, actionChan, moodCh)
@@ -102,6 +110,9 @@ func (ap *app) runScene(
 	defer stopOnError()
 
 	defer func() {
+		if r := recover(); r != nil {
+			panic(r)
+		}
 		// At the end of the scene, make runScene() return the collected
 		// errors.
 		err = collectErrors(ctx, nil, errCh, "prompt")
@@ -113,8 +124,20 @@ func (ap *app) runScene(
 	defer func() { wg.Wait() }()
 
 	for _, line := range lines {
-		// Start the scene for this actor.
 		a := line.actor
+		if a == nil {
+			// No actor: this is just a mood change.
+			// Ensure collectErrors finishes in any case.
+			errCh <- nil
+			if len(line.steps) != 1 || (len(line.steps) > 0 && line.steps[0].typ != stepAmbiance) {
+				return errors.WithContextTags(errors.AssertionFailedf("unexpected missing actor"), ctx)
+			}
+			if err := ap.runMoodChange(ctx, line.steps[0].action, actionChan, moodCh); err != nil {
+				return err
+			}
+			continue
+		}
+		// Start the scene for this actor.
 		steps := line.steps
 		lineCtx := logtags.AddTag(stopCtx, "actor", a.name)
 		lineCtx = logtags.AddTag(lineCtx, "role", a.role.name)
@@ -169,19 +192,7 @@ func (ap *app) runLine(
 
 		switch step.typ {
 		case stepAmbiance:
-			ap.narrate(I, "🎊", "    (mood %s)", step.action)
-			now := timeutil.Now()
-			elapsed := now.Sub(ap.au.epoch).Seconds()
-			if err := a.reportMoodEvent(stepCtx, ap.stopper, moodCh,
-				moodChange{ts: elapsed, newMood: step.action}); err != nil {
-				return err
-			}
-			ev := actionReport{
-				typ:       reportMoodChange,
-				startTime: elapsed,
-				output:    step.action,
-			}
-			if err := a.reportActionEvent(stepCtx, ap.stopper, actionChan, ev); err != nil {
+			if err := ap.runMoodChange(stepCtx, step.action, actionChan, moodCh); err != nil {
 				return err
 			}
 
@@ -196,7 +207,7 @@ func (ap *app) runLine(
 				return err
 			}
 			ev.failOk = step.failOk
-			reportErr := a.reportActionEvent(stepCtx, ap.stopper, actionChan, ev)
+			reportErr := reportActionEvent(stepCtx, ap.stopper, actionChan, ev)
 			if ev.result != resOk && !step.failOk {
 				return combineErrors(reportErr,
 					errors.WithContextTags(
@@ -211,7 +222,25 @@ func (ap *app) runLine(
 	return nil
 }
 
-func (a *actor) reportActionEvent(
+func (ap *app) runMoodChange(
+	ctx context.Context, newMood string, actionChan chan<- actionReport, moodCh chan<- moodChange,
+) error {
+	ap.narrate(I, "🎊", "    (mood %s)", newMood)
+	now := timeutil.Now()
+	elapsed := now.Sub(ap.au.epoch).Seconds()
+	if err := reportMoodEvent(ctx, ap.stopper, moodCh,
+		moodChange{ts: elapsed, newMood: newMood}); err != nil {
+		return err
+	}
+	ev := actionReport{
+		typ:       reportMoodChange,
+		startTime: elapsed,
+		output:    newMood,
+	}
+	return reportActionEvent(ctx, ap.stopper, actionChan, ev)
+}
+
+func reportActionEvent(
 	ctx context.Context, stopper *stop.Stopper, actionChan chan<- actionReport, ev actionReport,
 ) error {
 	select {
@@ -227,7 +256,7 @@ func (a *actor) reportActionEvent(
 	return nil
 }
 
-func (a *actor) reportMoodEvent(
+func reportMoodEvent(
 	ctx context.Context, stopper *stop.Stopper, moodCh chan<- moodChange, chg moodChange,
 ) error {
 	select {

@@ -81,6 +81,13 @@ func Run() (err error) {
 		log.Errorf(ctx, "compile error: %+v", err)
 		return errors.WithDetail(err, "(while compiling the script)")
 	}
+	if len(cfg.storyLine) == 0 && cfg.doPrint {
+		cfg.printSteps(os.Stdout, false /*annot*/)
+	}
+	if err = cfg.compileV2(); err != nil {
+		log.Errorf(ctx, "compile error: %+v", err)
+		return errors.WithDetail(err, "(while compiling the script)")
+	}
 
 	if cfg.doPrint {
 		cfg.printSteps(os.Stdout, false /*annot*/)

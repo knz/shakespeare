@@ -264,64 +264,88 @@ script
   # an optional tempo specification, the default is 1 second.
   [tempo <duration>]
 
-  # zero or more action aliases.
-  [ action <char> entails <sceneline> ] ...
+  # zero or more scene action definition
+  [ scene <char> entails for <target>: <actions>[?] [ ; <action>[?] ] ... ] ...
 
-  # zero or more script lines.
-  [ prompt <selector> <line> ] ...
+  # zero or more mood change
+  [ scene <char> mood <name> ] ...
+
+  # zero or more story line definition
+  [ storyline <line> ] ...
+
+  # zero or more story edits
+  [ edit s/<regexp>/<subst>/ ] ...
 end
 ```
 
 The tempo duration uses the Go duration syntax: a number followed by a
 time unit. For example `1s`, `100ms`, etc.
 
-An action alias is defined by the `action` keyword, followed by an
-ASCII printable character, followed by the `entails` keyword, followed
-by a "scene line": one or more of the following items, separated by semicolons:
+Actions in a scene are defined by the `scene` keyword, followed by a
+scene handle (ASCII letter or number), followed by the `entails for`
+keyword, followed by an actor selector, followed by `:`, followed by a
+list of actions separated by semicolons. Each action may optionally
+end with `?` (see below).
 
-- `:<name>`: a reference to a role action.
-- `:<name>?`: a reference to a role action; the test will tolerate
-  an error in the executed command.
-- `mood <name>`: sets the mood of the play to the given name.
-- `nop`: "no-operation": do nothing.
+A mood change can be configured by a scene using the `scene` keyword,
+followed by a scene handle, followed by `mood`, followed by a mood
+name.
 
-A script line is defined by the `prompt` keyword, followed by an actor
-selector, followed by a string of control chars.
+A storyline is defined by the `storyline` keyword, followed by
+zero or more act strings separated by spaces. Any occurrence of `_` in these strings
+is ignored during parsing, and can thus be used to pad strings visually.
 
 An actor selector is either:
 
 - `<name>`: a reference to a single actor/character.
 - `every <name>`: a reference to all actors playing the given role.
 
+Act strings are composed as follows:
+
+- the special notation `.` for "no operation";
+- a control character that refers to a scene definition;
+- a concurrent group, composed of two or more scene references separated by `+`.
+
 ### Semantics
 
 Constraints:
-- each action character must be unique.
-- the control characters used in script lines must be defined by `action` lines prior.
-- the actions entailed by the control chars must be valid for the selected actors' role.
+- each scene handle must be unique.
+- the scene handles used in story lines must be defined by `scene` lines prior.
 
 Semantics:
 
-- Each column of control chars across all script lines defines a *scene*.
+- the storyline is decomposed in *story acts* at space boundaries.
 
-- `shakespeare` executes the script lines of each actor inside a
-  single scene concurrently with each other.
+- each act is then decomposed in *scene groups* consisting of either
+  "do nothing (`.`), a single scene refered by its handle, or
+  two or more scenes refered by handles separated by `+`.
 
-- `shakespeare` waits until each actor has finished running its line
-  in a scene before starting the next scene.
+- if there are multiple `storyline` definitions, they are *combined*
+  during parsing, merging the scene groups on all definitions, and
+  aligning the acts. For example `..a bc ` merged with `a b c` produces
+  `a.a b+bc c`.
 
-- Each scene is not allowed to start before its minimum start time,
-  defined as the position of the column times the tempo. For example,
-  with the default tempo of 1s, the 4th column scene is not allowed
-  to start before 4s has elapsed since the start of the test.
+- each `edit` line is processed during parsing by performing a regular
+  sed-like regexp substitution on the storyline computed so far.
+
+- `shakespeare` performs each act sequentially. Within one act,
+  scene groups are performed sequentially. Within one scene group,
+  scenes are performed concurrently. There is an execution barrier
+  at the end of each scene group.
+
+- Each scene group is not allowed to start before its minimum start
+  time, defined as the position of the column inside the act times the
+  tempo. For example, with the default tempo of 1s, the 4th column
+  scene is not allowed to start before 4s has elapsed since the start
+  of the act.
 
 It is possible for actions to last longer than the tempo interval. When this occurs,
 further scenes may be delayed further than their minimum start time, in which
 case they will start immediately when their previous scene completes.
 
-Therefore, the length of the longest script line, multiplied by the
-tempo, determines the *minimum* play duration (assuming no errors
-occur), but a play may last longer.
+Therefore, the total number of scene groups, multiplied by the tempo,
+determines the *minimum* play duration (assuming no errors occur), but
+a play may last longer.
 
 ## Audience configuration
 

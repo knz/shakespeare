@@ -314,7 +314,7 @@ func (ap *app) subPlots(
 		fmt.Fprintf(f, "set multiplot layout %d,1\n", len(plotGroups)+1)
 
 		// Ensure all the x-axes are aligned.
-		fmt.Fprintln(f, "set lmargin at screen 0.05\nset rmargin at screen 0.98\n")
+		fmt.Fprintln(f, "set lmargin at screen 0.05\nset rmargin at screen 0.98")
 
 		// Auditor faces.
 		fmt.Fprintf(f, `array faces[4]

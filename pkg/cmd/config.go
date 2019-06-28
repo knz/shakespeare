@@ -119,6 +119,8 @@ func (cfg *config) initArgs(ctx context.Context) error {
 	pflag.BoolVarP(&cfg.earlyExit, "stop-at-first-violation", "S", false, "terminate the play as soon as an auditor is dissatisfied")
 	pflag.StringSliceVarP(&cfg.includePath, "search-dir", "I", []string{}, "add this directory to the search path for include directives")
 	pflag.BoolVar(&cfg.asciiOnly, "ascii-only", false, "do not display unicode emojis")
+	var showVersion bool
+	pflag.BoolVar(&showVersion, "version", false, "show version information and exit")
 
 	// Load the go flag settings from the log package into pflag.
 	pflag.CommandLine.AddGoFlagSet(flag.CommandLine)
@@ -128,6 +130,12 @@ func (cfg *config) initArgs(ctx context.Context) error {
 
 	// Parse the command-line.
 	pflag.Parse()
+
+	// Just version?
+	if showVersion {
+		fmt.Println("shakespeare", versionName)
+		os.Exit(0)
+	}
 
 	// Derive the artifacts directory.
 	cfg.artifactsDir = filepath.Join(cfg.dataDir, "artifacts")
@@ -163,7 +171,10 @@ func newConfig() *config {
 }
 
 // printCfg prints the current configuration.
-func (cfg *config) printCfg(w io.Writer, skipComments, annot bool) {
+func (cfg *config) printCfg(w io.Writer, skipComments, skipVer, annot bool) {
+	if !skipComments && !skipVer {
+		fmt.Fprintln(w, "# configuration parsed by shakespeare", versionName)
+	}
 	fkw, fsn, fan, frn, facn, fann, fmod, fre, fsh := fid, fid, fid, fid, fid, fid, fid, fid, fid
 	if annot {
 		fkw = fw("kw")   // keyword

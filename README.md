@@ -80,6 +80,7 @@ This overall operation is illustrated by the following diagram:
 | `-q`, `--quiet`                   | false                | Run quietly.                                                                                        |
 | `-I`, `--search-dir`              | .                    | Directory to search for included configurations.                                                    |
 | `--ascii-only`                    | false                | Avoid printing out special unicode characters.                                                      |
+| `--version`                       | false                | Show version number and exit.                                                                       |
 | `--log-dir`                       | `logs` in output dir | If non-empty, copy the logs to that directory.                                                      |
 | `--logtostderr`                   | NONE                 | Copy every log message at or above this threshold to stderr (choices: INFO, WARNING, ERROR, FATAL). |
 

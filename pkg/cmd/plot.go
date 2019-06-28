@@ -168,10 +168,10 @@ pre,code{font-family: 'Nova Mono', monospace;}
 		fmt.Fprintln(f, divider)
 		fmt.Fprintln(f, "<p>For your curious eyes, the full book for this play:</p>")
 		fmt.Fprintln(f, "<div style='margin-left: auto; margin-right: auto; max-width: 800px'><pre style='font-size: small'>")
-		ap.cfg.printCfg(f, true /*skipComs*/, true /*annot*/)
+		ap.cfg.printCfg(f, true /*skipComs*/, true /*skipVer*/, true /*annot*/)
 		ap.cfg.printSteps(f, true /*annot*/)
 		fmt.Fprintln(f, "</pre></div>")
-		fmt.Fprintln(f, "<p><em><small>a report produced by <a href='https://github.com/knz/shakespeare'>Shakespeare</a></small></em></p>")
+		fmt.Fprintf(f, "<p><em><small>a report produced by <a href='https://github.com/knz/shakespeare'>Shakespeare</a>, %s</small></em></p>\n", versionName)
 		fmt.Fprintln(f, `</body></html>`)
 		return nil
 	}(); err != nil {

@@ -33,7 +33,7 @@ func TestParse(t *testing.T) {
 				return fmt.Sprintf("parse error: %s\n", renderError(err))
 			}
 			var out bytes.Buffer
-			cfg.printCfg(&out, false, false)
+			cfg.printCfg(&out, false, true, false)
 			// FIXME: remove this when satisfied
 			if len(cfg.stanzas) > 0 {
 				if err := cfg.compileV1(); err != nil {
@@ -64,7 +64,7 @@ func TestParse(t *testing.T) {
 				t.Fatalf("reparse error: %s\n", renderError(err))
 			}
 			var out2 bytes.Buffer
-			cfg.printCfg(&out2, false, false)
+			cfg.printCfg(&out2, false, true, false)
 
 			if len(cfg.stanzas) > 0 {
 				if err := cfg.compileV1(); err != nil {

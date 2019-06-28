@@ -72,7 +72,7 @@ func Run() (err error) {
 	}
 
 	if cfg.doPrint {
-		cfg.printCfg(os.Stdout, false /*skipComs*/, false /*annot*/)
+		cfg.printCfg(os.Stdout, false /*skipComs*/, false /*skipVer*/, false /*annot*/)
 		fmt.Println()
 	}
 

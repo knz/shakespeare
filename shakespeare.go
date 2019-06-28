@@ -8,6 +8,8 @@ import (
 	"github.com/knz/shakespeare/pkg/crdb/log"
 )
 
+//go:generate sh vergen.sh
+
 func main() {
 	if err := cmd.Run(); err != nil {
 		cmd.RenderError(log.OrigStderr, err)

@@ -227,23 +227,18 @@ func (a *actor) runActorCommandWithConsumer(
 
 func (a *actor) makeShCmd(ctx context.Context, bindCtx bool, pcmd cmd) *exec.Cmd {
 	var script bytes.Buffer
-	// set -euxo pipefail:
+	// set -euao pipefail:
 	//    -e fail commands on error
 	//    -u fail command if a variable is not set
 	//    -o pipefail   fail entire pipeline if one command fails
-	script.WriteString(`set -euo pipefail; `)
+	//    -a auto-exports all variables
+	script.WriteString(`set -euao pipefail; `)
 	// Ensure files are created from the working directory.
-	script.WriteString(`export TMPDIR=$PWD HOME=$PWD/..; `)
+	script.WriteString(`TMPDIR=$PWD; HOME=$PWD/..; `)
 	// Trace the execution. We do this before setting the
 	// environment so as to see the expanded values.
 	script.WriteString(`set -x; `)
-	if a.extraAssign != "" {
-		script.WriteString("export ")
-		script.WriteString(a.extraAssign)
-		script.WriteString("; ")
-	}
 	if a.extraEnv != "" {
-		script.WriteString("export ")
 		script.WriteString(a.extraEnv)
 		script.WriteString("; ")
 	}

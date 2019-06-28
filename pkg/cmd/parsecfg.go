@@ -557,7 +557,13 @@ func (cfg *config) parseActors(line string) error {
 			if err := addOneActor(thisActorName, extraEnv); err != nil {
 				return err
 			}
-			cfg.actors[thisActorName].extraAssign = "i=" + ns
+			a := cfg.actors[thisActorName]
+			extraVar := "i=" + ns
+			if a.extraEnv != "" {
+				a.extraEnv = extraVar + "; " + a.extraEnv
+			} else {
+				a.extraEnv = extraVar
+			}
 		}
 	} else {
 		return errors.New("unknown syntax")

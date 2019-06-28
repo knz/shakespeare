@@ -219,9 +219,6 @@ func (cfg *config) printCfg(w io.Writer, skipComments, annot bool) {
 			}
 			fmt.Fprintln(w)
 			if !skipComments {
-				if a.extraAssign != "" {
-					fmt.Fprintf(w, "  # %s also runs commands with %s\n", fan(a.name), a.extraAssign)
-				}
 				fmt.Fprintf(w, "  # %s plays from working directory %s\n", fan(a.name), a.workDir)
 			}
 			for _, sig := range a.sinkNames {
@@ -416,12 +413,11 @@ func (p *sigParser) fmt(fsn, fkw, fre func(string) string) string {
 
 // actor is an agent that can participate in a play.
 type actor struct {
-	name        string
-	role        *role
-	workDir     string
-	shellPath   string
-	extraAssign string
-	extraEnv    string
+	name      string
+	role      *role
+	workDir   string
+	shellPath string
+	extraEnv  string
 	// sinks is the set of sinks that are listening to this
 	// actor's signal(s). The map key is the signal name, the value
 	// is the sink.

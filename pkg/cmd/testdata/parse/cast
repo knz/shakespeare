@@ -48,17 +48,13 @@ role doctor
   :cure echo cured
 end
 cast
-  a1 plays doctor
-  # a1 also runs commands with i=1
+  a1 plays doctor with i=1
   # a1 plays from working directory a1
-  a2 plays doctor
-  # a2 also runs commands with i=2
+  a2 plays doctor with i=2
   # a2 plays from working directory a2
-  a3 plays doctor
-  # a3 also runs commands with i=3
+  a3 plays doctor with i=3
   # a3 plays from working directory a3
-  b1 plays doctor with x=123
-  # b1 also runs commands with i=1
+  b1 plays doctor with i=1; x=123
   # b1 plays from working directory b1
 end
 script

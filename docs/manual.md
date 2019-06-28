@@ -31,7 +31,8 @@ as if they appeared in a `script` section.
 |-----------------------------------|----------------------|-----------------------------------------------------------------------------------------------------|
 | `-o`, `--output-dir`              | `.`                  | Directory where to generate artifacts, output data files and the plot script.                       |
 | `-S`, `--stop-at-first-violation` | false                | Stop the play as soon as an auditor detects a violation.                                            |
-| `-s`, `--extra-script`            | (none)               | Additional lines of `script` configuration                                                          |
+| `-D`, `--define`                  | (none)               | Preprocessing variable definitions.                                                                 |
+| `-s`, `--extra-script`            | (none)               | Additional lines of `script` configuration.                                                         |
 | `-p`, `--print-cfg`               | false                | Print configuration after parsing and compilation.                                                  |
 | `-n`, `--dry-run`                 | false                | Stop after parsing the configuration and compiling the steps (do not actually execute the script).  |
 | `-q`, `--quiet`                   | false                | Run quietly.                                                                                        |
@@ -123,6 +124,7 @@ end
 
 Here are the possible top level elements of a configuration:
 
+- `parameter ...`: a definition for a preprocessing parameter.
 - `role ... end`: a definition for one role.
 - `cast ... end`: some definitions for the cast.
 - `script ... end`: some definitions for the script.
@@ -140,6 +142,29 @@ the configuration. They are combined in the results.
 
 Tip: use `shakespeare -n -p` to print out the final configuration
 after all directives have been processed.
+
+## Configuration preprocessing
+
+`shakespeare` provides a preprocessing facility as follows:
+
+- preprocessing parameters can be defined with `-D` on the command
+  line, or `parameter <name> defaults to <value>` inside the
+  configuration.
+
+- while reading/parsing the configuration, any occurrence of a name of
+  a preprocessing parameter enclosed in `~...~` is replaced by its
+  configured value. For example, with `-Dfoo=123`, occurrences of
+  `~foo~` are replaced by `123`.
+
+- this substitution occurs specifically on the following fields:
+
+  - the text provided to `title` and `attention` clauses.
+  - role names in role definitions and "extends" clauses, e.g. `role ~name~` or `role .. extends ~name~`.
+  - role names in `every ` clauses used to define audiences and scenes, e.g. `alice watches every ~role~`.
+  - the multiplicity of multi-actor definitions, e.g. `alice* play ~N~ doctor`.
+  - the extra shell environment provided to an actor, e.g. `alice plays doctor with ~stuff~`.
+  - evaluable expressions, e.g. `alice expects always: v < ~N~`.
+  - include directives, e.g. `include ~filename~.cfg`.
 
 ## Roles configuration
 

@@ -28,7 +28,7 @@ func (cfg *config) parseCfg(ctx context.Context, rd *reader) error {
 		{audienceRe, cfg.parseAudience},
 	}
 	for {
-		line, pos, stop, skip, err := rd.readLine(ctx)
+		line, pos, stop, skip, err := rd.readLine(ctx, cfg)
 		if err != nil || stop {
 			return err
 		} else if skip {
@@ -36,20 +36,43 @@ func (cfg *config) parseCfg(ctx context.Context, rd *reader) error {
 		}
 
 		if title, ok := withPrefix(line, "title "); ok {
+			title, err = cfg.preprocReplace(title)
+			if err != nil {
+				return pos.wrapErr(err)
+			}
 			cfg.titleStrings = append(cfg.titleStrings, title)
 		} else if att, ok := withPrefix(line, "attention "); ok {
+			att, err = cfg.preprocReplace(att)
+			if err != nil {
+				return pos.wrapErr(err)
+			}
 			cfg.seeAlso = append(cfg.seeAlso, att)
 		} else if auth, ok := withPrefix(line, "author "); ok {
+			// Author strings are not modified by preprocessing!
 			cfg.authors = append(cfg.authors, auth)
+		} else if p := pw(paramRe); p.m(line) {
+			name, err := p.id("name")
+			if err != nil {
+				return pos.wrapErr(err)
+			}
+			val := p.get("val")
+			if _, ok := cfg.pVars[name]; !ok {
+				cfg.pVars[name] = val
+				cfg.pVarNames = append(cfg.pVarNames, name)
+			}
 		} else if p := pw(roleRe); p.m(line) {
 			// The "role" syntax is special because the role name
 			// is listed in the heading line.
-			roleName, err := p.id("rolename")
+			roleName, err := p.idp("rolename", cfg)
 			if err != nil {
 				return pos.wrapErr(err)
 			}
 			extends := p.get("extends")
 			extends, _ = withPrefix(extends, "extends")
+			extends, err = cfg.preprocReplace(extends)
+			if err != nil {
+				return pos.wrapErr(err)
+			}
 			if extends != "" {
 				if err := checkIdent(roleName); err != nil {
 					return pos.wrapErr(err)
@@ -66,7 +89,7 @@ func (cfg *config) parseCfg(ctx context.Context, rd *reader) error {
 			for _, parser := range topLevelParsers {
 				if parser.headerRe.MatchString(line) {
 					foundParser = true
-					if err := parseSection(ctx, rd, parser.parseFn); err != nil {
+					if err := cfg.parseSection(ctx, rd, parser.parseFn); err != nil {
 						// Error is already decorated by parseSection.
 						return err
 					}
@@ -83,11 +106,15 @@ func compileRe(re string) *regexp.Regexp {
 	return regexp.MustCompile(fmt.Sprintf("(?s:%s)", re))
 }
 
+var paramRe = compileRe(`^parameter\s+(?P<name>\S+)\s+defaults\s+to\s+(?P<val>.*)$`)
+
 // parseSection applies the given lineParser to every line inside a section,
 // and stops at the "end" keyword.
-func parseSection(ctx context.Context, rd *reader, lineParser func(line string) error) error {
+func (cfg *config) parseSection(
+	ctx context.Context, rd *reader, lineParser func(line string) error,
+) error {
 	for {
-		line, pos, stop, skip, err := rd.readLine(ctx)
+		line, pos, stop, skip, err := rd.readLine(ctx, cfg)
 		if err != nil || stop {
 			return err
 		} else if skip {
@@ -383,7 +410,7 @@ func (cfg *config) parseRole(
 	cfg.roles[roleName] = thisRole
 	cfg.roleNames = append(cfg.roleNames, roleName)
 
-	err := parseSection(ctx, rd, func(line string) error {
+	err := cfg.parseSection(ctx, rd, func(line string) error {
 		if p := pw(actionDefRe); p.m(line) {
 			aName, err := p.id("actionname")
 			if err != nil {
@@ -493,7 +520,7 @@ var actorDefRe = compileRe(`^(?P<actorname>\S+?)(?P<star>\*?)\s+(?:plays|play\s+
 
 func (cfg *config) parseActors(line string) error {
 	if p := pw(actorDefRe); p.m(line) {
-		roleName, err := p.id("rolename")
+		roleName, err := p.idp("rolename", cfg)
 		if err != nil {
 			return err
 		}
@@ -503,6 +530,10 @@ func (cfg *config) parseActors(line string) error {
 		}
 
 		mul := p.get("mul")
+		mul, err = cfg.preprocReplace(mul)
+		if err != nil {
+			return err
+		}
 
 		r, ok := cfg.roles[roleName]
 		if !ok && mul != "" {
@@ -516,6 +547,10 @@ func (cfg *config) parseActors(line string) error {
 		}
 
 		extraEnv := p.getp("extraenv", "with")
+		extraEnv, err = cfg.preprocReplace(extraEnv)
+		if err != nil {
+			return err
+		}
 
 		addOneActor := func(actorName, extraEnv string) error {
 			if _, ok := cfg.actors[actorName]; ok {
@@ -886,6 +921,16 @@ func (p *parser) id(part string) (string, error) {
 	return s, checkIdent(s)
 }
 
+func (p *parser) idp(part string, cfg *config) (string, error) {
+	n := p.get(part)
+	var err error
+	n, err = cfg.preprocReplace(n)
+	if err != nil {
+		return "", err
+	}
+	return n, checkIdent(n)
+}
+
 func (p *parser) getp(part, prefix string) string {
 	res := p.get(part)
 	return strings.TrimSpace(strings.TrimPrefix(res, prefix))
@@ -898,22 +943,20 @@ func withPrefix(line, prefix string) (string, bool) {
 	return strings.TrimSpace(strings.TrimPrefix(line, prefix)), true
 }
 
-var preprocRe = compileRe(`%\w*%`)
+var preprocRe = compileRe(`~\w+~`)
 
 // preprocReplace replaces occurrences of %pvar% by val in str.
-func preprocReplace(str, pvar, val string) (string, error) {
-	ref := "%" + pvar + "%"
+func (cfg *config) preprocReplace(str string) (string, error) {
 	var err error
 	res := preprocRe.ReplaceAllStringFunc(str, func(m string) string {
-		switch m {
-		case "%%":
-			return "%"
-		case ref:
+		vn := m[1 : len(m)-1]
+		if val, ok := cfg.pVars[vn]; ok {
 			return val
-		default:
-			err = combineErrors(err, errors.Newf("undefined variable: %s", m))
-			return m
 		}
+		err = combineErrors(err, errors.Newf("undefined parameter: %s", m))
+		return m
 	})
-	return res, err
+	return res, errors.WithHint(
+		explainAlternatives(err, "parameters", cfg.pVars),
+		"maybe use -D...?")
 }

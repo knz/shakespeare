@@ -42,6 +42,11 @@ type config struct {
 	asciiOnly bool
 	// Additional lines of script config.
 	extraScript []string
+	// Preprocessing parameter definitions.
+	defines []string
+	// Preprocessing variables.
+	pVars     map[string]string
+	pVarNames []string
 
 	// titleStrings is the list of title strings encountered
 	// in the configuration.
@@ -124,6 +129,7 @@ func (cfg *config) initArgs(ctx context.Context) error {
 	var showVersion bool
 	pflag.BoolVar(&showVersion, "version", false, "show version information and exit")
 	pflag.StringSliceVarP(&cfg.extraScript, "extra-script", "s", []string{}, "additional lines of script configuration, processed at end")
+	pflag.StringSliceVarP(&cfg.defines, "define", "D", []string{}, "preprocessing variable definition (eg -Dfoo=bar)")
 
 	// Load the go flag settings from the log package into pflag.
 	pflag.CommandLine.AddGoFlagSet(flag.CommandLine)
@@ -138,6 +144,11 @@ func (cfg *config) initArgs(ctx context.Context) error {
 	if showVersion {
 		fmt.Println("shakespeare", versionName)
 		os.Exit(0)
+	}
+
+	// Derive the initial preproc variables assignments.
+	if err := cfg.parseDefines(); err != nil {
+		return err
 	}
 
 	// Derive the artifacts directory.
@@ -155,6 +166,26 @@ func (cfg *config) initArgs(ctx context.Context) error {
 	return nil
 }
 
+func (cfg *config) parseDefines() error {
+	for _, d := range cfg.defines {
+		// Split variable=value.
+		dname := d
+		dval := ""
+		idx := strings.IndexByte(d, '=')
+		if idx >= 0 {
+			dname = d[:idx]
+			dval = d[idx+1:]
+		}
+		if _, ok := cfg.pVars[dname]; ok {
+			// Define already exists. Do nothing.
+			continue
+		}
+		cfg.pVars[dname] = dval
+		cfg.pVarNames = append(cfg.pVarNames, dname)
+	}
+	return nil
+}
+
 // newConfig creates a config with defaults.
 func newConfig() *config {
 	cfg := &config{
@@ -162,6 +193,7 @@ func newConfig() *config {
 		actors:     make(map[string]*actor),
 		actions:    make(map[byte][]*action),
 		sceneSpecs: make(map[byte]*sceneSpec),
+		pVars:      make(map[string]string),
 		stanzas:    nil,
 		tempo:      time.Second,
 		audience:   make(map[string]*audienceMember),
@@ -178,6 +210,7 @@ func (cfg *config) printCfg(w io.Writer, skipComments, skipVer, annot bool) {
 	if !skipComments && !skipVer {
 		fmt.Fprintln(w, "# configuration parsed by shakespeare", versionName)
 	}
+
 	fkw, fsn, fan, frn, facn, fann, fmod, fre, fsh := fid, fid, fid, fid, fid, fid, fid, fid, escapeNl
 	if annot {
 		fkw = fw("kw")                                               // keyword
@@ -190,6 +223,7 @@ func (cfg *config) printCfg(w io.Writer, skipComments, skipVer, annot bool) {
 		fre = fw("re")                                               // regexp
 		fsh = func(s string) string { return fw("sh")(escapeNl(s)) } // shell script
 	}
+
 	for _, title := range cfg.titleStrings {
 		fmt.Fprintln(w, fkw("title"), title)
 	}
@@ -654,6 +688,11 @@ type moodPeriod struct {
 // - <actorname>       -> that specific actor
 func (cfg *config) selectActors(target string) (*role, []*actor, error) {
 	if roleName, ok := withPrefix(target, "every "); ok {
+		var err error
+		roleName, err = cfg.preprocReplace(roleName)
+		if err != nil {
+			return nil, nil, err
+		}
 		if err := checkIdent(roleName); err != nil {
 			return nil, nil, err
 		}

@@ -161,15 +161,15 @@ func (p *pos) wrapErr(err error) error {
 }
 
 func (r *reader) readLine(
-	ctx context.Context,
+	ctx context.Context, cfg *config,
 ) (line string, p pos, stop bool, skip bool, err error) {
-	return r.readers[len(r.readers)-1].readLine(ctx, r)
+	return r.readers[len(r.readers)-1].readLine(ctx, r, cfg)
 }
 
 // readLine reads a logical line of specification. It may be split
 // across multiple input lines using backslashes.
 func (r *subreader) readLine(
-	ctx context.Context, pr *reader,
+	ctx context.Context, pr *reader, cfg *config,
 ) (line string, p pos, stop bool, skip bool, err error) {
 	startPos := pos{lineno: r.lineno, r: r}
 	for {
@@ -218,6 +218,10 @@ func (r *subreader) readLine(
 		}
 
 		fName := strings.TrimPrefix(line, "include ")
+		fName, err = cfg.preprocReplace(fName)
+		if err != nil {
+			return "", pos{}, true, false, startPos.wrapErr(err)
+		}
 
 		// The first include search path will be the path of the file
 		// we're currently reading.

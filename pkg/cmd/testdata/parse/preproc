@@ -1,0 +1,195 @@
+parse
+parameter s defaults to foo
+title hello ~s~
+----
+title hello foo
+# no roles defined
+# no cast defined
+script
+  tempo 1s
+  # no stanzas defined, play will terminate immediately
+end
+# no audience defined
+
+parse
+parameter s defaults to foo
+attention hello ~s~
+----
+attention hello foo
+# no roles defined
+# no cast defined
+script
+  tempo 1s
+  # no stanzas defined, play will terminate immediately
+end
+# no audience defined
+
+
+parse
+parameter s defaults to foo
+role ~s~
+end
+----
+role foo
+end
+# no cast defined
+script
+  tempo 1s
+  # no stanzas defined, play will terminate immediately
+end
+# no audience defined
+
+parse
+parameter s defaults to foo
+role foo
+  spotlight true
+end
+role bar extends ~s~
+end
+----
+role foo
+  spotlight true
+end
+role bar
+  spotlight true
+end
+# no cast defined
+script
+  tempo 1s
+  # no stanzas defined, play will terminate immediately
+end
+# no audience defined
+
+parse
+parameter s defaults to doctor
+include ~s~.cfg
+----
+role doctor
+  spotlight true
+  signal cures event at (?P<ts_now>)(?P<event>.*)
+  :cure echo cured
+end
+# no cast defined
+script
+  tempo 1s
+  # no stanzas defined, play will terminate immediately
+end
+# no audience defined
+
+parse
+parameter s defaults to foo
+role foo
+end
+cast
+  n plays ~s~
+end
+----
+role foo
+end
+cast
+  n plays foo
+  # n plays from working directory n
+end
+script
+  tempo 1s
+  # no stanzas defined, play will terminate immediately
+end
+# no audience defined
+
+parse
+parameter s defaults to 3
+role foo
+end
+cast
+  n* play ~s~ foo
+end
+----
+role foo
+end
+cast
+  n1 plays foo with i=1
+  # n1 plays from working directory n1
+  n2 plays foo with i=2
+  # n2 plays from working directory n2
+  n3 plays foo with i=3
+  # n3 plays from working directory n3
+end
+script
+  tempo 1s
+  # no stanzas defined, play will terminate immediately
+end
+# no audience defined
+
+parse
+parameter s defaults to foo
+parameter s defaults to bar
+role ~s~
+end
+----
+role foo
+end
+# no cast defined
+script
+  tempo 1s
+  # no stanzas defined, play will terminate immediately
+end
+# no audience defined
+
+parse
+parameter s defaults to foo
+role foo
+  spotlight true
+  signal x event at (?P<ts_now>)(?P<event>.*)
+end
+audience
+  alice watches every ~s~ x
+end
+----
+role foo
+  spotlight true
+  signal x event at (?P<ts_now>)(?P<event>.*)
+end
+# no cast defined
+script
+  tempo 1s
+  # no stanzas defined, play will terminate immediately
+end
+# no audience defined
+
+parse
+parameter s defaults to foo
+role bar
+end
+cast
+  alice plays bar with ~s~=123
+end
+----
+role bar
+end
+cast
+  alice plays bar with foo=123
+  # alice plays from working directory alice
+end
+script
+  tempo 1s
+  # no stanzas defined, play will terminate immediately
+end
+# no audience defined
+
+
+parse
+parameter s defaults to 123
+audience
+  alice expects always: ~s~ < 456
+end
+----
+# no roles defined
+# no cast defined
+script
+  tempo 1s
+  # no stanzas defined, play will terminate immediately
+end
+audience
+  alice audits throughout
+  alice expects always: 123 < 456
+end

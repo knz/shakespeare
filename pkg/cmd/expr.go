@@ -21,6 +21,12 @@ type expr struct {
 // validate and compile a govaluate expression. It also extracts the
 // variable dependencies of the expression.
 func (a *audienceMember) checkExpr(cfg *config, expSrc string) (expr, error) {
+	var err error
+	expSrc, err = cfg.preprocReplace(expSrc)
+	if err != nil {
+		return expr{}, err
+	}
+
 	compiledExp, err := govaluate.NewEvaluableExpressionWithFunctions(expSrc, evalFunctions)
 	if err != nil {
 		return expr{}, err

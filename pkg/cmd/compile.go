@@ -214,6 +214,9 @@ func (cfg *config) printSteps(w io.Writer, annot bool) {
 			}
 		}
 	}
+	if cfg.repeatActNum > 0 {
+		fmt.Fprintf(w, "# -- REPEATING FROM ACT %d --\n", cfg.repeatActNum)
+	}
 	fmt.Fprintln(w, "# end")
 }
 

@@ -382,6 +382,66 @@ end
 # end
 
 ###
+### repeat
+###
+
+parse
+script
+  scene a mood ends blue
+  storyline ... a ...
+  repeat from a
+end
+----
+# no roles defined
+# no cast defined
+script
+  tempo 1s
+  scene a mood ends blue
+  storyline ... a ...
+  repeat from a
+  # (repeating act 2 and following)
+end
+# no audience defined
+# play
+# -- ACT 1: ... --
+#  1:  (wait until 3s)
+# -- ACT 2: a --
+#  1:  (mood: blue)
+#  2:  (wait until 1s)
+# -- ACT 3: ... --
+#  1:  (wait until 3s)
+# -- REPEATING FROM ACT 2 --
+# end
+
+parse
+script
+  scene a mood ends blue
+  storyline ... a ...
+  repeat from b
+end
+----
+# no roles defined
+# no cast defined
+script
+  tempo 1s
+  scene a mood ends blue
+  storyline ... a ...
+  repeat from b
+  # (no matching act, nothing is repeated)
+end
+# no audience defined
+# play
+# -- ACT 1: ... --
+#  1:  (wait until 3s)
+# -- ACT 2: a --
+#  1:  (mood: blue)
+#  2:  (wait until 1s)
+# -- ACT 3: ... --
+#  1:  (wait until 3s)
+# end
+
+
+###
 ### storyline errors
 ###
 

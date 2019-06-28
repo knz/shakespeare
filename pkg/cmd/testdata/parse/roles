@@ -100,3 +100,21 @@ while parsing:
 <testdata>:1     role dupsig
 <testdata>:2       signal foo event at (?P<ts_now>)(?P<event>.*)
 <testdata>:3   >   signal foo event at (?P<ts_now>)(?P<event>.*)
+
+# multiline cmds
+parse
+role multiline
+  spotlight true \
+    && false
+end
+----
+role multiline
+  spotlight true \
+    && false
+end
+# no cast defined
+script
+  tempo 1s
+  # no stanzas defined, play will terminate immediately
+end
+# no audience defined

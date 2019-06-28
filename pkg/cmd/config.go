@@ -175,17 +175,17 @@ func (cfg *config) printCfg(w io.Writer, skipComments, skipVer, annot bool) {
 	if !skipComments && !skipVer {
 		fmt.Fprintln(w, "# configuration parsed by shakespeare", versionName)
 	}
-	fkw, fsn, fan, frn, facn, fann, fmod, fre, fsh := fid, fid, fid, fid, fid, fid, fid, fid, fid
+	fkw, fsn, fan, frn, facn, fann, fmod, fre, fsh := fid, fid, fid, fid, fid, fid, fid, fid, escapeNl
 	if annot {
-		fkw = fw("kw")   // keyword
-		fsn = fw("sn")   // sig name
-		fan = fw("an")   // actor name
-		frn = fw("rn")   // role name
-		facn = fw("acn") // action name
-		fann = fw("ann") // audience name
-		fmod = fw("mod") // modality
-		fre = fw("re")   // regexp
-		fsh = fw("sh")   // shell script
+		fkw = fw("kw")                                               // keyword
+		fsn = fw("sn")                                               // sig name
+		fan = fw("an")                                               // actor name
+		frn = fw("rn")                                               // role name
+		facn = fw("acn")                                             // action name
+		fann = fw("ann")                                             // audience name
+		fmod = fw("mod")                                             // modality
+		fre = fw("re")                                               // regexp
+		fsh = func(s string) string { return fw("sh")(escapeNl(s)) } // shell script
 	}
 	for _, title := range cfg.titleStrings {
 		fmt.Fprintln(w, fkw("title"), title)
@@ -851,3 +851,5 @@ func bytesToStrings(bs []byte) []string {
 	}
 	return res
 }
+
+func escapeNl(s string) string { return strings.ReplaceAll(s, "\n", "\\\n") }

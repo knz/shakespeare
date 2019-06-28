@@ -40,6 +40,8 @@ type config struct {
 	includePath []string
 	// Whether to displays emoji.
 	asciiOnly bool
+	// Additional lines of script config.
+	extraScript []string
 
 	// titleStrings is the list of title strings encountered
 	// in the configuration.
@@ -121,6 +123,7 @@ func (cfg *config) initArgs(ctx context.Context) error {
 	pflag.BoolVar(&cfg.asciiOnly, "ascii-only", false, "do not display unicode emojis")
 	var showVersion bool
 	pflag.BoolVar(&showVersion, "version", false, "show version information and exit")
+	pflag.StringSliceVarP(&cfg.extraScript, "extra-script", "s", []string{}, "additional lines of script configuration, processed at end")
 
 	// Load the go flag settings from the log package into pflag.
 	pflag.CommandLine.AddGoFlagSet(flag.CommandLine)

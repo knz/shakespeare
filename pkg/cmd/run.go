@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -79,6 +80,21 @@ func Run() (err error) {
 			return nil
 		}(); err != nil {
 			return err
+		}
+	}
+
+	// Process additional configuration passed via -s.
+	if len(cfg.extraScript) > 0 {
+		var extraScript bytes.Buffer
+		fmt.Fprintln(&extraScript, "script")
+		for _, s := range cfg.extraScript {
+			fmt.Fprintln(&extraScript, s)
+		}
+		fmt.Fprintln(&extraScript, "end")
+		rd, _ := newReaderFromString("<command line>", extraScript.String())
+		if err = cfg.parseCfg(ctx, rd); err != nil {
+			log.Errorf(ctx, "parse error: %+v", err)
+			return errors.WithDetail(err, "(while parsing the specification)")
 		}
 	}
 

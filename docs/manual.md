@@ -21,7 +21,9 @@ If no parameters are specified, defaults are used as described below.
 
 If no configuration files are specified, `shakespeare` reads its
 configuration from standard input. If multiple files are specified,
-they are processed as if they were concatenated.
+they are processed as if they were concatenated.  The additional
+strings provided via `-s` on the command line are processed at the end
+as if they appeared in a `script` section.
 
 ### Command line parameters
 
@@ -29,6 +31,7 @@ they are processed as if they were concatenated.
 |-----------------------------------|----------------------|-----------------------------------------------------------------------------------------------------|
 | `-o`, `--output-dir`              | `.`                  | Directory where to generate artifacts, output data files and the plot script.                       |
 | `-S`, `--stop-at-first-violation` | false                | Stop the play as soon as an auditor detects a violation.                                            |
+| `-s`, `--extra-script`            | (none)               | Additional lines of `script` configuration                                                          |
 | `-p`, `--print-cfg`               | false                | Print configuration after parsing and compilation.                                                  |
 | `-n`, `--dry-run`                 | false                | Stop after parsing the configuration and compiling the steps (do not actually execute the script).  |
 | `-q`, `--quiet`                   | false                | Run quietly.                                                                                        |

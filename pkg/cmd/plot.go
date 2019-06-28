@@ -20,6 +20,10 @@ func (ap *app) plot(ctx context.Context, foundFailure bool) error {
 	log.Info(ctx, "generating scripts")
 
 	// Sanity checking.
+	if math.IsInf(ap.maxTime, 0) || math.IsInf(ap.minTime, 0) {
+		ap.expandTimeRange(0)
+	}
+
 	if ap.maxTime < ap.minTime {
 		ap.minTime, ap.maxTime = ap.maxTime, ap.minTime
 	}

@@ -152,10 +152,13 @@ func (ap *app) plot(ctx context.Context, foundFailure bool) error {
 
 		// Our text labels may contain underscores, we don't want to have
 		// them handled as subscripts (math notation).
-		fmt.Fprintf(f, "set termoption noenhanced\n")
+		fmt.Fprintln(f, "set termoption noenhanced")
 
 		// We want multiple plots sharing the same objects (overlays).
 		fmt.Fprintf(f, "set multiplot layout %d,1\n", len(plotGroups)+1)
+
+		// Ensure all the x-axes are aligned.
+		fmt.Fprintln(f, "set lmargin at screen 0.05\nset rmargin at screen 0.98\n")
 
 		// Auditor faces.
 		fmt.Fprintf(f, `array faces[4]

@@ -576,10 +576,11 @@ var ambianceRe = compileRe(`^mood\s+(?P<mood>\S+)$`)
 var stanzaRe = compileRe(`^prompt\s+(?P<target>every\s+\S+|\S+)\s+(?P<stanza>.*)$`)
 
 // V2 rules
-var entailsRe = compileRe(`scene\s+(?P<char>\S)\s+entails\s+for\s+(?P<target>every\s+\S+|\S+)\s*:\s*(?P<actions>.*)$`)
-var moodChangeRe = compileRe(`scene\s+(?P<char>\S)\s+mood\s+(?P<when>starts|ends)\s+(?P<mood>\S+)\s*$`)
-var storyLineRe = compileRe(`storyline\s+(?P<storyline>.*)\s*$`)
-var editRe = compileRe(`edit\s+(?P<editcmd>.*)$`)
+var entailsRe = compileRe(`^scene\s+(?P<char>\S)\s+entails\s+for\s+(?P<target>every\s+\S+|\S+)\s*:\s*(?P<actions>.*)$`)
+var moodChangeRe = compileRe(`^scene\s+(?P<char>\S)\s+mood\s+(?P<when>starts|ends)\s+(?P<mood>\S+)\s*$`)
+var storyLineRe = compileRe(`^storyline\s+(?P<storyline>.*)\s*$`)
+var editRe = compileRe(`^edit\s+(?P<editcmd>.*)$`)
+var repeatRe = compileRe(`^repeat\s+from\s+(?P<repeat>.*)$`)
 
 func (cfg *config) parseScript(line string) error {
 	if p := pw(actionRe); p.m(line) {
@@ -673,6 +674,14 @@ func (cfg *config) parseScript(line string) error {
 				script: script,
 			})
 		}
+	} else if p := pw(repeatRe); p.m(line) {
+		repeat := p.get("repeat")
+		re, err := regexp.Compile(repeat)
+		if err != nil {
+			return err
+		}
+		cfg.repeatFrom = re
+		cfg.updateRepeat()
 	} else if p := pw(storyLineRe); p.m(line) {
 		storyLine := p.get("storyline")
 		st, err := cfg.validateStoryLine(storyLine)
@@ -680,6 +689,7 @@ func (cfg *config) parseScript(line string) error {
 			return err
 		}
 		cfg.storyLine = combineStoryLines(cfg.storyLine, st)
+		cfg.updateRepeat()
 		log.Infof(context.Background(), "combined storylines: %s", strings.Join(cfg.storyLine, " "))
 	} else if p := pw(editRe); p.m(line) {
 		editcmd := p.get("editcmd")
@@ -702,6 +712,7 @@ func (cfg *config) parseScript(line string) error {
 			return errors.WithDetailf(err, "storyline after edit: %s", newStoryLine)
 		}
 		cfg.storyLine = st
+		cfg.updateRepeat()
 	} else if p := pw(moodChangeRe); p.m(line) {
 		aMood, err := p.id("mood")
 		if err != nil {

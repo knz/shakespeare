@@ -80,6 +80,9 @@ type config struct {
 	sceneSpecChars []byte
 	// storyLine is the list of act specifications.
 	storyLine []string
+	// repeatFrom/repeatActNum is the point at which acts will be repeated.
+	repeatFrom   *regexp.Regexp
+	repeatActNum int
 
 	// play is the list of actions to play.
 	// This is populated by compile().
@@ -275,6 +278,14 @@ func (cfg *config) printCfg(w io.Writer, skipComments, annot bool) {
 		}
 		if len(cfg.storyLine) > 0 {
 			fmt.Fprintf(w, "  %s %s\n", fkw("storyline"), strings.Join(cfg.storyLine, " "))
+		}
+		if cfg.repeatFrom != nil {
+			fmt.Fprintf(w, "  %s %s\n", fkw("repeat from"), cfg.repeatFrom.String())
+			if cfg.repeatActNum > 0 {
+				fmt.Fprintf(w, "  # (repeating act %d and following)\n", cfg.repeatActNum)
+			} else {
+				fmt.Fprintln(w, "  # (no matching act, nothing is repeated)")
+			}
 		}
 	}
 	fmt.Fprintln(w, fkw("end"))
@@ -776,8 +787,8 @@ func (cfg *config) validateStoryLine(storyLine string) ([]string, error) {
 		if part == "" {
 			continue
 		}
+		actNum := len(newParts) + 1
 		for i := 0; i < len(part); i++ {
-			actNum := len(newParts) + 1
 			scChar := part[i]
 			switch scChar {
 			case ' ', '.':
@@ -803,6 +814,20 @@ func (cfg *config) validateStoryLine(storyLine string) ([]string, error) {
 		newParts = append(newParts, part)
 	}
 	return newParts, nil
+}
+
+func (cfg *config) updateRepeat() {
+	if cfg.repeatFrom == nil {
+		return
+	}
+	for i, part := range cfg.storyLine {
+		// Find the repetition point.
+		log.Warningf(context.TODO(), "WOO %q vs %s", part, cfg.repeatFrom)
+		if cfg.repeatFrom.MatchString(part) {
+			cfg.repeatActNum = i + 1
+			break
+		}
+	}
 }
 
 // bytesToStrings convers an array of bytes to an array of strings,

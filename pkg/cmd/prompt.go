@@ -26,7 +26,8 @@ func (ap *app) prompt(
 	surpriseDur := 2 * ap.cfg.tempo.Seconds()
 
 	// Play.
-	for j, act := range ap.cfg.play {
+	for j := 0; j < len(ap.cfg.play); j++ {
+		act := ap.cfg.play[j]
 		actNum := j + 1
 		actCtx := logtags.AddTag(ctx, "act", actNum)
 		actStart := timeutil.Now()
@@ -98,6 +99,16 @@ func (ap *app) prompt(
 			if err != nil {
 				return errors.WithContextTags(err, ctx)
 			}
+		}
+
+		// End of act. Are we looping?
+		if ap.cfg.repeatActNum > 0 && j == len(ap.cfg.play)-1 {
+			ap.narrate(I, "🔁", "restarting from act %d", ap.cfg.repeatActNum)
+			// "num" is 1-indexed, but j is 0-indexed. shift.
+			repeatIdx := ap.cfg.repeatActNum - 1
+			// the loop iteration will increment j before
+			// the next iteration, so start one lower.
+			j = repeatIdx - 1
 		}
 	}
 

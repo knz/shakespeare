@@ -19,6 +19,10 @@ func (ap *app) plot(ctx context.Context, foundFailure bool) error {
 	ctx = logtags.AddTag(ctx, "plotter", nil)
 	log.Info(ctx, "generating scripts")
 
+	// Sanity checking.
+	if ap.maxTime < ap.minTime {
+		ap.minTime, ap.maxTime = ap.maxTime, ap.minTime
+	}
 	// Ensure the x axis always start at zero, even if no
 	// event was received until later on the time line.
 	if ap.minTime > 0 {
@@ -28,12 +32,164 @@ func (ap *app) plot(ctx context.Context, foundFailure bool) error {
 	if ap.maxTime < 0 {
 		ap.maxTime = 1
 	}
+	// More sanity check.
+	if ap.maxTime < ap.minTime+1 {
+		ap.maxTime = ap.minTime + 1
+	}
+
 	ap.narrate(I, "ℹ️ ", "the timeline extends from %.2fs to %.2fs, relative to %s",
 		ap.minTime, ap.maxTime, ap.au.epoch)
 
+	numPlots, err := ap.subPlots(ctx, "plot.gp", ap.minTime, ap.maxTime)
+	if err != nil {
+		return err
+	}
+
+	repeatTs := math.Inf(-1)
+	beforeLastTs := repeatTs
+	if ap.cfg.repeatActNum > 0 {
+		// Find the timestamp where the last repetition started.
+		for _, acn := range ap.au.actChanges {
+			if acn.actNum == ap.cfg.repeatActNum {
+				beforeLastTs = repeatTs
+				repeatTs = acn.ts
+				// No break here: we want to get the ts for the last occurrence.
+			}
+		}
+	}
+	if !math.IsInf(beforeLastTs, 0) {
+		// Use the next-to-last iteration if available.
+		repeatTs = beforeLastTs
+	}
+	hasRepeat := !math.IsInf(repeatTs, 0)
+	if hasRepeat {
+		if _, err := ap.subPlots(ctx, "lastplot.gp", repeatTs, ap.maxTime); err != nil {
+			return err
+		}
+	}
+
+	if err := func() error {
+		fName := filepath.Join(ap.cfg.dataDir, "runme.gp")
+		f, err := os.Create(fName)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		ap.narrate(I, "📜", "plot-all script: %s", fName)
+
+		// We'll generate PDF.
+		fmt.Fprintf(f, "# auto-generated file.\n# Run 'gnuplot runme.gp' to actually generate plots.\n")
+		fmt.Fprintf(f, "set term pdf color size 7,%d font \",6\"\n", 2*numPlots)
+		fmt.Fprintf(f, "set output 'plot.pdf'\n")
+		fmt.Fprintf(f, "load 'plot.gp'\n")
+		if hasRepeat {
+			fmt.Fprintf(f, "set output 'lastplot.pdf'\n")
+			fmt.Fprintf(f, "load 'lastplot.gp'\n")
+		}
+		fmt.Fprintf(f, "set term svg mouse standalone size 600,%d dynamic font \",6\"\n", 200*numPlots)
+		fmt.Fprintf(f, "set output 'plot.svg'\n")
+		fmt.Fprintf(f, "load 'plot.gp'\n")
+		if hasRepeat {
+			fmt.Fprintf(f, "set output 'lastplot.svg'\n")
+			fmt.Fprintf(f, "load 'lastplot.gp'\n")
+		}
+
+		return nil
+	}(); err != nil {
+		return err
+	}
+
+	if err := func() error {
+		fName := filepath.Join(ap.cfg.dataDir, "plot.html")
+		f, err := os.Create(fName)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		ap.narrate(I, "📄", "HTML include for SVG plots: %s", fName)
+		fmt.Fprintln(f, `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/>`)
+		fmt.Fprint(f, "<title>shakespeare report")
+		if len(ap.cfg.titleStrings) > 0 {
+			fmt.Fprintf(f, ": a tale of %s", html.EscapeString(joinAnd(ap.cfg.titleStrings)))
+		}
+		fmt.Fprintln(f, `</title>`)
+		if len(ap.cfg.authors) > 0 {
+			fmt.Fprintf(f, "<meta name='author' content='%s' />\n", html.EscapeString(joinAnd(ap.cfg.authors)))
+		}
+		fmt.Fprintln(f, `<link href="https://fonts.googleapis.com/css?family=Nova+Mono&display=swap" rel="stylesheet">`)
+		fmt.Fprintln(f, `<link href="https://fonts.googleapis.com/css?family=Pinyon+Script&display=swap" rel="stylesheet">`)
+		fmt.Fprintln(f, `<style type='text/css'>
+h1,h3,p,ul{text-align: center;}
+p,li{font-family:'Pinyon Script',cursive;}
+pre,code{font-family: 'Nova Mono', monospace;}
+.kw{font-weight:bold;}
+.rn{color:blue;font-style:italic;}
+.acn{color:blue;font-style:italic;font-weight:bold;}
+.sn{color:darkgreen;font-style:italic;}
+.an{color:purple;font-style:italic;}
+.ann{color:orange;font-style:italic;}
+.sh{color:#444;}
+.re{color:green;}
+.mod{font-style:italic;}
+</style></head><body>`)
+		if len(ap.cfg.titleStrings) > 0 {
+			fmt.Fprintf(f, "<h1>A tale of %s</h1>\n", html.EscapeString(joinAnd(ap.cfg.titleStrings)))
+		}
+		if len(ap.cfg.authors) > 0 {
+			fmt.Fprintf(f, "<h3>Written by %s</h3>\n", html.EscapeString(joinAnd(ap.cfg.authors)))
+		}
+		fmt.Fprintf(f, "<p>%s<p>\n", formatDatePretty(ap.au.epoch))
+		if foundFailure {
+			fmt.Fprintln(f, "<p>Avert your eyes! For this tale, alas, does not end well.<p>")
+		} else {
+			fmt.Fprintln(f, "<p>Rejoice! This tale ends well.<p>")
+		}
+		const divider = `<p style="font-family:serif; margin-top:3em; margin-bottom:3em;">⊱ ────────────────── {.⋅ ♫ ⋅.} ───────────────── ⊰</p>`
+		fmt.Fprintln(f, divider)
+		fmt.Fprintln(f, `<div style="margin-left: auto; margin-right: auto; max-width: 1024px"><embed id="E" src="plot.svg"/></div>`)
+		if hasRepeat {
+			fmt.Fprintln(f, divider)
+			fmt.Fprintf(f, "<p>For your delicate eyes, the last %.1f seconds of the play:</p>\n", ap.maxTime-repeatTs)
+			fmt.Fprintln(f, `<div style="margin-left: auto; margin-right: auto; max-width: 1024px"><embed id="E" src="lastplot.svg"/></div>`)
+		}
+		if len(ap.cfg.seeAlso) > 0 {
+			fmt.Fprintln(f, divider)
+			fmt.Fprintln(f, "<p>Attention! You may want to know:</p><ul>")
+			for _, seeAlso := range ap.cfg.seeAlso {
+				h := html.EscapeString(seeAlso)
+				if strings.Contains(seeAlso, "://") {
+					fmt.Fprintf(f, `<li><a href='%s'><small><code>%s</code></small></a></li>`, h, h)
+				} else {
+					fmt.Fprintf(f, `<li>%s</li>`, h)
+				}
+			}
+			fmt.Fprintln(f, "</ul>")
+		}
+		fmt.Fprintln(f, divider)
+		fmt.Fprintln(f, "<p>For your curious eyes, the full book for this play:</p>")
+		fmt.Fprintln(f, "<div style='margin-left: auto; margin-right: auto; max-width: 800px'><pre style='font-size: small'>")
+		ap.cfg.printCfg(f, true /*skipComs*/, true /*annot*/)
+		ap.cfg.printSteps(f, true /*annot*/)
+		fmt.Fprintln(f, "</pre></div>")
+		fmt.Fprintln(f, "<p><em><small>a report produced by <a href='https://github.com/knz/shakespeare'>Shakespeare</a></small></em></p>")
+		fmt.Fprintln(f, `</body></html>`)
+		return nil
+	}(); err != nil {
+		return err
+	}
+
+	ap.maybeRunGnuplot(ctx, hasRepeat)
+	log.Info(ctx, "done")
+	return nil
+}
+
+func (ap *app) subPlots(
+	ctx context.Context, outGpFileName string, minTime, maxTime float64,
+) (int, error) {
 	// Give some breathing room to action labels.
-	ap.minTime -= 1.0
-	ap.maxTime += 1.0
+	visibleDuration := maxTime - minTime
+	minTime -= .05 * visibleDuration
+	maxTime += .05 * visibleDuration
 
 	// plot describes one curve in a plot group.
 	type plot struct {
@@ -138,7 +294,7 @@ func (ap *app) plot(ctx context.Context, foundFailure bool) error {
 	// The user will be responsible for running gnuplot on the latter.
 
 	if err := func() error {
-		fName := filepath.Join(ap.cfg.dataDir, "plot.gp")
+		fName := filepath.Join(ap.cfg.dataDir, outGpFileName)
 		f, err := os.Create(fName)
 		if err != nil {
 			return err
@@ -171,7 +327,7 @@ faces[4] = ""
 		// We force the x range to be the same for all the plots.
 		// If we did not do that, each plot may get a different x range
 		// (adjusted automatically based on the data collected for that plot).
-		fmt.Fprintf(f, "set xrange [%f:%f]\n", ap.minTime, ap.maxTime)
+		fmt.Fprintf(f, "set xrange [%f:%f]\n", minTime, maxTime)
 		if ap.maxTime < 10 {
 			fmt.Fprintf(f, "set xtics out 1\n")
 			fmt.Fprintf(f, "set mxtics 2\n")
@@ -276,107 +432,13 @@ faces[4] = ""
 		fmt.Fprintln(f, "unset multiplot")
 		return nil
 	}(); err != nil {
-		return err
+		return 0, err
 	}
 
-	if err := func() error {
-		fName := filepath.Join(ap.cfg.dataDir, "runme.gp")
-		f, err := os.Create(fName)
-		if err != nil {
-			return err
-		}
-		defer f.Close()
-		ap.narrate(I, "📜", "plot-all script: %s", fName)
-
-		// We'll generate PDF.
-		fmt.Fprintf(f, "# auto-generated file.\n# Run 'gnuplot runme.gp' to actually generate plots.\n")
-		fmt.Fprintf(f, "set term pdf color size 7,%d font \",6\"\n", 2*(len(plotGroups)+1))
-		fmt.Fprintf(f, "set output 'plot.pdf'\n")
-		fmt.Fprintf(f, "load 'plot.gp'\n")
-		fmt.Fprintf(f, "set term svg mouse standalone size 600,%d dynamic font \",6\"\n", 200*(len(plotGroups)+1))
-		fmt.Fprintf(f, "set output 'plot.svg'\n")
-		fmt.Fprintf(f, "load 'plot.gp'\n")
-		return nil
-	}(); err != nil {
-		return err
-	}
-
-	if err := func() error {
-		fName := filepath.Join(ap.cfg.dataDir, "plot.html")
-		f, err := os.Create(fName)
-		if err != nil {
-			return err
-		}
-		defer f.Close()
-		ap.narrate(I, "📄", "HTML include for SVG plots: %s", fName)
-		fmt.Fprintln(f, `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/>`)
-		fmt.Fprint(f, "<title>shakespeare report")
-		if len(ap.cfg.titleStrings) > 0 {
-			fmt.Fprintf(f, ": a tale of %s", html.EscapeString(joinAnd(ap.cfg.titleStrings)))
-		}
-		fmt.Fprintln(f, `</title>`)
-		if len(ap.cfg.authors) > 0 {
-			fmt.Fprintf(f, "<meta name='author' content='%s' />\n", html.EscapeString(joinAnd(ap.cfg.authors)))
-		}
-		fmt.Fprintln(f, `<link href="https://fonts.googleapis.com/css?family=Nova+Mono&display=swap" rel="stylesheet">`)
-		fmt.Fprintln(f, `<link href="https://fonts.googleapis.com/css?family=Pinyon+Script&display=swap" rel="stylesheet">`)
-		fmt.Fprintln(f, `<style type='text/css'>
-h1,h3,p,ul{text-align: center;}
-p,li{font-family:'Pinyon Script',cursive;}
-pre,code{font-family: 'Nova Mono', monospace;}
-.kw{font-weight:bold;}
-.rn{color:blue;font-style:italic;}
-.acn{color:blue;font-style:italic;font-weight:bold;}
-.sn{color:darkgreen;font-style:italic;}
-.an{color:purple;font-style:italic;}
-.ann{color:orange;font-style:italic;}
-.sh{color:#444;}
-.re{color:green;}
-.mod{font-style:italic;}
-</style></head><body>`)
-		if len(ap.cfg.titleStrings) > 0 {
-			fmt.Fprintf(f, "<h1>A tale of %s</h1>\n", html.EscapeString(joinAnd(ap.cfg.titleStrings)))
-		}
-		if len(ap.cfg.authors) > 0 {
-			fmt.Fprintf(f, "<h3>Written by %s</h3>\n", html.EscapeString(joinAnd(ap.cfg.authors)))
-		}
-		fmt.Fprintf(f, "<p>%s<p>\n", formatDatePretty(ap.au.epoch))
-		if foundFailure {
-			fmt.Fprintln(f, "<p>Avert your eyes! For this tale, alas, does not end well.<p>")
-		} else {
-			fmt.Fprintln(f, "<p>Rejoice! This tale ends well.<p>")
-		}
-		fmt.Fprintln(f, `<div style="margin-left: auto; margin-right: auto; max-width: 1024px"><embed id="E" src="plot.svg"/></div>`)
-		if len(ap.cfg.seeAlso) > 0 {
-			fmt.Fprintln(f, "<p>Attention! You may want to know:</p><ul>")
-			for _, seeAlso := range ap.cfg.seeAlso {
-				h := html.EscapeString(seeAlso)
-				if strings.Contains(seeAlso, "://") {
-					fmt.Fprintf(f, `<li><a href='%s'><small><code>%s</code></small></a></li>`, h, h)
-				} else {
-					fmt.Fprintf(f, `<li>%s</li>`, h)
-				}
-			}
-			fmt.Fprintln(f, "</ul>")
-		}
-		fmt.Fprintln(f, "<p>For the curious eye, the full book for this play:</p>")
-		fmt.Fprintln(f, "<div style='margin-left: auto; margin-right: auto; max-width: 800px'><pre style='font-size: small'>")
-		ap.cfg.printCfg(f, true /*skipComs*/, true /*annot*/)
-		ap.cfg.printSteps(f, true /*annot*/)
-		fmt.Fprintln(f, "</pre></div>")
-		fmt.Fprintln(f, "<p><em><small>a report produced by <a href='https://github.com/knz/shakespeare'>Shakespeare</a></small></em></p>")
-		fmt.Fprintln(f, `</body></html>`)
-		return nil
-	}(); err != nil {
-		return err
-	}
-
-	ap.maybeRunGnuplot(ctx)
-	log.Info(ctx, "done")
-	return nil
+	return len(plotGroups) + 1, nil
 }
 
-func (ap *app) maybeRunGnuplot(ctx context.Context) {
+func (ap *app) maybeRunGnuplot(ctx context.Context, hasRepeat bool) {
 	cmd := exec.CommandContext(ctx, ap.cfg.gnuplotPath, "runme.gp")
 	cmd.Dir = ap.cfg.dataDir
 	res, err := cmd.CombinedOutput()
@@ -386,6 +448,10 @@ func (ap *app) maybeRunGnuplot(ctx context.Context) {
 	} else {
 		ap.narrate(I, "📄", "SVG plot: %s", filepath.Join(ap.cfg.dataDir, "plot.svg"))
 		ap.narrate(I, "📄", "PDF plot: %s", filepath.Join(ap.cfg.dataDir, "plot.pdf"))
+		if hasRepeat {
+			ap.narrate(I, "📄", "SVG plot: %s", filepath.Join(ap.cfg.dataDir, "lastplot.svg"))
+			ap.narrate(I, "📄", "PDF plot: %s", filepath.Join(ap.cfg.dataDir, "lastplot.pdf"))
+		}
 	}
 }
 

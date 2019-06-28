@@ -286,6 +286,9 @@ script
 
   # zero or more story edits
   [ edit s/<regexp>/<subst>/ ] ...
+
+  # zero or more repeat specifiers
+  [ repeat from <regexp> ] ...
 end
 ```
 
@@ -350,13 +353,24 @@ Semantics:
   scene is not allowed to start before 4s has elapsed since the start
   of the act.
 
-It is possible for actions to last longer than the tempo interval. When this occurs,
-further scenes may be delayed further than their minimum start time, in which
-case they will start immediately when their previous scene completes.
+  It is possible for actions to last longer than the tempo interval. When this occurs,
+  further scenes may be delayed further than their minimum start time, in which
+  case they will start immediately when their previous scene completes.
 
-Therefore, the total number of scene groups, multiplied by the tempo,
-determines the *minimum* play duration (assuming no errors occur), but
-a play may last longer.
+  Therefore, the total number of scene groups, multiplied by the tempo,
+  determines the *minimum* play duration (assuming no errors occur), but
+  a play may last longer.
+
+- If a `repeat from` clause is specified, `shakespeare` will find the
+  first act that matches the provided regexp. During execution of the
+  play, every time the last act is reached, the play will continue,
+  restarting at the matching act. In this mode, the play only
+  terminates when an error is encountered.
+
+  Additionally, in the generated plots, a "zoomed in" plot will be
+  generated for the last two iterations of the repeated act(s).
+
+  Subsequent `repeat` clauses override each other.
 
 ## Audience configuration
 

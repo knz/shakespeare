@@ -10,3 +10,13 @@
 
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out
+
+pkg/cmd/version.go
+
+*.csv
+*.pdf
+*.gp
+*.svg
+*.html
+
+artifacts/

@@ -226,30 +226,34 @@ func (a *actor) runActorCommandWithConsumer(
 }
 
 func (a *actor) makeShCmd(ctx context.Context, bindCtx bool, pcmd cmd) *exec.Cmd {
-	args := []string{
-		"-c",
-		// Ensure the command fails:
-		// set -euxo pipefail:
-		//    -e fail commands on error
-		//    -u fail command if a variable is not set
-		//    -o pipefail   fail entire pipeline if one command fails
-		// trap: terminate all the process group when the shell exits.
-		`set -euo pipefail; ` +
-			// Ensure files are created from the working directory.
-			`export TMPDIR=$PWD HOME=$PWD/..; ` +
-			// Remember the process group ID.
-			// `shpid=$$; ` +
-			// In case something happens, close the entire process group.
-			// `ret=130; trap '' INT; trap 'set -x; kill -INT -$shpid || true' HUP; ` +
-			// Now execute the command. We trace the execution.
-			`set -x; ` + string(pcmd),
+	var script bytes.Buffer
+	// set -euxo pipefail:
+	//    -e fail commands on error
+	//    -u fail command if a variable is not set
+	//    -o pipefail   fail entire pipeline if one command fails
+	script.WriteString(`set -euo pipefail; `)
+	// Ensure files are created from the working directory.
+	script.WriteString(`export TMPDIR=$PWD HOME=$PWD/..; `)
+	// Trace the execution. We do this before setting the
+	// environment so as to see the expanded values.
+	script.WriteString(`set -x; `)
+	if a.extraAssign != "" {
+		script.WriteString("export ")
+		script.WriteString(a.extraAssign)
+		script.WriteString("; ")
 	}
+	if a.extraEnv != "" {
+		script.WriteString("export ")
+		script.WriteString(a.extraEnv)
+		script.WriteString("; ")
+	}
+	script.WriteString(string(pcmd))
 
 	var cmd *exec.Cmd
 	if bindCtx {
-		cmd = exec.CommandContext(ctx, a.shellPath, args...)
+		cmd = exec.CommandContext(ctx, a.shellPath, "-c", script.String())
 	} else {
-		cmd = exec.Command(a.shellPath, args...)
+		cmd = exec.Command(a.shellPath, "-c", script.String())
 	}
 
 	// We want a separate process group.
@@ -258,10 +262,6 @@ func (a *actor) makeShCmd(ctx context.Context, bindCtx bool, pcmd cmd) *exec.Cmd
 
 	cmd.Stdin = nil
 	cmd.Dir = a.workDir
-	if a.extraEnv != "" {
-		cmd.Path = "/usr/bin/env"
-		cmd.Args = append([]string{"/usr/bin/env", "-S", a.extraEnv}, cmd.Args...)
-	}
 	return cmd
 }
 

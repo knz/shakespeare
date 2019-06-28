@@ -489,11 +489,10 @@ func hasSubexp(re *regexp.Regexp, n string) bool {
 }
 
 var actorsRe = compileRe(`^cast$`)
-var actorDefRe = compileRe(`^(?P<actorname>\S+)\s+plays\s+(?P<rolename>\S+?)\s*(?P<extraenv>\(.*\)|)\s*$`)
+var actorDefRe = compileRe(`^(?P<actorname>\S+?)(?P<star>\*?)\s+(?:plays|play\s+(?P<mul>\S+))\s+(?P<rolename>\S+)(?P<extraenv>(?:\s+with\s+.*)?)\s*$`)
 
 func (cfg *config) parseActors(line string) error {
 	if p := pw(actorDefRe); p.m(line) {
-		extraEnv := p.get("extraenv")
 		roleName, err := p.id("rolename")
 		if err != nil {
 			return err
@@ -503,31 +502,63 @@ func (cfg *config) parseActors(line string) error {
 			return err
 		}
 
+		mul := p.get("mul")
+
 		r, ok := cfg.roles[roleName]
+		if !ok && mul != "" {
+			// try a little harder, maybe there was a plural.
+			roleName = strings.TrimSuffix(roleName, "s")
+			r, ok = cfg.roles[roleName]
+		}
 		if !ok {
 			return explainAlternatives(
 				errors.Newf("unknown role: %s", roleName), "roles", cfg.roles)
 		}
 
-		if _, ok := cfg.actors[actorName]; ok {
-			return errors.Newf("duplicate actor definition: %q", actorName)
+		extraEnv := p.getp("extraenv", "with")
+
+		addOneActor := func(actorName, extraEnv string) error {
+			if _, ok := cfg.actors[actorName]; ok {
+				return errors.Newf("duplicate actor definition: %q", actorName)
+			}
+
+			act := actor{
+				shellPath: cfg.shellPath,
+				name:      actorName,
+				role:      r,
+				extraEnv:  extraEnv,
+				workDir:   filepath.Join(cfg.artifactsDir, actorName),
+				sinks:     make(map[string]*sink),
+			}
+			cfg.actors[actorName] = &act
+			cfg.actorNames = append(cfg.actorNames, actorName)
+			return nil
 		}
 
-		if extraEnv != "" {
-			extraEnv = strings.TrimPrefix(extraEnv, "(")
-			extraEnv = strings.TrimSuffix(extraEnv, ")")
+		if mul == "" {
+			if p.get("star") != "" {
+				return errors.New("cannot use * with a single actor definition")
+			}
+			return addOneActor(actorName, extraEnv)
 		}
-
-		act := actor{
-			shellPath: cfg.shellPath,
-			name:      actorName,
-			role:      r,
-			extraEnv:  extraEnv,
-			workDir:   filepath.Join(cfg.artifactsDir, actorName),
-			sinks:     make(map[string]*sink),
+		if p.get("star") == "" {
+			return errors.WithHintf(errors.New("must use * in name to define multiple actors"), "try: %s* play ...", actorName)
 		}
-		cfg.actors[actorName] = &act
-		cfg.actorNames = append(cfg.actorNames, actorName)
+		n, err := strconv.ParseInt(mul, 10, 0)
+		if err != nil {
+			return err
+		}
+		for i := 0; i < int(n); i++ {
+			ns := strconv.Itoa(i + 1)
+			thisActorName := actorName + ns
+			if err != nil {
+				return err
+			}
+			if err := addOneActor(thisActorName, extraEnv); err != nil {
+				return err
+			}
+			cfg.actors[thisActorName].extraAssign = "i=" + ns
+		}
 	} else {
 		return errors.New("unknown syntax")
 	}
@@ -848,4 +879,24 @@ func withPrefix(line, prefix string) (string, bool) {
 		return "", false
 	}
 	return strings.TrimSpace(strings.TrimPrefix(line, prefix)), true
+}
+
+var preprocRe = compileRe(`%\w*%`)
+
+// preprocReplace replaces occurrences of %pvar% by val in str.
+func preprocReplace(str, pvar, val string) (string, error) {
+	ref := "%" + pvar + "%"
+	var err error
+	res := preprocRe.ReplaceAllStringFunc(str, func(m string) string {
+		switch m {
+		case "%%":
+			return "%"
+		case ref:
+			return val
+		default:
+			err = combineErrors(err, errors.Newf("undefined variable: %s", m))
+			return m
+		}
+	})
+	return res, err
 }

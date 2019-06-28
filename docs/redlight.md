@@ -188,17 +188,16 @@ end
 
 cast
   myroad plays road
-  mylight plays redlight(road=myroad)
+  mylight plays redlight with road=myroad
 end
 
 script
   tempo 100ms
-  action . entails nop
-  action c entails :car
-  action r entails :red
-  action g entails :green
-  prompt myroad  ....c...c..c..c..c..c..c...
-  prompt mylight ..r...g...r...g...r...g....
+  scene c entails for myroad: car
+  scene r entails for mylight: red
+  scene g entails for mylight: green
+  storyline ....c...c..c..c..c..c..c...
+  storyline ..r...g...r...g...r...g....
 end
 
 audience
@@ -258,7 +257,7 @@ Notice how the `red` and `green` action use the shell parameter
 above:
 
 ```
-  mylight plays redlight(road=myroad)
+  mylight plays redlight with road=myroad
 ```
 
 The new `road` role defines two signals `ride` and `stop`, which we
@@ -297,8 +296,8 @@ For example, we can extend the [script defined above](#Script) as follows:
 ```
 script
   ...
-  action r entails :red; mood red
-  action g entails :green; mood clear
+  action r ends with mood red
+  action g ends with mood clear
   ...
 ```
 

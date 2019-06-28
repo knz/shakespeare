@@ -91,7 +91,7 @@ end
 cast
   alice plays doctor
   # alice plays from working directory alice
-  bob plays doctor(with_a_hat)
+  bob plays doctor with a_hat
   # bob plays from working directory bob
 end
 script

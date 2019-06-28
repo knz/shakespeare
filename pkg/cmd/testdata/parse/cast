@@ -15,7 +15,7 @@ parse
 include doctor.cfg
 cast
   alice plays doctor
-  bob plays doctor(with_a_hat)
+  bob plays doctor with a_hat
 end
 ----
 role doctor
@@ -26,7 +26,7 @@ end
 cast
   alice plays doctor
   # alice plays from working directory alice
-  bob plays doctor(with_a_hat)
+  bob plays doctor with a_hat
   # bob plays from working directory bob
 end
 script
@@ -35,7 +35,37 @@ script
 end
 # no audience defined
 
-
+parse
+include doctor.cfg
+cast
+  a* play 3 doctors
+  b* play 1 doctor with x=123
+end
+----
+role doctor
+  spotlight true
+  signal cures event at (?P<ts_now>)(?P<event>.*)
+  :cure echo cured
+end
+cast
+  a1 plays doctor
+  # a1 also runs commands with i=1
+  # a1 plays from working directory a1
+  a2 plays doctor
+  # a2 also runs commands with i=2
+  # a2 plays from working directory a2
+  a3 plays doctor
+  # a3 also runs commands with i=3
+  # a3 plays from working directory a3
+  b1 plays doctor with x=123
+  # b1 also runs commands with i=1
+  # b1 plays from working directory b1
+end
+script
+  tempo 1s
+  # no stanzas defined, play will terminate immediately
+end
+# no audience defined
 
 parse
 cast
@@ -77,18 +107,3 @@ while parsing:
 <testdata>:2     cast
 <testdata>:3        alice plays doctor
 <testdata>:4   >    alice plays doctor
-
-
-parse
-include doctor.cfg
-cast
-   alice plays doctor(
-end
-----
-parse error: <testdata>:3: not a valid identifier: "doctor("
---
-while parsing:
-<testdata>:1     include doctor.cfg
-<testdata>:2     cast
-<testdata>:3   >    alice plays doctor(
-HINT: try this instead: doctor_

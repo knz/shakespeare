@@ -54,6 +54,15 @@ func newReaderFromString(file string, data string) (*reader, error) {
 	return &reader{readers: []*subreader{sr}, includePath: nil}, nil
 }
 
+func hasLocalDir(includePath []string) bool {
+	for _, i := range includePath {
+		if i == "." {
+			return true
+		}
+	}
+	return false
+}
+
 func newSubReader(ctx context.Context, file string, includePath []string) (*subreader, error) {
 	r := &subreader{lineno: 1, file: file}
 	if file == "-" {
@@ -62,9 +71,6 @@ func newSubReader(ctx context.Context, file string, includePath []string) (*subr
 	} else {
 		var f *os.File
 		var fName string
-		if len(includePath) == 0 {
-			includePath = []string{"."}
-		}
 
 		for _, p := range includePath {
 			fName = filepath.Join(p, file)
@@ -205,6 +211,12 @@ func (r *subreader) readLine(
 
 	// Handle file includes.
 	if strings.HasPrefix(line, "include ") {
+		if len(pr.readers) >= 10 {
+			// Avoid infinite include recursion.
+			return "", pos{}, true, false, startPos.wrapErr(
+				errors.New("include depth limit exceeded"))
+		}
+
 		fName := strings.TrimPrefix(line, "include ")
 
 		// The first include search path will be the path of the file

@@ -12,11 +12,14 @@ import (
 )
 
 func TestParse(t *testing.T) {
-	includePath := []string{filepath.Join("testdata", "include")}
+	includePath := []string{filepath.Join("testdata", "include"), ""}
 	datadriven.Walk(t, filepath.Join("testdata", "parse"), func(t *testing.T, path string) {
-		if strings.HasSuffix(path, "~") || strings.HasPrefix(path, ".#") {
+		if strings.HasSuffix(path, "~") ||
+			strings.HasPrefix(path, ".#") ||
+			strings.HasSuffix(path, ".cfg") {
 			return
 		}
+		includePath[1] = filepath.Dir(path)
 		datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
 			// First round of parse.
 			rd, err := newReaderFromString("<testdata>", d.Input)

@@ -132,6 +132,11 @@ func (cfg *config) initArgs(ctx context.Context) error {
 	// Derive the artifacts directory.
 	cfg.artifactsDir = filepath.Join(cfg.dataDir, "artifacts")
 
+	// Ensure the include path contains the current directory.
+	if !hasLocalDir(cfg.includePath) {
+		cfg.includePath = append(cfg.includePath, ".")
+	}
+
 	// Ensure the output directory and artifacts dir exist.
 	if err := os.MkdirAll(cfg.artifactsDir, 0755); err != nil {
 		return err

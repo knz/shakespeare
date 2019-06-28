@@ -61,7 +61,7 @@ func (ap *app) detectSignals(
 		}
 		valHolder := auditableValue{
 			typ:     rp.typ,
-			varName: exprVar{actorName: a.name, sigName: rp.name},
+			varName: varName{actorName: a.name, sigName: rp.name},
 		}
 
 		var ts time.Time
@@ -92,9 +92,9 @@ func (ap *app) detectSignals(
 
 		// Parse the data.
 		switch rp.typ {
-		case parseEvent:
+		case sigTypEvent:
 			valHolder.val = rp.re.ReplaceAllString(line, "${event}")
-		case parseScalar:
+		case sigTypScalar:
 			valS := rp.re.ReplaceAllString(line, "${scalar}")
 			x, err := strconv.ParseFloat(valS, 64)
 			if err != nil {
@@ -102,7 +102,7 @@ func (ap *app) detectSignals(
 				continue
 			}
 			valHolder.val = x
-		case parseDelta:
+		case sigTypDelta:
 			curValS := rp.re.ReplaceAllString(line, "${delta}")
 			curVal, err := strconv.ParseFloat(curValS, 64)
 			if err != nil {

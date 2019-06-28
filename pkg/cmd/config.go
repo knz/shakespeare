@@ -13,7 +13,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Knetic/govaluate"
 	"github.com/cockroachdb/errors"
 	"github.com/knz/shakespeare/pkg/crdb/log"
 	"github.com/knz/shakespeare/pkg/crdb/log/logflags"
@@ -95,8 +94,8 @@ type config struct {
 	audienceNames []string
 
 	// vars is the set of variables computed by the audience.
-	vars     map[exprVar]*variable
-	varNames []exprVar
+	vars     map[varName]*variable
+	varNames []varName
 }
 
 func (cfg *config) initArgs(ctx context.Context) error {
@@ -137,12 +136,6 @@ func (cfg *config) initArgs(ctx context.Context) error {
 	return nil
 }
 
-type audienceMember struct {
-	name     string
-	observer observer
-	auditor  auditor
-}
-
 // newConfig creates a config with defaults.
 func newConfig() *config {
 	cfg := &config{
@@ -153,11 +146,11 @@ func newConfig() *config {
 		stanzas:    nil,
 		tempo:      time.Second,
 		audience:   make(map[string]*audienceMember),
-		vars:       make(map[exprVar]*variable),
+		vars:       make(map[varName]*variable),
 	}
-	cfg.maybeAddVar(nil, exprVar{sigName: "t"}, false)
-	cfg.maybeAddVar(nil, exprVar{sigName: "mood"}, false)
-	cfg.maybeAddVar(nil, exprVar{sigName: "moodt"}, false)
+	cfg.maybeAddVar(nil, varName{sigName: "t"}, false)
+	cfg.maybeAddVar(nil, varName{sigName: "mood"}, false)
+	cfg.maybeAddVar(nil, varName{sigName: "moodt"}, false)
 	return cfg
 }
 
@@ -339,10 +332,6 @@ func fw(cat string) func(string) string {
 	}
 }
 
-// cmd is the type of a command that can be executed as
-// effect of a play action.
-type cmd string
-
 // role is a model that can be played by zero or more actors.
 type role struct {
 	name string
@@ -354,14 +343,14 @@ type role struct {
 	actionCmds  map[string]cmd
 	actionNames []string
 	// sigParsers are the supported signals for each actor.
-	sigParsers []*resultParser
+	sigParsers []*sigParser
 	sigNames   []string
 }
 
 func (r *role) clone(newName string) *role {
 	newR := *r
 	newR.actionNames = append([]string(nil), r.actionNames...)
-	newR.sigParsers = append([]*resultParser(nil), r.sigParsers...)
+	newR.sigParsers = append([]*sigParser(nil), r.sigParsers...)
 	newR.sigNames = append([]string(nil), r.sigNames...)
 	newR.actionCmds = make(map[string]cmd, len(r.actionCmds))
 	for k, v := range r.actionCmds {
@@ -371,8 +360,13 @@ func (r *role) clone(newName string) *role {
 	return &newR
 }
 
-type resultParser struct {
-	typ parserType
+// cmd is the type of a command that can be executed as
+// effect of a play action.
+type cmd string
+
+// sigParser describes how to extract signals from a spotlight.
+type sigParser struct {
+	typ sigType
 	// name is the name of this signal/source on each actor.
 	name string
 	// re is how to parse the signal/source to get data points.
@@ -383,24 +377,27 @@ type resultParser struct {
 	timeLayout string
 }
 
-type parserType int
+type sigType int
 
 const (
-	parseEvent parserType = iota
-	parseScalar
-	parseDelta
+	sigTypEvent sigType = iota
+	sigTypScalar
+	sigTypDelta
 )
 
-func (p *resultParser) fmt(fsn, fkw, fre func(string) string) string {
+func (p *sigParser) fmt(fsn, fkw, fre func(string) string) string {
+	var s string
 	switch p.typ {
-	case parseEvent:
-		return fmt.Sprintf("%s %s %s", fsn(p.name), fkw("event at"), fre(p.re.String()))
-	case parseScalar:
-		return fmt.Sprintf("%s %s %s", fsn(p.name), fkw("scalar at"), fre(p.re.String()))
-	case parseDelta:
-		return fmt.Sprintf("%s %s %s", fsn(p.name), fkw("delta at"), fre(p.re.String()))
+	case sigTypEvent:
+		s = "event at"
+	case sigTypScalar:
+		s = "scalar at"
+	case sigTypDelta:
+		s = "delta at"
+	default:
+		return "<???parser>"
 	}
-	return "<???parser>"
+	return fmt.Sprintf("%s %s %s", fsn(p.name), fkw(s), fre(p.re.String()))
 }
 
 // actor is an agent that can participate in a play.
@@ -468,34 +465,52 @@ type stanza struct {
 	script string
 }
 
+// audienceMember is a member of the audience.
+type audienceMember struct {
+	name     string
+	observer observer
+	auditor  auditor
+}
+
 // observer is the "collector" part of an audience member.
 type observer struct {
-	obsVars     map[exprVar]*collectedSignal
-	obsVarNames []exprVar
-	ylabel      string
+	// obsVars is the set of signals/variables watched by this observer.
+	obsVars     map[varName]*collectedSignal
+	obsVarNames []varName
+
+	// the y-axis label on plots.
+	ylabel string
+	// disablePlot is set for "only helps" observers.
 	disablePlot bool
 	// hasData indicates whether data was received for this audience.
+	// It is used to omit the plot if there was no data.
 	hasData bool
 }
 
 type collectedSignal struct {
-	origin []string
-	// hasData indicates whether data was received from a given actor.
-	hasData    bool
+	// hasData is set when at least one event was collected,
+	// and is used by the plotter to omit the plot curve if there was no data.
+	hasData bool
+	// drawEvents determines the plot style.
 	drawEvents bool
 }
 
+// variable is one of the variables active during an audition.
+// It contains values either for a signal or for an auditor-defined variable.
 type variable struct {
-	name         exprVar
+	name         varName
 	isArray      bool
 	watchers     map[string]*audienceMember
 	watcherNames []string
 }
 
+// auditor is the "auditor" part of an audience member.
 type auditor struct {
+	name string
+
 	// observedSignals is the set of actor signals
 	// that this auditor is sensitive on.
-	observedSignals map[exprVar]struct{}
+	observedSignals map[varName]struct{}
 
 	// activCond determines when this auditor wakes up.
 	activeCond expr
@@ -508,12 +523,8 @@ type auditor struct {
 	expectExpr expr
 }
 
-type expr struct {
-	src      string
-	compiled *govaluate.EvaluableExpression
-	deps     map[exprVar]struct{}
-}
-
+// assignment describes one of the "collects" or "computes" clauses in
+// an auditor.
 type assignment struct {
 	// targetVar is the variable to assign.
 	targetVar string
@@ -522,26 +533,6 @@ type assignment struct {
 	// assignMode is how to assign to the variable.
 	assignMode assignMode
 	N          int
-}
-
-func (s *assignment) String() string {
-	var buf bytes.Buffer
-	var mode string
-	switch s.assignMode {
-	case assignSingle:
-		fmt.Fprintf(&buf, "computes %s as %s", s.targetVar, s.expr.src)
-		return buf.String()
-	case assignFirstN:
-		mode = "first"
-	case assignLastN:
-		mode = "last"
-	case assignTopN:
-		mode = "top"
-	case assignBottomN:
-		mode = "bottom"
-	}
-	fmt.Fprintf(&buf, "collects %s as %s %d %s", s.targetVar, mode, s.N, s.expr.src)
-	return buf.String()
 }
 
 func (s *assignment) fmt(fkw, fsn, fmod, fre func(string) string) string {
@@ -564,6 +555,8 @@ func (s *assignment) fmt(fkw, fsn, fmod, fre func(string) string) string {
 	return buf.String()
 }
 
+// assignMode describes one of the assignment types for "collects" or
+// "computes" clauses.
 type assignMode int
 
 const (
@@ -574,19 +567,19 @@ const (
 	assignBottomN                   // bottom N values in array
 )
 
-type exprVar struct {
+type varName struct {
 	actorName string
 	sigName   string
 }
 
-func (e exprVar) String() string {
+func (e varName) String() string {
 	if e.actorName == "" {
 		return e.sigName
 	}
 	return e.actorName + " " + e.sigName
 }
 
-func (e exprVar) fmt(fan, fsn func(string) string) string {
+func (e varName) fmt(fan, fsn func(string) string) string {
 	if e.actorName == "" {
 		return fsn(e.sigName)
 	}
@@ -623,31 +616,6 @@ type moodPeriod struct {
 	startTime float64
 	endTime   float64
 	mood      string
-}
-
-type audition struct {
-	cfg *config
-	// epoch is the instant at which the collector started collecting events.
-	// audition instants are relative to this moment.
-	epoch           time.Time
-	curMood         string
-	curMoodStart    float64
-	moodPeriods     []moodPeriod
-	actChanges      []actChange
-	auditorStates   map[string]*auditorState
-	curActivated    map[exprVar]bool
-	curVals         map[string]interface{}
-	auditViolations []auditViolation
-	// names of auditors that are not sensitive to any particular signal
-	// and thus reacts to any of them.
-	alwaysAudit []string
-}
-
-type auditViolation struct {
-	ts          float64
-	result      result
-	auditorName string
-	output      string
 }
 
 // selectActors selects the actors (and the role) matching
@@ -691,7 +659,7 @@ func (cfg *config) addOrGetAudienceMember(name string) *audienceMember {
 		a = &audienceMember{
 			name: name,
 			observer: observer{
-				obsVars: make(map[exprVar]*collectedSignal),
+				obsVars: make(map[varName]*collectedSignal),
 			},
 		}
 		cfg.audience[name] = a
@@ -704,7 +672,7 @@ func (cfg *config) addOrGetAudienceMember(name string) *audienceMember {
 func (r *role) getSignal(signal string) (isEventSignal bool, ok bool) {
 	for _, rp := range r.sigParsers {
 		if rp.name == signal {
-			return rp.typ == parseEvent, true
+			return rp.typ == sigTypEvent, true
 		}
 	}
 	return false, false
@@ -732,7 +700,7 @@ func (a *actor) addObserver(sigName, observerName string) {
 }
 
 // addOrUpdateSignalSource adds a signal source to an observer.
-func (a *audienceMember) addOrUpdateSignalSource(r *role, vr exprVar) error {
+func (a *audienceMember) addOrUpdateSignalSource(r *role, vr varName) error {
 	isEventSignal, ok := r.getSignal(vr.sigName)
 	if !ok {
 		return explainAlternativesList(errors.Newf("unknown signal %q for role %s", vr.sigName, r.name),
@@ -757,18 +725,18 @@ func (a *audienceMember) addOrUpdateSignalSource(r *role, vr exprVar) error {
 // maybeAddVar adds a variable if it does not exist.
 // If it already exists and dupOk is set, it is a no-op.
 // Otherwise an error is returned.
-func (cfg *config) maybeAddVar(a *audienceMember, varName exprVar, dupOk bool) error {
-	v, ok := cfg.vars[varName]
+func (cfg *config) maybeAddVar(a *audienceMember, vn varName, dupOk bool) error {
+	v, ok := cfg.vars[vn]
 	if !ok {
 		v = &variable{
-			name:     varName,
+			name:     vn,
 			watchers: make(map[string]*audienceMember),
 		}
-		cfg.vars[varName] = v
-		cfg.varNames = append(cfg.varNames, varName)
+		cfg.vars[vn] = v
+		cfg.varNames = append(cfg.varNames, vn)
 	} else {
 		if !dupOk {
-			return errors.Newf("variable already defined: %q", varName)
+			return errors.Newf("variable already defined: %q", vn)
 		}
 	}
 	if a != nil {

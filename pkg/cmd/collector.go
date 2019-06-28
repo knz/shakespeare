@@ -15,8 +15,8 @@ import (
 
 type observation struct {
 	ts      float64
-	typ     parserType
-	varName exprVar
+	typ     sigType
+	varName varName
 	val     string
 }
 
@@ -148,10 +148,10 @@ func (ap *app) collect(
 				if ev.result == resErr || ev.result == resFailure {
 					ap.au.auditViolations = append(ap.au.auditViolations,
 						auditViolation{
-							ts:          sinceBeginning,
-							result:      ev.result,
-							auditorName: ev.actor,
-							output:      ev.output,
+							ts:           sinceBeginning,
+							result:       ev.result,
+							auditorName:  ev.actor,
+							failureState: ev.output,
 						})
 					if ap.cfg.earlyExit {
 						// the defer above will catch the violation.
@@ -219,7 +219,7 @@ func (ap *app) collect(
 				}
 				// shuffle is a random value between [-.25, +.25] used to randomize event plots.
 				shuffle := (.5 * rand.Float64()) - .25
-				if ev.typ == parseEvent {
+				if ev.typ == sigTypEvent {
 					fmt.Fprintf(w, "%.4f %q %.3f\n", ev.ts, html.EscapeString(ev.val), shuffle)
 				} else {
 					fmt.Fprintf(w, "%.4f %v %.3f\n", ev.ts, ev.val, shuffle)

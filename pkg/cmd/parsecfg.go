@@ -137,11 +137,11 @@ func (cfg *config) parseAudience(line string) error {
 		for _, actor := range foundActors {
 			actor.addObserver(signal, aName)
 
-			varName := exprVar{actor.name, signal}
-			if err := cfg.maybeAddVar(a, varName, true /* dupOk */); err != nil {
+			vn := varName{actor.name, signal}
+			if err := cfg.maybeAddVar(a, vn, true /* dupOk */); err != nil {
 				return err
 			}
-			if err := a.addOrUpdateSignalSource(r, varName); err != nil {
+			if err := a.addOrUpdateSignalSource(r, vn); err != nil {
 				return err
 			}
 		}
@@ -155,19 +155,19 @@ func (cfg *config) parseAudience(line string) error {
 			return err
 		}
 
-		varName := exprVar{actorName: "", sigName: target}
-		v, ok := cfg.vars[varName]
+		vn := varName{actorName: "", sigName: target}
+		v, ok := cfg.vars[vn]
 		if !ok {
 			return explainAlternatives(
-				errors.Newf("variable not defined: %q", varName),
+				errors.Newf("variable not defined: %q", vn),
 				"variables", cfg.vars)
 		}
 
 		a := cfg.addOrGetAudienceMember(aName)
 		v.maybeAddWatcher(a)
-		if _, ok := a.observer.obsVars[varName]; !ok {
-			a.observer.obsVars[varName] = &collectedSignal{}
-			a.observer.obsVarNames = append(a.observer.obsVarNames, varName)
+		if _, ok := a.observer.obsVars[vn]; !ok {
+			a.observer.obsVars[vn] = &collectedSignal{}
+			a.observer.obsVarNames = append(a.observer.obsVarNames, vn)
 		}
 	} else if p := pw(measuresRe); p.m(line) {
 		aName, err := p.id("name")
@@ -289,11 +289,11 @@ func (cfg *config) parseAudience(line string) error {
 
 		// Add the variable. This must happen after the check,
 		// so that we are not using the variable we are writing to.
-		varName := exprVar{sigName: aVar}
-		if err := cfg.maybeAddVar(nil, varName, false /*dupOk*/); err != nil {
+		vn := varName{sigName: aVar}
+		if err := cfg.maybeAddVar(nil, vn, false /*dupOk*/); err != nil {
 			return err
 		}
-		cfg.vars[varName].isArray = true
+		cfg.vars[vn].isArray = true
 
 		a.auditor.assignments = append(a.auditor.assignments, assignment{
 			targetVar:  aVar,
@@ -325,8 +325,8 @@ func (cfg *config) parseAudience(line string) error {
 
 		// Add the variable. This must happen after the check,
 		// so that we are not using the variable we are writing to.
-		varName := exprVar{sigName: aVar}
-		if err := cfg.maybeAddVar(nil, varName, false /*dupOk*/); err != nil {
+		vn := varName{sigName: aVar}
+		if err := cfg.maybeAddVar(nil, vn, false /*dupOk*/); err != nil {
 			return err
 		}
 
@@ -383,7 +383,7 @@ func (cfg *config) parseRole(
 	cfg.roles[roleName] = thisRole
 	cfg.roleNames = append(cfg.roleNames, roleName)
 
-	return parseSection(ctx, rd, func(line string) error {
+	err := parseSection(ctx, rd, func(line string) error {
 		if p := pw(actionDefRe); p.m(line) {
 			aName, err := p.id("actionname")
 			if err != nil {
@@ -406,7 +406,7 @@ func (cfg *config) parseRole(
 				return err
 			}
 
-			rp := resultParser{}
+			rp := sigParser{}
 			reS := p.get("re")
 
 			// Expand commonly known time formats.
@@ -427,17 +427,17 @@ func (cfg *config) parseRole(
 			ptype := p.get("type")
 			switch ptype {
 			case "event":
-				rp.typ = parseEvent
+				rp.typ = sigTypEvent
 				if !hasSubexp(re, "event") {
 					return errors.New("expected (?P<event>...) in regexp")
 				}
 			case "scalar":
-				rp.typ = parseScalar
+				rp.typ = sigTypScalar
 				if !hasSubexp(re, "scalar") {
 					return errors.New("expected (?P<scalar>...) in regexp")
 				}
 			case "delta":
-				rp.typ = parseDelta
+				rp.typ = sigTypDelta
 				if !hasSubexp(re, "delta") {
 					return errors.New("expected (?P<delta>...) in regexp")
 				}
@@ -469,6 +469,14 @@ func (cfg *config) parseRole(
 		}
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+
+	if len(thisRole.sigNames) > 0 && thisRole.spotlightCmd == "" {
+		return errors.New("cannot extract signals without a spotlight")
+	}
+	return nil
 }
 
 func hasSubexp(re *regexp.Regexp, n string) bool {

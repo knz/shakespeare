@@ -31,15 +31,6 @@ func Run() (err error) {
 		return errors.WithDetail(err, "(while parsing the command line)")
 	}
 
-	file := "-"
-	if pflag.NArg() < 1 {
-		if !cfg.quiet {
-			fmt.Println("no configuration specified, reading from standard input...")
-		}
-	} else {
-		file = pflag.Arg(0)
-	}
-
 	// Initialize the logging sub-system.
 	if err = cfg.setupLogging(ctx); err != nil {
 		log.Errorf(ctx, "init error: %+v", err)
@@ -58,17 +49,37 @@ func Run() (err error) {
 		}
 	}()
 
-	// Read the scenario.
-	rd, err := newReader(ctx, file, cfg.includePath)
-	if err != nil {
-		log.Errorf(ctx, "open error: %+v", err)
-		return errors.WithDetail(err, "(while opening the specification)")
+	// Read the configuration(s).
+	files := []string{"-"}
+	if pflag.NArg() < 1 {
+		if !cfg.quiet {
+			fmt.Println("no configuration specified, reading from standard input...")
+		}
+	} else {
+		files = make([]string, pflag.NArg())
+		for i := 0; i < pflag.NArg(); i++ {
+			files[i] = pflag.Arg(i)
+		}
 	}
-	defer rd.close()
 
-	if err = cfg.parseCfg(ctx, rd); err != nil {
-		log.Errorf(ctx, "parse error: %+v", err)
-		return errors.WithDetail(err, "(while parsing the specification)")
+	for _, file := range files {
+		if err := func() error {
+			// We use a closure to close the reader directly after each file.
+			rd, err := newReader(ctx, file, cfg.includePath)
+			if err != nil {
+				log.Errorf(ctx, "open error: %+v", err)
+				return errors.WithDetail(err, "(while opening the specification)")
+			}
+			defer rd.close()
+
+			if err = cfg.parseCfg(ctx, rd); err != nil {
+				log.Errorf(ctx, "parse error: %+v", err)
+				return errors.WithDetail(err, "(while parsing the specification)")
+			}
+			return nil
+		}(); err != nil {
+			return err
+		}
 	}
 
 	if cfg.doPrint {

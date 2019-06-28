@@ -5,7 +5,7 @@ include empty.cfg
 # no cast defined
 script
   tempo 1s
-  # no stanzas defined, play will terminate immediately
+  # no storyline defined, play will terminate immediately
 end
 # no audience defined
 
@@ -27,7 +27,7 @@ cast
 end
 script
   tempo 2m3s
-  # no stanzas defined, play will terminate immediately
+  # no storyline defined, play will terminate immediately
 end
 # no audience defined
 
@@ -50,7 +50,7 @@ include otherinc.cfg
 # no cast defined
 script
   tempo 2m3s
-  # no stanzas defined, play will terminate immediately
+  # no storyline defined, play will terminate immediately
 end
 # no audience defined
 

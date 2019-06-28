@@ -7,7 +7,7 @@ end
 # no cast defined
 script
   tempo 1s
-  # no stanzas defined, play will terminate immediately
+  # no storyline defined, play will terminate immediately
 end
 # no audience defined
 
@@ -24,7 +24,7 @@ end
 # no cast defined
 script
   tempo 1s
-  # no stanzas defined, play will terminate immediately
+  # no storyline defined, play will terminate immediately
 end
 # no audience defined
 
@@ -47,7 +47,7 @@ end
 # no cast defined
 script
   tempo 1s
-  # no stanzas defined, play will terminate immediately
+  # no storyline defined, play will terminate immediately
 end
 # no audience defined
 
@@ -115,6 +115,6 @@ end
 # no cast defined
 script
   tempo 1s
-  # no stanzas defined, play will terminate immediately
+  # no storyline defined, play will terminate immediately
 end
 # no audience defined

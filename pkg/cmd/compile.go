@@ -115,61 +115,6 @@ func (cfg *config) compileV2() error {
 	return nil
 }
 
-// compileV1 transforms a programmatic description
-// of a play (using stanzas) into an explicit list of steps.
-func (cfg *config) compileV1() error {
-	// Compute the maximum act length.
-	actLen := 0
-	for _, s := range cfg.stanzas {
-		if len(s.script) > actLen {
-			actLen = len(s.script)
-		}
-	}
-
-	// We know how long the play is going to be.
-	thisAct := make([]scene, actLen+1)
-
-	// Compile the script.
-	atTime := time.Duration(0)
-	for i := 0; i < actLen; i++ {
-		thisScene := &thisAct[i]
-		thisScene.waitUntil = atTime
-		for _, s := range cfg.stanzas {
-			script := s.script
-			if i >= len(script) {
-				continue
-			}
-
-			thisScene.concurrentLines = append(thisScene.concurrentLines, scriptLine{actor: s.actor})
-			curLine := &thisScene.concurrentLines[len(thisScene.concurrentLines)-1]
-
-			aChar := script[i]
-			acts := cfg.actions[aChar]
-
-			for _, act := range acts {
-				switch act.typ {
-				case ambianceAction:
-					curLine.steps = append(curLine.steps,
-						step{typ: stepAmbiance, action: act.act})
-				case doAction:
-					curLine.steps = append(curLine.steps,
-						step{typ: stepDo, action: act.act, failOk: act.failOk})
-				}
-			}
-			if len(curLine.steps) == 0 {
-				// No steps actually generated (or only nops). Erase the last line.
-				thisScene.concurrentLines = thisScene.concurrentLines[:len(thisScene.concurrentLines)-1]
-			}
-		}
-		atTime += cfg.tempo
-	}
-	thisAct[len(thisAct)-1].waitUntil = atTime
-
-	cfg.play = [][]scene{thisAct}
-
-	return nil
-}
-
 // printSteps prints the generated steps.
 func (cfg *config) printSteps(w io.Writer, annot bool) {
 	fkw, fan, facn := fid, fid, fid

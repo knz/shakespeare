@@ -34,13 +34,6 @@ func TestParse(t *testing.T) {
 			}
 			var out bytes.Buffer
 			cfg.printCfg(&out, false, true, false)
-			// FIXME: remove this when satisfied
-			if len(cfg.stanzas) > 0 {
-				if err := cfg.compileV1(); err != nil {
-					return fmt.Sprintf("compile error: %s\n", renderError(err))
-				}
-				cfg.printSteps(&out, false)
-			}
 			if len(cfg.storyLine) > 0 {
 				if err := cfg.compileV2(); err != nil {
 					return fmt.Sprintf("compile error: %s\n", renderError(err))
@@ -66,12 +59,6 @@ func TestParse(t *testing.T) {
 			var out2 bytes.Buffer
 			cfg.printCfg(&out2, false, true, false)
 
-			if len(cfg.stanzas) > 0 {
-				if err := cfg.compileV1(); err != nil {
-					t.Fatalf("compile error after reparse: %s\n", renderError(err))
-				}
-				cfg.printSteps(&out2, false)
-			}
 			if len(cfg.storyLine) > 0 {
 				if err := cfg.compileV2(); err != nil {
 					return fmt.Sprintf("compile error after reparse: %s\n", renderError(err))

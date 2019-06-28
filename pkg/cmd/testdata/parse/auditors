@@ -7,7 +7,7 @@ end
 # no cast defined
 script
   tempo 1s
-  # no stanzas defined, play will terminate immediately
+  # no storyline defined, play will terminate immediately
 end
 audience
   # condice sensitive to t
@@ -24,7 +24,7 @@ end
 # no cast defined
 script
   tempo 1s
-  # no stanzas defined, play will terminate immediately
+  # no storyline defined, play will terminate immediately
 end
 audience
   condice audits throughout
@@ -40,7 +40,7 @@ end
 # no cast defined
 script
   tempo 1s
-  # no stanzas defined, play will terminate immediately
+  # no storyline defined, play will terminate immediately
 end
 audience
   # condice sensitive to t
@@ -69,7 +69,7 @@ cast
 end
 script
   tempo 1s
-  # no stanzas defined, play will terminate immediately
+  # no storyline defined, play will terminate immediately
 end
 audience
   # condice sensitive to alice cures

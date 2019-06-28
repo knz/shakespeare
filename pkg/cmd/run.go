@@ -104,13 +104,6 @@ func Run() (err error) {
 	}
 
 	// Generate the steps.
-	if err = cfg.compileV1(); err != nil {
-		log.Errorf(ctx, "compile error: %+v", err)
-		return errors.WithDetail(err, "(while compiling the script)")
-	}
-	if len(cfg.storyLine) == 0 && cfg.doPrint {
-		cfg.printSteps(os.Stdout, false /*annot*/)
-	}
 	if err = cfg.compileV2(); err != nil {
 		log.Errorf(ctx, "compile error: %+v", err)
 		return errors.WithDetail(err, "(while compiling the script)")

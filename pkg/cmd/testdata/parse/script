@@ -11,7 +11,7 @@ end
 # no cast defined
 script
   tempo 1ms
-  # no stanzas defined, play will terminate immediately
+  # no storyline defined, play will terminate immediately
 end
 # no audience defined
 
@@ -44,7 +44,7 @@ script
   scene a mood starts blue
   scene a mood ends red
   scene b mood starts orange
-  # no stanzas defined, play will terminate immediately
+  # no storyline defined, play will terminate immediately
 end
 # no audience defined
 

@@ -17,7 +17,7 @@ end
 # no cast defined
 script
   tempo 1s
-  # no stanzas defined, play will terminate immediately
+  # no storyline defined, play will terminate immediately
 end
 # no audience defined
 
@@ -100,25 +100,25 @@ HINT: try this instead: _123woo
 
 parse
 script
-  action  entails nop
+  scene  mood starts blue
 end
 ----
-parse error: <testdata>:2: only ASCII letters, digits and punctuation allowed as action shorthands
+parse error: <testdata>:2: only ASCII letters, digits and punctuation allowed as scene shorthands
 --
 while parsing:
 <testdata>:1     script
-<testdata>:2   >   action  entails nop
+<testdata>:2   >   scene  mood starts blue
 
 parse
 script
-  action ☃ entails nop
+  scene ☃ mood starts blue
 end
 ----
-parse error: <testdata>:2: only ASCII characters allowed as action shorthands
+parse error: <testdata>:2: only ASCII characters allowed as scene shorthands
 --
 while parsing:
 <testdata>:1     script
-<testdata>:2   >   action ☃ entails nop
+<testdata>:2   >   scene ☃ mood starts blue
 
 parse
 audience

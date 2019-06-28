@@ -68,18 +68,6 @@ type config struct {
 	actors     map[string]*actor
 	actorNames []string
 
-	// actions is the set of actions defined by the configuration,
-	// using the "old" format (V1).
-	// This is populated during parsing.
-	actions     map[byte][]*action
-	actionChars []byte
-
-	// stanzas defines the programmatic play scenario,
-	// using the "old" format (V1).
-	// This is populated during parsing, and transformed
-	// into steps during compileV1().
-	stanzas []stanza
-
 	// sceneSpecs is the set of scenes defined by the configuration,
 	// using the "new" format (V2).
 	// This is populated during parsing.
@@ -191,10 +179,8 @@ func newConfig() *config {
 	cfg := &config{
 		roles:      make(map[string]*role),
 		actors:     make(map[string]*actor),
-		actions:    make(map[byte][]*action),
 		sceneSpecs: make(map[byte]*sceneSpec),
 		pVars:      make(map[string]string),
-		stanzas:    nil,
 		tempo:      time.Second,
 		audience:   make(map[string]*audienceMember),
 		vars:       make(map[varName]*variable),
@@ -293,12 +279,6 @@ func (cfg *config) printCfg(w io.Writer, skipComments, skipVer, annot bool) {
 
 	fmt.Fprintln(w, fkw("script"))
 	fmt.Fprintf(w, "  %s %s\n", fkw("tempo"), cfg.tempo)
-	for _, aan := range cfg.actionChars {
-		aa := cfg.actions[aan]
-		for _, a := range aa {
-			fmt.Fprintf(w, "  %s %s %s %s\n", fkw("action"), a.name, fkw("entails"), a.fmt(fkw, facn))
-		}
-	}
 	for _, aan := range cfg.sceneSpecChars {
 		sc := cfg.sceneSpecs[aan]
 		for _, ag := range sc.entails {
@@ -318,14 +298,11 @@ func (cfg *config) printCfg(w io.Writer, skipComments, skipVer, annot bool) {
 			fmt.Fprintf(w, "  %s %s %s %s\n", fkw("scene"), sc.name, fkw("mood ends"), sc.moodEnd)
 		}
 	}
-	if len(cfg.stanzas) == 0 && len(cfg.storyLine) == 0 {
+	if len(cfg.storyLine) == 0 {
 		if !skipComments {
-			fmt.Fprintln(w, "  # no stanzas defined, play will terminate immediately")
+			fmt.Fprintln(w, "  # no storyline defined, play will terminate immediately")
 		}
 	} else {
-		for _, stanza := range cfg.stanzas {
-			fmt.Fprintf(w, "  %s %-10s %s\n", fkw("prompt"), fan(stanza.actor.name), stanza.script)
-		}
 		if len(cfg.storyLine) > 0 {
 			fmt.Fprintf(w, "  %s %s\n", fkw("storyline"), strings.Join(cfg.storyLine, " "))
 		}

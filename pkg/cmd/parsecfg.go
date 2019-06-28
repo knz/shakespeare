@@ -609,13 +609,6 @@ func (cfg *config) parseActors(line string) error {
 var scriptRe = compileRe(`^script$`)
 var tempoRe = compileRe(`^tempo\s+(?P<dur>.*)$`)
 
-// V1 rules
-var actionRe = compileRe(`^action\s+(?P<char>\S)\s+entails\s+(?P<chardef>.*)$`)
-var doRe = compileRe(`^:(?P<action>\S+)$`)
-var nopRe = compileRe(`^nop$`)
-var ambianceRe = compileRe(`^mood\s+(?P<mood>\S+)$`)
-var stanzaRe = compileRe(`^prompt\s+(?P<target>every\s+\S+|\S+)\s+(?P<stanza>.*)$`)
-
 // V2 rules
 var entailsRe = compileRe(`^scene\s+(?P<char>\S)\s+entails\s+for\s+(?P<target>every\s+\S+|\S+)\s*:\s*(?P<actions>.*)$`)
 var moodChangeRe = compileRe(`^scene\s+(?P<char>\S)\s+mood\s+(?P<when>starts|ends)\s+(?P<mood>\S+)\s*$`)
@@ -624,97 +617,13 @@ var editRe = compileRe(`^edit\s+(?P<editcmd>.*)$`)
 var repeatRe = compileRe(`^repeat\s+from\s+(?P<repeat>.*)$`)
 
 func (cfg *config) parseScript(line string) error {
-	if p := pw(actionRe); p.m(line) {
-		actShorthand := p.get("char")
-		if len(actShorthand) != 1 {
-			return errors.New("only ASCII characters allowed as action shorthands")
-		}
-		actChar := actShorthand[0]
-		if !unicode.In(rune(actChar), unicode.L, unicode.N, unicode.P) {
-			return errors.New("only ASCII letters, digits and punctuation allowed as action shorthands")
-		}
-
-		actActions := p.get("chardef")
-		components := strings.Split(actActions, ";")
-		for _, c := range components {
-			actAction := strings.TrimSpace(c)
-
-			_, ok := cfg.actions[actChar]
-			a := action{name: actShorthand}
-			cfg.actions[actChar] = append(cfg.actions[actChar], &a)
-			if !ok {
-				cfg.actionChars = append(cfg.actionChars, actChar)
-			}
-
-			if p := pw(nopRe); p.m(actAction) {
-				// action . nop
-				a.typ = nopAction
-			} else if p := pw(ambianceRe); p.m(actAction) {
-				// action r mood red
-				a.typ = ambianceAction
-				mood, err := p.id("mood")
-				if err != nil {
-					return err
-				}
-				a.act = mood
-			} else if p := pw(doRe); p.m(actAction) {
-				// action r :dosomething
-				a.typ = doAction
-				act := p.get("action")
-				if strings.HasSuffix(act, "?") {
-					a.failOk = true
-					act = strings.TrimSuffix(act, "?")
-				}
-				if err := checkIdent(act); err != nil {
-					return err
-				}
-				a.act = act
-			} else {
-				return errors.Newf("unknown action syntax: %s", line)
-			}
-		}
-	} else if p := pw(tempoRe); p.m(line) {
+	if p := pw(tempoRe); p.m(line) {
 		durS := p.get("dur")
 		dur, err := time.ParseDuration(durS)
 		if err != nil {
 			return errors.Wrap(err, "parsing tempo")
 		}
 		cfg.tempo = dur
-	} else if p := pw(stanzaRe); p.m(line) {
-		script := p.get("stanza")
-		target := p.get("target")
-
-		r, foundActors, err := cfg.selectActors(target)
-		if err != nil {
-			return err
-		}
-		if len(foundActors) == 0 {
-			log.Warningf(context.TODO(), "there is no actor playing role %q to play this script: %s", r.name, line)
-			return nil
-		}
-
-		for i := 0; i < len(script); i++ {
-			actionSteps, ok := cfg.actions[script[i]]
-			if !ok {
-				return explainAlternatives(errors.Newf("script action '%c' not defined", script[i]), "script actions", cfg.actions)
-			}
-			for _, act := range actionSteps {
-				if act.typ != doAction {
-					continue
-				}
-				if _, ok := r.actionCmds[act.act]; !ok {
-					return explainAlternatives(
-						errors.Newf("action :%s (used in script action '%c') is not defined for role %q", act.act, script[i], r.name),
-						fmt.Sprintf("actions for role %s", r.name), r.actionCmds)
-				}
-			}
-		}
-		for _, actor := range foundActors {
-			cfg.stanzas = append(cfg.stanzas, stanza{
-				actor:  actor,
-				script: script,
-			})
-		}
 	} else if p := pw(repeatRe); p.m(line) {
 		repeat := p.get("repeat")
 		re, err := regexp.Compile(repeat)

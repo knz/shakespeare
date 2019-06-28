@@ -103,14 +103,14 @@ end
 # no audience defined
 # play
 # -- ACT 1 --
-# 1:  bob: cure!
-# 2:  (wait until 1s)
-# 2:  alice: cure!
-# 5:  (wait until 4s)
-# 5:  alice: cure!
-# 5:  (meanwhile)
-# 5:  bob: cure!
-# 8:  (wait until 7s)
+#  1:  bob: cure!
+#  2:  (wait until 1s)
+#  2:  alice: cure!
+#  5:  (wait until 4s)
+#  5:  alice: cure!
+#  5:  (meanwhile)
+#  5:  bob: cure!
+#  8:  (wait until 7s)
 # end
 
 

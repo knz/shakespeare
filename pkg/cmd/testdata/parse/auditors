@@ -90,7 +90,7 @@ while parsing:
 <testdata>:2     include medical_cast.cfg
 <testdata>:3     audience
 <testdata>:4   >   condice expects notknown: true
-HINT: available modalities: always, always eventually, eventually, eventually always, never, not always, once, thrice, twice
+HINT: available modalities: always, always eventually, at most once, eventually, eventually always, never, not always, once, thrice, twice
 
 parse
 audience

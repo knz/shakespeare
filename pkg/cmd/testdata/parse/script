@@ -82,14 +82,14 @@ end
 # no audience defined
 # play
 # -- ACT 1: aa --
-# 1:  (mood: red)
-# 2:  alice: cure!
-# 3:  (mood: blue)
-# 4:  (wait until 1s)
-# 4:  (mood: red)
-# 5:  alice: cure!
-# 6:  (mood: blue)
-# 7:  (wait until 2s)
+#  1:  (mood: red)
+#  2:  alice: cure!
+#  3:  (mood: blue)
+#  4:  (wait until 1s)
+#  4:  (mood: red)
+#  5:  alice: cure!
+#  6:  (mood: blue)
+#  7:  (wait until 2s)
 # end
 
 parse
@@ -122,14 +122,14 @@ end
 # no audience defined
 # play
 # -- ACT 1: a.a --
-# 1:  (mood: red)
-# 2:  alice: cure!
-# 3:  (mood: blue)
-# 4:  (wait until 2s)
-# 4:  (mood: red)
-# 5:  alice: cure!
-# 6:  (mood: blue)
-# 7:  (wait until 3s)
+#  1:  (mood: red)
+#  2:  alice: cure!
+#  3:  (mood: blue)
+#  4:  (wait until 2s)
+#  4:  (mood: red)
+#  5:  alice: cure!
+#  6:  (mood: blue)
+#  7:  (wait until 3s)
 # end
 
 
@@ -169,12 +169,12 @@ end
 # no audience defined
 # play
 # -- ACT 1: a+b --
-# 1:  (mood: red)
-# 2:  alice: cure!
-# 2:  (meanwhile)
-# 2:  bob: cure!
-# 3:  (mood: orange)
-# 4:  (wait until 1s)
+#  1:  (mood: red)
+#  2:  alice: cure!
+#  2:  (meanwhile)
+#  2:  bob: cure!
+#  3:  (mood: orange)
+#  4:  (wait until 1s)
 # end
 
 
@@ -199,10 +199,10 @@ end
 # no audience defined
 # play
 # -- ACT 1: aa --
-# 1:  (mood: red)
-# 2:  (wait until 1s)
-# 2:  (mood: red)
-# 3:  (wait until 2s)
+#  1:  (mood: red)
+#  2:  (wait until 1s)
+#  2:  (mood: red)
+#  3:  (wait until 2s)
 # end
 
 parse
@@ -222,8 +222,8 @@ end
 # no audience defined
 # play
 # -- ACT 1: a+a --
-# 1:  (mood: red)
-# 2:  (wait until 1s)
+#  1:  (mood: red)
+#  2:  (wait until 1s)
 # end
 
 parse
@@ -243,15 +243,15 @@ end
 # no audience defined
 # play
 # -- ACT 1: a+aa --
-# 1:  (mood: red)
-# 2:  (wait until 1s)
-# 2:  (mood: red)
-# 3:  (wait until 2s)
+#  1:  (mood: red)
+#  2:  (wait until 1s)
+#  2:  (mood: red)
+#  3:  (wait until 2s)
 # -- ACT 2: a+aa --
-# 1:  (mood: red)
-# 2:  (wait until 1s)
-# 2:  (mood: red)
-# 3:  (wait until 2s)
+#  1:  (mood: red)
+#  2:  (wait until 1s)
+#  2:  (mood: red)
+#  3:  (wait until 2s)
 # end
 
 parse
@@ -271,11 +271,11 @@ end
 # no audience defined
 # play
 # -- ACT 1: a --
-# 1:  (mood: red)
-# 2:  (wait until 1s)
+#  1:  (mood: red)
+#  2:  (wait until 1s)
 # -- ACT 2: a --
-# 1:  (mood: red)
-# 2:  (wait until 1s)
+#  1:  (mood: red)
+#  2:  (wait until 1s)
 # end
 
 parse
@@ -305,26 +305,26 @@ end
 # no audience defined
 # play
 # -- ACT 1: c+a+bc --
-# 1:  (mood: yellow)
-# 2:  (mood: blue)
-# 3:  (wait until 1s)
-# 3:  (mood: yellow)
-# 4:  (mood: yellow)
-# 5:  (wait until 2s)
+#  1:  (mood: yellow)
+#  2:  (mood: blue)
+#  3:  (wait until 1s)
+#  3:  (mood: yellow)
+#  4:  (mood: yellow)
+#  5:  (wait until 2s)
 # -- ACT 2: a+b+cc --
-# 1:  (mood: red)
-# 2:  (mood: yellow)
-# 3:  (wait until 1s)
-# 3:  (mood: yellow)
-# 4:  (mood: yellow)
-# 5:  (wait until 2s)
+#  1:  (mood: red)
+#  2:  (mood: yellow)
+#  3:  (wait until 1s)
+#  3:  (mood: yellow)
+#  4:  (mood: yellow)
+#  5:  (wait until 2s)
 # -- ACT 3: bc+a+b --
-# 1:  (mood: blue)
-# 2:  (mood: blue)
-# 3:  (wait until 1s)
-# 3:  (mood: yellow)
-# 4:  (mood: blue)
-# 5:  (wait until 2s)
+#  1:  (mood: blue)
+#  2:  (mood: blue)
+#  3:  (wait until 1s)
+#  3:  (mood: yellow)
+#  4:  (mood: blue)
+#  5:  (wait until 2s)
 # end
 
 parse
@@ -358,23 +358,23 @@ end
 # no audience defined
 # play
 # -- ACT 1: .a.b. --
-# 1:  (wait until 1s)
-# 1:  alice: cure!
-# 1:  (meanwhile)
-# 1:  bob: cure!
-# 2:  (wait until 3s)
-# 2:  (mood: blue)
-# 3:  alice: cure!
-# 4:  (wait until 5s)
+#  1:  (wait until 1s)
+#  1:  alice: cure!
+#  1:  (meanwhile)
+#  1:  bob: cure!
+#  2:  (wait until 3s)
+#  2:  (mood: blue)
+#  3:  alice: cure!
+#  4:  (wait until 5s)
 # -- ACT 2: .a+b. --
-# 1:  (wait until 1s)
-# 1:  (mood: blue)
-# 2:  alice: cure!
-# 2:  (meanwhile)
-# 2:  bob: cure!
-# 2:  (meanwhile)
-# 2:  alice: cure!
-# 3:  (wait until 3s)
+#  1:  (wait until 1s)
+#  1:  (mood: blue)
+#  2:  alice: cure!
+#  2:  (meanwhile)
+#  2:  bob: cure!
+#  2:  (meanwhile)
+#  2:  alice: cure!
+#  3:  (wait until 3s)
 # end
 
 ###

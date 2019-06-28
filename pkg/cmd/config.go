@@ -665,7 +665,8 @@ func (cfg *config) selectActors(target string) (*role, []*actor, error) {
 			return nil, nil, explainAlternatives(errors.Newf("unknown role %q", roleName), "roles", cfg.roles)
 		}
 		var res []*actor
-		for _, a := range cfg.actors {
+		for _, an := range cfg.actorNames {
+			a := cfg.actors[an]
 			if a.role != r {
 				continue
 			}

@@ -50,10 +50,10 @@ script
   # no stanzas defined, play will terminate immediately
 end
 audience
-  # condice sensitive to bob cures
   # condice sensitive to alice cures
-  condice watches bob cures
+  # condice sensitive to bob cures
   condice watches alice cures
+  condice watches bob cures
 end
 
 parse

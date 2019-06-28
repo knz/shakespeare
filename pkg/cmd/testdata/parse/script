@@ -63,6 +63,7 @@ script
 end
 ----
 role doctor
+  spotlight true
   signal cures event at (?P<ts_now>)(?P<event>.*)
   :cure echo cured
 end
@@ -147,6 +148,7 @@ script
 end
 ----
 role doctor
+  spotlight true
   signal cures event at (?P<ts_now>)(?P<event>.*)
   :cure echo cured
 end
@@ -338,6 +340,7 @@ script
 end
 ----
 role doctor
+  spotlight true
   signal cures event at (?P<ts_now>)(?P<event>.*)
   :cure echo cured
 end

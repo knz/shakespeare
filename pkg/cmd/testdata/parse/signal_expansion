@@ -1,9 +1,11 @@
 parse
 role test
+  spotlight true
   signal test event at (?P<ts_now>)(?P<event>.*)
 end
 ----
 role test
+  spotlight true
   signal test event at (?P<ts_now>)(?P<event>.*)
 end
 # no cast defined
@@ -16,10 +18,12 @@ end
 
 parse
 role test
+  spotlight true
   signal test event at (?P<ts_rfc3339>)(?P<event>.*)
 end
 ----
 role test
+  spotlight true
   signal test event at (?P<ts_rfc3339>\d\d\d\d-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)Z)(?P<event>.*)
 end
 # no cast defined
@@ -31,10 +35,12 @@ end
 
 parse
 role test
+  spotlight true
   signal test event at (?P<ts_log>)(?P<event>.*)
 end
 ----
 role test
+  spotlight true
   signal test event at (?P<ts_log>\d{6} \d\d:\d\d:\d\d\.\d{6})(?P<event>.*)
 end
 # no cast defined
@@ -46,24 +52,28 @@ end
 
 parse
 role test
+  spotlight true
   signal test event at (?P<event>.*)
 end
 ----
-parse error: <testdata>:2: unknown or missing time stamp format (?P<ts_...>) in regexp
+parse error: <testdata>:3: unknown or missing time stamp format (?P<ts_...>) in regexp
 --
 while parsing:
 <testdata>:1     role test
-<testdata>:2   >   signal test event at (?P<event>.*)
+<testdata>:2       spotlight true
+<testdata>:3   >   signal test event at (?P<event>.*)
 HINT: available formats: ts_log, ts_now, ts_rfc3339
 
 
 parse
 role test
+  spotlight true
   signal test event at .*
 end
 ----
-parse error: <testdata>:2: expected (?P<event>...) in regexp
+parse error: <testdata>:3: expected (?P<event>...) in regexp
 --
 while parsing:
 <testdata>:1     role test
-<testdata>:2   >   signal test event at .*
+<testdata>:2       spotlight true
+<testdata>:3   >   signal test event at .*

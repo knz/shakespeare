@@ -655,14 +655,14 @@ type auditViolation struct {
 // - every <rolename>  -> every actor playing <rolename>
 // - <actorname>       -> that specific actor
 func (cfg *config) selectActors(target string) (*role, []*actor, error) {
-	if strings.HasPrefix(target, "every ") {
-		roleName := strings.TrimPrefix(target, "every ")
+	if roleName, ok := withPrefix(target, "every "); ok {
 		if err := checkIdent(roleName); err != nil {
 			return nil, nil, err
 		}
 		r, ok := cfg.roles[roleName]
 		if !ok {
-			return nil, nil, explainAlternatives(errors.Newf("unknown role %q", roleName), "roles", cfg.roles)
+			return nil, nil, explainAlternatives(
+				errors.Newf("unknown role %q", roleName), "roles", cfg.roles)
 		}
 		var res []*actor
 		for _, an := range cfg.actorNames {
@@ -679,7 +679,8 @@ func (cfg *config) selectActors(target string) (*role, []*actor, error) {
 	}
 	act, ok := cfg.actors[target]
 	if !ok {
-		return nil, nil, explainAlternatives(errors.Newf("unknown actor %q", target), "actors", cfg.actors)
+		return nil, nil, explainAlternatives(
+			errors.Newf("unknown actor %q", target), "actors", cfg.actors)
 	}
 	return act.role, []*actor{act}, nil
 }
@@ -753,6 +754,9 @@ func (a *audienceMember) addOrUpdateSignalSource(r *role, vr exprVar) error {
 	return nil
 }
 
+// maybeAddVar adds a variable if it does not exist.
+// If it already exists and dupOk is set, it is a no-op.
+// Otherwise an error is returned.
 func (cfg *config) maybeAddVar(a *audienceMember, varName exprVar, dupOk bool) error {
 	v, ok := cfg.vars[varName]
 	if !ok {
@@ -777,7 +781,6 @@ func (v *variable) maybeAddWatcher(watcher *audienceMember) {
 	if _, ok := v.watchers[watcher.name]; ok {
 		return
 	}
-	log.Warningf(context.TODO(), "added watcher %q for var %q", watcher.name, v.name)
 	v.watchers[watcher.name] = watcher
 	v.watcherNames = append(v.watcherNames, watcher.name)
 }
@@ -830,6 +833,8 @@ func (cfg *config) validateStoryLine(storyLine string) ([]string, error) {
 	return newParts, nil
 }
 
+// bytesToStrings convers an array of bytes to an array of strings,
+// this is used to propose alternatives upon encountering an error.
 func bytesToStrings(bs []byte) []string {
 	res := make([]string, len(bs))
 	for i, b := range bs {

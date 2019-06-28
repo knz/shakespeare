@@ -35,21 +35,21 @@ func (cfg *config) parseCfg(ctx context.Context, rd *reader) error {
 			continue
 		}
 
-		if strings.HasPrefix(line, "title ") {
-			cfg.titleStrings = append(cfg.titleStrings, strings.TrimSpace(strings.TrimPrefix(line, "title ")))
-		} else if strings.HasPrefix(line, "attention ") {
-			cfg.seeAlso = append(cfg.seeAlso, strings.TrimSpace(strings.TrimPrefix(line, "attention ")))
-		} else if strings.HasPrefix(line, "author ") {
-			cfg.authors = append(cfg.authors, strings.TrimSpace(strings.TrimPrefix(line, "author ")))
-		} else if roleRe.MatchString(line) {
+		if title, ok := withPrefix(line, "title "); ok {
+			cfg.titleStrings = append(cfg.titleStrings, title)
+		} else if att, ok := withPrefix(line, "attention "); ok {
+			cfg.seeAlso = append(cfg.seeAlso, att)
+		} else if auth, ok := withPrefix(line, "author "); ok {
+			cfg.authors = append(cfg.authors, auth)
+		} else if p := pw(roleRe); p.m(line) {
 			// The "role" syntax is special because the role name
 			// is listed in the heading line.
-			roleName := roleRe.ReplaceAllString(line, "${rolename}")
-			if err := checkIdent(roleName); err != nil {
+			roleName, err := p.id("rolename")
+			if err != nil {
 				return pos.wrapErr(err)
 			}
-			extends := strings.TrimSpace(roleRe.ReplaceAllString(line, "${extends}"))
-			extends = strings.TrimSpace(strings.TrimPrefix(extends, "extends"))
+			extends := p.get("extends")
+			extends, _ = withPrefix(extends, "extends")
 			if extends != "" {
 				if err := checkIdent(roleName); err != nil {
 					return pos.wrapErr(err)
@@ -113,12 +113,14 @@ var expectsRe = compileRe(`^(?P<name>\S+)\s+expects\s+(?P<when>[a-z]+[a-z ]*[a-z
 var noPlotRe = compileRe(`^(?P<name>\S+)\s+only\s+helps\s*$`)
 
 func (cfg *config) parseAudience(line string) error {
-	if watchRe.MatchString(line) {
-		aName := watchRe.ReplaceAllString(line, "${name}")
-		target := watchRe.ReplaceAllString(line, "${target}")
-		signal := watchRe.ReplaceAllString(line, "${signal}")
-
-		if err := checkIdents(aName, signal); err != nil {
+	if p := pw(watchRe); p.m(line) {
+		target := p.get("target")
+		aName, err := p.id("name")
+		if err != nil {
+			return err
+		}
+		signal, err := p.id("signal")
+		if err != nil {
 			return err
 		}
 
@@ -143,18 +145,22 @@ func (cfg *config) parseAudience(line string) error {
 				return err
 			}
 		}
-	} else if watchVarRe.MatchString(line) {
-		aName := watchVarRe.ReplaceAllString(line, "${name}")
-		target := watchVarRe.ReplaceAllString(line, "${varname}")
-
-		if err := checkIdents(aName, target); err != nil {
+	} else if p := pw(watchVarRe); p.m(line) {
+		aName, err := p.id("name")
+		if err != nil {
+			return err
+		}
+		target, err := p.id("varname")
+		if err != nil {
 			return err
 		}
 
 		varName := exprVar{actorName: "", sigName: target}
 		v, ok := cfg.vars[varName]
 		if !ok {
-			return explainAlternatives(errors.Newf("variable not defined: %q", varName), "variables", cfg.vars)
+			return explainAlternatives(
+				errors.Newf("variable not defined: %q", varName),
+				"variables", cfg.vars)
 		}
 
 		a := cfg.addOrGetAudienceMember(aName)
@@ -163,27 +169,26 @@ func (cfg *config) parseAudience(line string) error {
 			a.observer.obsVars[varName] = &collectedSignal{}
 			a.observer.obsVarNames = append(a.observer.obsVarNames, varName)
 		}
-	} else if measuresRe.MatchString(line) {
-		aName := measuresRe.ReplaceAllString(line, "${name}")
-		if err := checkIdent(aName); err != nil {
+	} else if p := pw(measuresRe); p.m(line) {
+		aName, err := p.id("name")
+		if err != nil {
 			return err
 		}
-		ylabel := strings.TrimSpace(measuresRe.ReplaceAllString(line, "${ylabel}"))
+		ylabel := p.get("ylabel")
 		a := cfg.addOrGetAudienceMember(aName)
 		a.observer.ylabel = ylabel
-	} else if noPlotRe.MatchString(line) {
-		aName := noPlotRe.ReplaceAllString(line, "${name}")
-		if err := checkIdent(aName); err != nil {
+	} else if p := pw(noPlotRe); p.m(line) {
+		aName, err := p.id("name")
+		if err != nil {
 			return err
 		}
 		a := cfg.addOrGetAudienceMember(aName)
 		a.observer.disablePlot = true
-	} else if expectsRe.MatchString(line) {
-		aName := expectsRe.ReplaceAllString(line, "${name}")
-		aWhen := expectsRe.ReplaceAllString(line, "${when}")
-		aExpr := strings.TrimSpace(expectsRe.ReplaceAllString(line, "${expr}"))
-
-		if err := checkIdent(aName); err != nil {
+	} else if p := pw(expectsRe); p.m(line) {
+		aWhen := p.get("when")
+		aExpr := p.get("expr")
+		aName, err := p.id("name")
+		if err != nil {
 			return err
 		}
 
@@ -207,26 +212,23 @@ func (cfg *config) parseAudience(line string) error {
 			return err
 		}
 		a.auditor.expectExpr = exp
-	} else if activeRe.MatchString(line) {
-		aName := activeRe.ReplaceAllString(line, "${name}")
-		aWhen := activeRe.ReplaceAllString(line, "${expr}")
-
-		if err := checkIdent(aName); err != nil {
+	} else if p := pw(activeRe); p.m(line) {
+		aWhen := p.get("expr")
+		aName, err := p.id("name")
+		if err != nil {
 			return err
 		}
 
 		var expr string
-		switch {
-		case strings.HasPrefix(aWhen, "only"):
-			expr = strings.TrimSpace(strings.TrimPrefix(aWhen, "only"))
-			if strings.HasPrefix(expr, "while") {
-				expr = strings.TrimSpace(strings.TrimPrefix(expr, "while"))
+		if e, ok := withPrefix(aWhen, "only"); ok {
+			if wh, ok := withPrefix(e, "while"); ok {
+				expr = wh
 			} else {
-				expr = strings.TrimSpace(strings.TrimPrefix(expr, "when"))
+				expr, _ = withPrefix(e, "when")
 			}
-		case strings.HasPrefix(aWhen, "throughout"):
+		} else if strings.HasPrefix(aWhen, "throughout") {
 			expr = "true"
-		default:
+		} else {
 			return errors.Newf("invalid activation period: %q", aWhen)
 		}
 
@@ -240,14 +242,16 @@ func (cfg *config) parseAudience(line string) error {
 			return err
 		}
 		a.auditor.activeCond = exp
-	} else if collectsRe.MatchString(line) {
-		aName := collectsRe.ReplaceAllString(line, "${name}")
-		aVar := collectsRe.ReplaceAllString(line, "${var}")
-		aMode := collectsRe.ReplaceAllString(line, "${mode}")
-		aN := collectsRe.ReplaceAllString(line, "${N}")
-		aExpr := collectsRe.ReplaceAllString(line, "${expr}")
-
-		if err := checkIdents(aName, aVar); err != nil {
+	} else if p := pw(collectsRe); p.m(line) {
+		aMode := p.get("mode")
+		aN := p.get("N")
+		aExpr := p.get("expr")
+		aName, err := p.id("name")
+		if err != nil {
+			return err
+		}
+		aVar, err := p.id("var")
+		if err != nil {
 			return err
 		}
 
@@ -297,12 +301,14 @@ func (cfg *config) parseAudience(line string) error {
 			assignMode: mode,
 			N:          N,
 		})
-	} else if computesRe.MatchString(line) {
-		aName := computesRe.ReplaceAllString(line, "${name}")
-		aVar := computesRe.ReplaceAllString(line, "${var}")
-		aExpr := computesRe.ReplaceAllString(line, "${expr}")
-
-		if err := checkIdents(aName, aVar); err != nil {
+	} else if p := pw(computesRe); p.m(line) {
+		aExpr := p.get("expr")
+		aName, err := p.id("name")
+		if err != nil {
+			return err
+		}
+		aVar, err := p.id("var")
+		if err != nil {
 			return err
 		}
 
@@ -365,7 +371,8 @@ func (cfg *config) parseRole(
 	if extends != "" {
 		parentRole, ok := cfg.roles[extends]
 		if !ok {
-			return explainAlternatives(errors.Newf("unknown role: %s", extends), "roles", cfg.roles)
+			return explainAlternatives(
+				errors.Newf("unknown role: %s", extends), "roles", cfg.roles)
 		}
 		thisRole = parentRole.clone(roleName)
 	} else {
@@ -377,30 +384,30 @@ func (cfg *config) parseRole(
 	cfg.roleNames = append(cfg.roleNames, roleName)
 
 	return parseSection(ctx, rd, func(line string) error {
-		if actionDefRe.MatchString(line) {
-			aName := actionDefRe.ReplaceAllString(line, "${actionname}")
-			if err := checkIdent(aName); err != nil {
+		if p := pw(actionDefRe); p.m(line) {
+			aName, err := p.id("actionname")
+			if err != nil {
 				return err
 			}
-			aCmd := actionDefRe.ReplaceAllString(line, "${cmd}")
+			aCmd := p.get("cmd")
 			if _, ok := thisRole.actionCmds[aName]; ok {
 				return errors.Newf("duplicate action name: %q", aName)
 			} else {
 				thisRole.actionNames = append(thisRole.actionNames, aName)
 			}
 			thisRole.actionCmds[aName] = cmd(aCmd)
-		} else if spotlightDefRe.MatchString(line) {
-			thisRole.spotlightCmd = cmd(spotlightDefRe.ReplaceAllString(line, "${cmd}"))
-		} else if cleanupDefRe.MatchString(line) {
-			thisRole.cleanupCmd = cmd(cleanupDefRe.ReplaceAllString(line, "${cmd}"))
-		} else if parseDefRe.MatchString(line) {
-			pname := parseDefRe.ReplaceAllString(line, "${name}")
-			if err := checkIdent(pname); err != nil {
+		} else if p := pw(spotlightDefRe); p.m(line) {
+			thisRole.spotlightCmd = cmd(p.get("cmd"))
+		} else if p := pw(cleanupDefRe); p.m(line) {
+			thisRole.cleanupCmd = cmd(p.get("cmd"))
+		} else if p := pw(parseDefRe); p.m(line) {
+			pname, err := p.id("name")
+			if err != nil {
 				return err
 			}
 
 			rp := resultParser{}
-			reS := parseDefRe.ReplaceAllString(line, "${re}")
+			reS := p.get("re")
 
 			// Expand commonly known time formats.
 			reS = strings.Replace(reS, `(?P<ts_rfc3339>)`, `(?P<ts_rfc3339>\d\d\d\d-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)Z)`, 1)
@@ -417,7 +424,7 @@ func (cfg *config) parseRole(
 			parserNames[pname] = struct{}{}
 			rp.name = pname
 
-			ptype := parseDefRe.ReplaceAllString(line, "${type}")
+			ptype := p.get("type")
 			switch ptype {
 			case "event":
 				rp.typ = parseEvent
@@ -477,18 +484,21 @@ var actorsRe = compileRe(`^cast$`)
 var actorDefRe = compileRe(`^(?P<actorname>\S+)\s+plays\s+(?P<rolename>\S+?)\s*(?P<extraenv>\(.*\)|)\s*$`)
 
 func (cfg *config) parseActors(line string) error {
-	if actorDefRe.MatchString(line) {
-		roleName := actorDefRe.ReplaceAllString(line, "${rolename}")
-		actorName := actorDefRe.ReplaceAllString(line, "${actorname}")
-		extraEnv := actorDefRe.ReplaceAllString(line, "${extraenv}")
-
-		if err := checkIdents(roleName, actorName); err != nil {
+	if p := pw(actorDefRe); p.m(line) {
+		extraEnv := p.get("extraenv")
+		roleName, err := p.id("rolename")
+		if err != nil {
+			return err
+		}
+		actorName, err := p.id("actorname")
+		if err != nil {
 			return err
 		}
 
 		r, ok := cfg.roles[roleName]
 		if !ok {
-			return explainAlternatives(errors.Newf("unknown role: %s", roleName), "roles", cfg.roles)
+			return explainAlternatives(
+				errors.Newf("unknown role: %s", roleName), "roles", cfg.roles)
 		}
 
 		if _, ok := cfg.actors[actorName]; ok {
@@ -533,8 +543,8 @@ var storyLineRe = compileRe(`storyline\s+(?P<storyline>.*)\s*$`)
 var editRe = compileRe(`edit\s+(?P<editcmd>.*)$`)
 
 func (cfg *config) parseScript(line string) error {
-	if actionRe.MatchString(line) {
-		actShorthand := actionRe.ReplaceAllString(line, "${char}")
+	if p := pw(actionRe); p.m(line) {
+		actShorthand := p.get("char")
 		if len(actShorthand) != 1 {
 			return errors.New("only ASCII characters allowed as action shorthands")
 		}
@@ -543,7 +553,7 @@ func (cfg *config) parseScript(line string) error {
 			return errors.New("only ASCII letters, digits and punctuation allowed as action shorthands")
 		}
 
-		actActions := actionRe.ReplaceAllString(line, "${chardef}")
+		actActions := p.get("chardef")
 		components := strings.Split(actActions, ";")
 		for _, c := range components {
 			actAction := strings.TrimSpace(c)
@@ -555,21 +565,21 @@ func (cfg *config) parseScript(line string) error {
 				cfg.actionChars = append(cfg.actionChars, actChar)
 			}
 
-			if nopRe.MatchString(actAction) {
+			if p := pw(nopRe); p.m(actAction) {
 				// action . nop
 				a.typ = nopAction
-			} else if ambianceRe.MatchString(actAction) {
+			} else if p := pw(ambianceRe); p.m(actAction) {
 				// action r mood red
 				a.typ = ambianceAction
-				mood := ambianceRe.ReplaceAllString(actAction, "${mood}")
-				if err := checkIdent(mood); err != nil {
+				mood, err := p.id("mood")
+				if err != nil {
 					return err
 				}
 				a.act = mood
-			} else if doRe.MatchString(actAction) {
+			} else if p := pw(doRe); p.m(actAction) {
 				// action r :dosomething
 				a.typ = doAction
-				act := doRe.ReplaceAllString(actAction, "${action}")
+				act := p.get("action")
 				if strings.HasSuffix(act, "?") {
 					a.failOk = true
 					act = strings.TrimSuffix(act, "?")
@@ -582,16 +592,16 @@ func (cfg *config) parseScript(line string) error {
 				return errors.Newf("unknown action syntax: %s", line)
 			}
 		}
-	} else if tempoRe.MatchString(line) {
-		durS := tempoRe.ReplaceAllString(line, "${dur}")
+	} else if p := pw(tempoRe); p.m(line) {
+		durS := p.get("dur")
 		dur, err := time.ParseDuration(durS)
 		if err != nil {
 			return errors.Wrap(err, "parsing tempo")
 		}
 		cfg.tempo = dur
-	} else if stanzaRe.MatchString(line) {
-		script := stanzaRe.ReplaceAllString(line, "${stanza}")
-		target := stanzaRe.ReplaceAllString(line, "${target}")
+	} else if p := pw(stanzaRe); p.m(line) {
+		script := p.get("stanza")
+		target := p.get("target")
 
 		r, foundActors, err := cfg.selectActors(target)
 		if err != nil {
@@ -624,16 +634,16 @@ func (cfg *config) parseScript(line string) error {
 				script: script,
 			})
 		}
-	} else if storyLineRe.MatchString(line) {
-		storyLine := strings.TrimSpace(storyLineRe.ReplaceAllString(line, "${storyline}"))
+	} else if p := pw(storyLineRe); p.m(line) {
+		storyLine := p.get("storyline")
 		st, err := cfg.validateStoryLine(storyLine)
 		if err != nil {
 			return err
 		}
 		cfg.storyLine = combineStoryLines(cfg.storyLine, st)
 		log.Infof(context.Background(), "combined storylines: %s", strings.Join(cfg.storyLine, " "))
-	} else if editRe.MatchString(line) {
-		editcmd := strings.TrimSpace(editRe.ReplaceAllString(line, "${editcmd}"))
+	} else if p := pw(editRe); p.m(line) {
+		editcmd := p.get("editcmd")
 		if len(editcmd) < 4 || editcmd[0] != 's' {
 			return errors.WithHint(errors.New("invalid syntax"), "try edit s/.../.../")
 		}
@@ -653,16 +663,14 @@ func (cfg *config) parseScript(line string) error {
 			return errors.WithDetailf(err, "storyline after edit: %s", newStoryLine)
 		}
 		cfg.storyLine = st
-	} else if moodChangeRe.MatchString(line) {
-		aMood := moodChangeRe.ReplaceAllString(line, "${mood}")
-		aWhen := moodChangeRe.ReplaceAllString(line, "${when}")
-		scShorthand := moodChangeRe.ReplaceAllString(line, "${char}")
-		_, err := validateShorthand(scShorthand)
+	} else if p := pw(moodChangeRe); p.m(line) {
+		aMood, err := p.id("mood")
 		if err != nil {
 			return err
 		}
-
-		if err := checkIdent(aMood); err != nil {
+		aWhen := p.get("when")
+		scShorthand := p.get("char")
+		if _, err := validateShorthand(scShorthand); err != nil {
 			return err
 		}
 
@@ -672,12 +680,11 @@ func (cfg *config) parseScript(line string) error {
 		} else {
 			sc.moodEnd = aMood
 		}
-	} else if entailsRe.MatchString(line) {
-		target := entailsRe.ReplaceAllString(line, "${target}")
-		actActions := entailsRe.ReplaceAllString(line, "${actions}")
-		scShorthand := entailsRe.ReplaceAllString(line, "${char}")
-		_, err := validateShorthand(scShorthand)
-		if err != nil {
+	} else if p := pw(entailsRe); p.m(line) {
+		target := p.get("target")
+		actActions := p.get("actions")
+		scShorthand := p.get("char")
+		if _, err := validateShorthand(scShorthand); err != nil {
 			return err
 		}
 
@@ -720,15 +727,15 @@ func (cfg *config) parseScript(line string) error {
 	return nil
 }
 
-func validateShorthand(actShorthand string) (byte, error) {
-	if len(actShorthand) != 1 {
-		return 0, errors.New("only ASCII characters allowed as action shorthands")
+func validateShorthand(scSchorthand string) (byte, error) {
+	if len(scSchorthand) != 1 {
+		return 0, errors.New("only ASCII characters allowed as scene shorthands")
 	}
-	actChar := actShorthand[0]
-	if !unicode.In(rune(actChar), unicode.L, unicode.N) {
-		return 0, errors.New("only ASCII letters, digits and punctuation allowed as action shorthands")
+	scChar := scSchorthand[0]
+	if !unicode.In(rune(scChar), unicode.L, unicode.N) {
+		return 0, errors.New("only ASCII letters, digits and punctuation allowed as scene shorthands")
 	}
-	return actChar, nil
+	return scChar, nil
 }
 
 func parseAuditWhen(when string) (*fsm, error) {
@@ -740,6 +747,8 @@ func parseAuditWhen(when string) (*fsm, error) {
 		"modalities", automata)
 }
 
+// explainAlternatives provides a hint to the user with the list
+// of possible choices, taken from the keys of the map given as argument.
 func explainAlternatives(err error, name string, theMap interface{}) error {
 	keys := reflect.ValueOf(theMap).MapKeys()
 	keyS := make([]string, len(keys))
@@ -749,6 +758,8 @@ func explainAlternatives(err error, name string, theMap interface{}) error {
 	return explainAlternativesList(err, name, keyS...)
 }
 
+// explainAlternativesList is like explainAlternatives
+// but the list of possible values is provided in the argument list.
 func explainAlternativesList(err error, name string, values ...string) error {
 	if len(values) == 0 {
 		return errors.WithHintf(err, "no %s defined yet", name)
@@ -757,8 +768,6 @@ func explainAlternativesList(err error, name string, values ...string) error {
 	return errors.WithHintf(err,
 		"available %s: %s", name, strings.Join(values, ", "))
 }
-
-var identRe = compileRe(`^[\p{L}\p{S}\p{M}_][\p{L}\p{S}\p{M}\p{N}_]*$`)
 
 func checkIdents(names ...string) error {
 	for _, name := range names {
@@ -769,6 +778,9 @@ func checkIdents(names ...string) error {
 	return nil
 }
 
+// checkIdent verifies that its argument is a valid identifier.
+// It proposes an alternative as hint if the identifier is not valid.
+// Unicode characters are allowed as long as they are letter- and number-like.
 func checkIdent(name string) error {
 	if len(name) == 0 {
 		return errors.New("no identifier specified")
@@ -785,6 +797,9 @@ func checkIdent(name string) error {
 	return nil
 }
 
+var identRe = compileRe(`^[\p{L}\p{S}\p{M}_][\p{L}\p{S}\p{M}\p{N}_]*$`)
+
+// identify returns its argument if valid in an identifier, otherwise `_`.
 func identify(r rune) rune {
 	if unicode.In(r, unicode.L, unicode.S, unicode.M, unicode.N) {
 		return r
@@ -792,63 +807,37 @@ func identify(r rune) rune {
 	return '_'
 }
 
-func combineStoryLines(line1, line2 []string) []string {
-	res := make([]string, len(line1))
-	i := 0
-	for ; i < len(line1); i++ {
-		if i >= len(line2) {
-			res[i] = line1[i]
-			continue
-		}
-		res[i] = combineActs(line1[i], line2[i])
-	}
-	for ; i < len(line2); i++ {
-		res = append(res, line2[i])
-	}
-	return res
+type parser struct {
+	re      *regexp.Regexp
+	curLine string
 }
 
-func combineActs(act1, act2 string) string {
-	var res strings.Builder
-	i1 := 0
-	i2 := 0
-	for i1 < len(act1) {
-		var s1, s2 string
-		s1, i1 = extractAction(act1, i1)
-		s2, i2 = extractAction(act2, i2)
-		if s1 == "." {
-			if s2 != "" {
-				res.WriteString(s2)
-			} else {
-				res.WriteByte('.')
-			}
-		} else {
-			res.WriteString(s1)
-			if s2 != "" && s2 != "." {
-				res.WriteByte('+')
-				res.WriteString(s2)
-			}
-		}
-	}
-	for ; i2 < len(act2); i2++ {
-		res.WriteByte(act2[i2])
-	}
-	return res.String()
+func pw(re *regexp.Regexp) parser {
+	return parser{re: re}
 }
 
-func extractAction(act1 string, i1 int) (string, int) {
-	if i1 >= len(act1) {
-		return "", i1
+func (p *parser) m(line string) bool {
+	p.curLine = line
+	return p.re.MatchString(line)
+}
+
+func (p *parser) get(part string) string {
+	return strings.TrimSpace(p.re.ReplaceAllString(p.curLine, "${"+part+"}"))
+}
+
+func (p *parser) id(part string) (string, error) {
+	s := p.get(part)
+	return s, checkIdent(s)
+}
+
+func (p *parser) getp(part, prefix string) string {
+	res := p.get(part)
+	return strings.TrimSpace(strings.TrimPrefix(res, prefix))
+}
+
+func withPrefix(line, prefix string) (string, bool) {
+	if !strings.HasPrefix(line, prefix) {
+		return "", false
 	}
-	s1 := []byte{act1[i1]}
-	end1 := i1 + 1
-	for end1+1 < len(act1) {
-		if act1[end1] != '+' {
-			break
-		}
-		s1 = append(s1, '+', act1[end1+1])
-		i1 += 2
-		end1 += 2
-	}
-	return string(s1), end1
+	return strings.TrimSpace(strings.TrimPrefix(line, prefix)), true
 }

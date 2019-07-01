@@ -111,7 +111,7 @@ func (ap *app) collect(
 
 		case <-termCh:
 			// The audit loop has completed. No more work to do.
-			log.Info(ctx, "terminated by prompter, auditors have exited")
+			log.Info(ctx, "terminated by audience, auditors have exited")
 			return nil
 
 		case ev := <-actionChan:

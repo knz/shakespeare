@@ -71,7 +71,7 @@ func (ap *app) conduct(ctx context.Context) (err error) {
 	// Start the prompter.
 	var wgPrompt sync.WaitGroup
 	promptErrCh := make(chan error)
-	promptDone := ap.runPrompter(ctx, &wgPrompt, actionChan, moodCh, actCh, spotTermCh, promptErrCh)
+	promptDone := ap.startPrompter(ctx, &wgPrompt, actionChan, moodCh, actCh, spotTermCh, promptErrCh)
 
 	// The shutdown sequence without cancellation/stopper is:
 	// - prompter exits, this closes spotTermCh
@@ -84,6 +84,9 @@ func (ap *app) conduct(ctx context.Context) (err error) {
 	// - collector can encounter a file failure.
 	// So at each of the shutdown stages below, we detect if a stage
 	// later has completed and cancel the stages before.
+
+	// TODO: this code can probably factored into a loop, not yet found
+	// out how.
 
 	var finalErr error
 	var interrupt bool
@@ -115,6 +118,8 @@ func (ap *app) conduct(ctx context.Context) (err error) {
 		interrupt = false
 	}
 	wgPrompt.Wait()
+	promptDone() // in case not called before.
+
 	// Second stage: wait for the spotlights to finish.
 	select {
 	case err := <-spotErrCh:
@@ -138,6 +143,8 @@ func (ap *app) conduct(ctx context.Context) (err error) {
 		interrupt = false
 	}
 	wgspot.Wait()
+	allSpotsDone() // in case not called before.
+
 	// Third stage: wait for the auditors to finish.
 	select {
 	case err := <-auErrCh:
@@ -156,15 +163,18 @@ func (ap *app) conduct(ctx context.Context) (err error) {
 		interrupt = false
 	}
 	wgau.Wait()
+	auDone() // in case not called before.
+
 	// Fourth stage: wait for the collector to finish.
 	finalErr = combineErrors(<-colErrCh, finalErr)
 	wgcol.Wait()
+	colDone() // in case not called before.
 
 	return finalErr
 }
 
-// runPrompter runs the prompter until completion.
-func (ap *app) runPrompter(
+// startPrompter runs the prompter until completion.
+func (ap *app) startPrompter(
 	ctx context.Context,
 	wg *sync.WaitGroup,
 	actionChan chan<- actionReport,
@@ -177,17 +187,18 @@ func (ap *app) runPrompter(
 	promptCtx = logtags.AddTag(promptCtx, "prompter", nil)
 	wg.Add(1)
 	runWorker(promptCtx, ap.stopper, func(ctx context.Context) {
-		defer wg.Done()
-		defer func() { close(termCh) }()
+		defer func() {
+			// Inform the spotlights to terminate.
+			close(termCh)
+			// Indicate to the conductor that we are terminating.
+			wg.Done()
+			// Also indicate to the conductor there will be no further error
+			// reported.
+			close(errCh)
+			log.Info(ctx, "<exit>")
+		}()
 		log.Info(ctx, "<intrat>")
-		err := errors.WithContextTags(ap.prompt(ctx, actionChan, moodCh, actCh), ctx)
-		if errors.Is(err, context.Canceled) {
-			// It's ok if the prompt is canceled.
-			err = nil
-		}
-		errCh <- err
-		close(errCh)
-		log.Info(ctx, "<exit>")
+		errCh <- errors.WithContextTags(ap.prompt(ctx, actionChan, moodCh, actCh), ctx)
 	})
 	return promptDone
 }
@@ -209,17 +220,18 @@ func (ap *app) startAudition(
 	auCtx = logtags.AddTag(auCtx, "audition", nil)
 	wg.Add(1)
 	runWorker(auCtx, ap.stopper, func(ctx context.Context) {
-		defer wg.Done()
-		defer func() { close(collTermCh) }()
+		defer func() {
+			// Inform the collector to terminate.
+			close(collTermCh)
+			// Indicate to the conductor that we are terminating.
+			wg.Done()
+			// Also indicate to the conductor there will be no further error
+			// reported.
+			close(errCh)
+			log.Info(ctx, "<ends>")
+		}()
 		log.Info(ctx, "<begins>")
-		err := errors.WithContextTags(ap.audit(ctx, auLogger, auChan, actionCh, collectorCh, moodCh, actCh), ctx)
-		if errors.Is(err, context.Canceled) {
-			// It's ok if the audition is canceled.
-			err = nil
-		}
-		errCh <- err
-		close(errCh)
-		log.Info(ctx, "<ends>")
+		errCh <- errors.WithContextTags(ap.audit(ctx, auLogger, auChan, actionCh, collectorCh, moodCh, actCh), ctx)
 	})
 	return auDone
 }
@@ -238,16 +250,16 @@ func (ap *app) startCollector(
 	colCtx = logtags.AddTag(colCtx, "collector", nil)
 	wg.Add(1)
 	runWorker(colCtx, ap.stopper, func(ctx context.Context) {
-		defer wg.Done()
+		defer func() {
+			// Indicate to the conductor that we are terminating.
+			wg.Done()
+			// Also indicate to the conductor there will be no further error
+			// reported.
+			close(errCh)
+			log.Info(ctx, "<exit>")
+		}()
 		log.Info(ctx, "<intrat>")
-		err := errors.WithContextTags(ap.collect(ctx, dataLogger, actionChan, collectorChan, termCh), ctx)
-		if errors.Is(err, context.Canceled) {
-			// It's ok if the collector is canceled.
-			err = nil
-		}
-		errCh <- err
-		close(errCh)
-		log.Info(ctx, "<exit>")
+		errCh <- errors.WithContextTags(ap.collect(ctx, dataLogger, actionChan, collectorChan, termCh), ctx)
 	})
 	return colDone
 }
@@ -265,70 +277,20 @@ func (ap *app) startSpotlights(
 	spotCtx = logtags.AddTag(spotCtx, "spotlight-supervisor", nil)
 	wg.Add(1)
 	runWorker(spotCtx, ap.stopper, func(ctx context.Context) {
-		defer wg.Done()
-		// Tell the audience we're done when we terminate.
-		defer func() { close(auChan) }()
+		defer func() {
+			// Inform the audience to terminate.
+			close(auChan)
+			// Indicate to the conductor that we are terminating.
+			wg.Done()
+			// Also indicate to the conductor there will be no further error
+			// reported.
+			close(errCh)
+			log.Info(ctx, "<exit>")
+		}()
 		log.Info(ctx, "<intrat>")
-		err := errors.WithContextTags(ap.manageSpotlights(ctx, monLogger, auChan, termCh), ctx)
-		if errors.Is(err, context.Canceled) {
-			// It's ok if the spotlights are canceled.
-			err = nil
-		}
-		errCh <- err
-		close(errCh)
-		log.Info(ctx, "<exit>")
+		errCh <- errors.WithContextTags(ap.manageSpotlights(ctx, monLogger, auChan, termCh), ctx)
 	})
 	return spotDone
-}
-
-func (ap *app) manageSpotlights(
-	ctx context.Context,
-	monLogger *log.SecondaryLogger,
-	auChan chan<- auditableEvent,
-	termCh <-chan struct{},
-) (err error) {
-	// errCh collects the errors from the concurrent spotlights.
-	errCh := make(chan error, len(ap.cfg.actors))
-
-	// This context is to cancel other spotlights when one of them fails.
-	stopCtx, stopOnError := context.WithCancel(ctx)
-	defer stopOnError()
-
-	defer func() {
-		if r := recover(); r != nil {
-			panic(r)
-		}
-		// Collect all the errors.
-		err = collectErrors(ctx, nil, errCh, "spotlight-supervisor")
-	}()
-
-	// We'll cancel any remaining spotlights, and wait, at the end.
-	var wg sync.WaitGroup
-	defer func() { wg.Wait() }()
-
-	for actName, thisActor := range ap.cfg.actors {
-		if thisActor.role.spotlightCmd == "" {
-			// No spotlight defined, don't start anything.
-			continue
-		}
-		spotCtx := logtags.AddTag(stopCtx, "spotlight", nil)
-		spotCtx = logtags.AddTag(spotCtx, "actor", actName)
-		spotCtx = logtags.AddTag(spotCtx, "role", thisActor.role.name)
-		a := thisActor
-		wg.Add(1)
-		runWorker(spotCtx, ap.stopper, func(ctx context.Context) {
-			defer wg.Done()
-			log.Info(spotCtx, "<shining>")
-			err := errors.WithContextTags(ap.spotlight(ctx, a, monLogger, auChan, termCh), ctx)
-			if errors.Is(err, context.Canceled) {
-				// It's ok if a sportlight is canceled.
-				err = nil
-			}
-			errCh <- err
-			log.Info(ctx, "<off>")
-		})
-	}
-	return nil
 }
 
 func (ap *app) runCleanup(ctx context.Context) error {
@@ -366,12 +328,14 @@ func (ap *app) runForAllActors(
 		a := thisActor
 		wg.Add(1)
 		runWorker(actCtx, ap.stopper, func(ctx context.Context) {
-			defer wg.Done()
+			defer func() {
+				wg.Done()
+				log.Info(ctx, "<done>")
+			}()
 			// Start one actor.
 			log.Info(ctx, "<start>")
 			_, _, err, _ := a.runActorCommand(ctx, ap.stopper, 10*time.Second, false /*interruptible*/, pCmd)
 			errCh <- errors.WithContextTags(err, ctx)
-			log.Info(ctx, "<done>")
 		})
 	}
 	if actNums == 0 {
@@ -385,15 +349,14 @@ func (ap *app) runForAllActors(
 
 func collectErrors(
 	ctx context.Context, closers []func(), errCh chan error, prefix string,
-) (err error) {
-	coll := &errorCollection{}
+) (finalErr error) {
 	// Wait on the first error return.
 	select {
-	case err = <-errCh:
-	}
-	if err != nil {
-		log.Errorf(ctx, "complaint during %s: %+v", prefix, err)
-		coll.errs = append(coll.errs, err)
+	case err := <-errCh:
+		if err != nil {
+			log.Errorf(ctx, "complaint during %s: %+v", prefix, err)
+			finalErr = combineErrors(finalErr, err)
+		}
 	}
 	// Signal all to terminate and wait for each of them.
 	for _, closer := range closers {
@@ -408,16 +371,8 @@ func collectErrors(
 			continue
 		}
 		log.Errorf(ctx, "complaint during %s: %+v", prefix, stErr)
-		coll.errs = append(coll.errs, stErr)
+		finalErr = combineErrors(finalErr, stErr)
 	}
 
-	if len(coll.errs) > 0 {
-		if len(coll.errs) == 1 {
-			err = coll.errs[0]
-		} else {
-			err = coll
-		}
-		return errors.WithContextTags(errors.Wrap(err, prefix), ctx)
-	}
-	return nil
+	return errors.WithContextTags(errors.Wrap(finalErr, prefix), ctx)
 }

@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -13,6 +14,56 @@ import (
 	"github.com/knz/shakespeare/pkg/crdb/log"
 	"github.com/knz/shakespeare/pkg/crdb/timeutil"
 )
+
+func (ap *app) manageSpotlights(
+	ctx context.Context,
+	monLogger *log.SecondaryLogger,
+	auChan chan<- auditableEvent,
+	termCh <-chan struct{},
+) (err error) {
+	// errCh collects the errors from the concurrent spotlights.
+	errCh := make(chan error, len(ap.cfg.actors))
+
+	// This context is to cancel other spotlights when one of them fails.
+	stopCtx, stopOnError := context.WithCancel(ctx)
+	defer stopOnError()
+
+	defer func() {
+		if r := recover(); r != nil {
+			panic(r)
+		}
+		// Collect all the errors.
+		err = collectErrors(ctx, nil, errCh, "spotlight-supervisor")
+	}()
+
+	// We'll cancel any remaining spotlights, and wait, at the end.
+	var wg sync.WaitGroup
+	defer func() { wg.Wait() }()
+
+	for actName, thisActor := range ap.cfg.actors {
+		if thisActor.role.spotlightCmd == "" {
+			// No spotlight defined, don't start anything.
+			continue
+		}
+		spotCtx := logtags.AddTag(stopCtx, "spotlight", nil)
+		spotCtx = logtags.AddTag(spotCtx, "actor", actName)
+		spotCtx = logtags.AddTag(spotCtx, "role", thisActor.role.name)
+		a := thisActor
+		wg.Add(1)
+		runWorker(spotCtx, ap.stopper, func(ctx context.Context) {
+			defer wg.Done()
+			log.Info(spotCtx, "<shining>")
+			err := errors.WithContextTags(ap.spotlight(ctx, a, monLogger, auChan, termCh), ctx)
+			if errors.Is(err, context.Canceled) {
+				// It's ok if a sportlight is canceled.
+				err = nil
+			}
+			errCh <- err
+			log.Info(ctx, "<off>")
+		})
+	}
+	return nil
+}
 
 // spotlight stats the monitoring (spotlight) thread for a given actor.
 // The collected events are sent to the given auChan.

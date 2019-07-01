@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"html"
@@ -72,22 +73,28 @@ func (ap *app) prompt(
 				continue
 			}
 
+			sceneTime := timeutil.Now()
+
 			extraMsg := ""
-			if toWait < -time.Duration(1)*time.Millisecond {
-				extraMsg = fmt.Sprintf(", running %.4fs behind schedule", -toWait.Seconds())
+			if !ap.cfg.avoidTimeProgress {
+				var extra bytes.Buffer
+				elapsedTotal := sceneTime.Sub(ap.au.epoch)
+				elapsedAct := sceneTime.Sub(actStart)
+				fmt.Fprintf(&extra, " (~%ds total, ~%ds in act", int(elapsedTotal.Seconds()), int(elapsedAct.Seconds()))
+				if toWait < -time.Duration(1)*time.Millisecond {
+					fmt.Fprintf(&extra, ", running %.4fs behind schedule", -toWait.Seconds())
+				}
+				extra.WriteByte(')')
+				extraMsg = extra.String()
 			}
 
-			sceneTime := timeutil.Now()
-			elapsedTotal := sceneTime.Sub(ap.au.epoch)
-			elapsedAct := sceneTime.Sub(actStart)
-			ap.narrate(I, "", "act %d, scene %d (~%ds total, ~%ds in act%s):",
-				actNum, sceneNum, int(elapsedTotal.Seconds()), int(elapsedAct.Seconds()), extraMsg)
+			ap.narrate(I, "", "act %d, scene %d%s:", actNum, sceneNum, extraMsg)
 
 			// Now run the scene.
 			err := ap.runScene(sceneCtx, scene.concurrentLines, actionChan, moodCh)
 
 			// In any case, make a statement about the duration.
-			if ap.cfg.tempo != 0 {
+			if ap.cfg.tempo != 0 && !ap.cfg.avoidTimeProgress {
 				sceneDur := timeutil.Now().Sub(sceneTime).Seconds()
 				if sceneDur >= surpriseDur {
 					ap.narrate(W, "😮", "woah! scene %d lasted %.1fx longer than expected!",

@@ -69,13 +69,13 @@ func Run() (err error) {
 			rd, err := newReader(ctx, file, cfg.includePath)
 			if err != nil {
 				log.Errorf(ctx, "open error: %+v", err)
-				return errors.WithDetail(err, "(while opening the specification)")
+				return err
 			}
 			defer rd.close()
 
 			if err = cfg.parseCfg(ctx, rd); err != nil {
 				log.Errorf(ctx, "parse error: %+v", err)
-				return errors.WithDetail(err, "(while parsing the specification)")
+				return err
 			}
 			return nil
 		}(); err != nil {
@@ -94,7 +94,7 @@ func Run() (err error) {
 		rd, _ := newReaderFromString("<command line>", extraScript.String())
 		if err = cfg.parseCfg(ctx, rd); err != nil {
 			log.Errorf(ctx, "parse error: %+v", err)
-			return errors.WithDetail(err, "(while parsing the specification)")
+			return err
 		}
 	}
 
@@ -106,7 +106,7 @@ func Run() (err error) {
 	// Generate the steps.
 	if err = cfg.compileV2(); err != nil {
 		log.Errorf(ctx, "compile error: %+v", err)
-		return errors.WithDetail(err, "(while compiling the script)")
+		return err
 	}
 
 	if cfg.doPrint {
@@ -136,7 +136,6 @@ func Run() (err error) {
 	if err != nil {
 		log.Errorf(ctx, "play error: %+v", err)
 		// We'll exit with the error later below.
-		err = errors.WithDetail(err, "(while conducting the play)")
 	}
 
 	if !errors.Is(err, errAuditViolation) {
@@ -150,13 +149,16 @@ func Run() (err error) {
 		err = combineErrors(err, ap.checkAuditViolations())
 	}
 
-	// Generate the plots.
-	plotErr := ap.plot(ctx, err != nil)
-	if plotErr != nil {
-		log.Errorf(ctx, "plot error: %+v", plotErr)
-		plotErr = errors.WithDetail(plotErr, "(while plotting the data)")
+	if !cfg.skipPlot {
+		// Generate the plots.
+		plotErr := ap.plot(ctx, err != nil)
+		if plotErr != nil {
+			log.Errorf(ctx, "plot error: %+v", plotErr)
+		}
+		err = combineErrors(err, plotErr)
 	}
-	return combineErrors(err, plotErr)
+
+	return err
 }
 
 func (ap *app) runConduct(bctx context.Context) error {

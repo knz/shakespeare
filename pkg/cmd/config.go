@@ -36,6 +36,12 @@ type config struct {
 	shellPath string
 	// The path to the gnuplot command to generate plots.
 	gnuplotPath string
+	// Disables plotting altogether
+	skipPlot bool
+	// Disables reporting of progress using time, to make the output more deterministic
+	// (used in tests).
+	avoidTimeProgress bool
+
 	// The list of directory to search for includes.
 	includePath []string
 	// Whether to displays emoji.
@@ -114,6 +120,7 @@ func (cfg *config) initArgs(ctx context.Context) error {
 	pflag.BoolVarP(&cfg.earlyExit, "stop-at-first-violation", "S", false, "terminate the play as soon as an auditor is dissatisfied")
 	pflag.StringSliceVarP(&cfg.includePath, "search-dir", "I", []string{}, "add this directory to the search path for include directives")
 	pflag.BoolVar(&cfg.asciiOnly, "ascii-only", false, "do not display unicode emojis")
+	pflag.BoolVar(&cfg.skipPlot, "disable-plots", false, "do not generate plot scripts at the end")
 	var showVersion bool
 	pflag.BoolVar(&showVersion, "version", false, "show version information and exit")
 	pflag.StringSliceVarP(&cfg.extraScript, "extra-script", "s", []string{}, "additional lines of script configuration, processed at end")

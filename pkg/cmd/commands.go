@@ -38,7 +38,7 @@ func (a *actor) runActorCommand(
 	ctx context.Context, stopper *stop.Stopper, timeout time.Duration, interruptible bool, pCmd cmd,
 ) (outdata string, ps *os.ProcessState, err error, exitErr error) {
 	var outbuf bytes.Buffer
-	ps, err, exitErr = a.runActorCommandWithConsumer(ctx, stopper, timeout, interruptible, pCmd, func(line string) error {
+	ps, err, exitErr = a.runActorCommandWithConsumer(ctx, stopper, timeout, interruptible, pCmd, nil, func(line string) error {
 		outbuf.WriteString(line)
 		return nil
 	})
@@ -57,6 +57,7 @@ func (a *actor) runActorCommandWithConsumer(
 	timeout time.Duration,
 	interruptible bool,
 	pCmd cmd,
+	termCh <-chan struct{},
 	consumer func(string) error,
 ) (ps *os.ProcessState, err error, exitErr error) {
 	execCtx, killCmd := context.WithCancel(context.Background())
@@ -88,11 +89,11 @@ func (a *actor) runActorCommandWithConsumer(
 		defer cancel()
 	}
 
-	stopRequested := stopper.ShouldQuiesce()
-	if !interruptible {
+	var stopRequested <-chan struct{}
+	if interruptible {
 		// If not interruptible, we want to ignore the stopper.
 		// Just override the channel.
-		stopRequested = make(chan struct{})
+		stopRequested = stopper.ShouldQuiesce()
 	}
 
 	coll := errorCollection{}
@@ -134,6 +135,12 @@ func (a *actor) runActorCommandWithConsumer(
 			coll.errs = append(coll.errs, wrapCtxErr(ctx))
 			interrupt = true
 			stopRead = true
+			break
+		case <-termCh:
+			// Prompter is completing, and telling the spotlights to stop.
+			log.Info(ctx, "terminated by prompter")
+			stopRead = true
+			interrupt = true
 			break
 		}
 	}

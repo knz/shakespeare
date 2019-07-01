@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/cockroachdb/errors"
@@ -16,9 +17,13 @@ import (
 // spotlight stats the monitoring (spotlight) thread for a given actor.
 // The collected events are sent to the given auChan.
 func (ap *app) spotlight(
-	ctx context.Context, a *actor, monLogger *log.SecondaryLogger, auChan chan<- auditableEvent,
+	ctx context.Context,
+	a *actor,
+	monLogger *log.SecondaryLogger,
+	auChan chan<- auditableEvent,
+	termCh <-chan struct{},
 ) error {
-	ps, err, exitErr := a.runActorCommandWithConsumer(ctx, ap.stopper, 0, true, a.role.spotlightCmd, func(line string) error {
+	ps, err, exitErr := a.runActorCommandWithConsumer(ctx, ap.stopper, 0, true, a.role.spotlightCmd, termCh, func(line string) error {
 		monLogger.Logf(ctx, "clamors: %q", line)
 		sigCtx := logtags.AddTag(ctx, "signals", nil)
 		line = strings.TrimSpace(line)
@@ -27,7 +32,8 @@ func (ap *app) spotlight(
 	})
 	log.Infof(ctx, "spotlight terminated (%+v)", err)
 	if ps != nil && !ps.Success() {
-		if errors.Is(err, context.Canceled) {
+		st := ps.Sys().(syscall.WaitStatus)
+		if st.Signaled() && st.Signal() == syscall.SIGHUP {
 			// It's expected that the spotlight gets a hangup at the end of execution. It's not worth reporting.
 		} else {
 			ap.narrate(E, "😞", "%s's spotlight failed: %s (see log for details)", a.name, exitErr)

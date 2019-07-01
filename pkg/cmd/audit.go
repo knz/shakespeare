@@ -82,6 +82,8 @@ type actChange struct {
 // by an actor. These events are processed in the audit loop.
 // If multiple signals are detected simultaneously, they
 // are reported together.
+// An empty `values` signal the end of the spotlights (produced
+// when the channel from spotlights to auditors is closed).
 type auditableEvent struct {
 	ts     float64
 	values []auditableValue
@@ -159,8 +161,9 @@ func (ap *app) audit(
 	}
 
 	defer func() {
+		ctx = logtags.AddTag(ctx, "audit-end", nil)
 		auLog.Logf(ctx, "at end")
-		if finalErr := ap.checkFinal(ctx, auLog, actionCh, collectorCh); err != nil {
+		if finalErr := ap.checkFinal(ctx, auLog, actionCh, collectorCh); finalErr != nil {
 			err = combineErrors(err, finalErr)
 		}
 	}()
@@ -186,7 +189,13 @@ func (ap *app) audit(
 			}
 
 		case ev := <-auChan:
-			if err = ap.checkEvent(ctx, auLog, actionCh, collectorCh, ev); err != nil {
+			if len(ev.values) == 0 {
+				// The spotlights have terminated, and are signalling us the
+				// end of the audition.
+				log.Info(ctx, "terminated by prompter, spotlights shut off")
+				return nil
+			}
+			if err = ap.checkEvent(ctx, auLog, actionCh, collectorCh, false /*final*/, ev); err != nil {
 				return err
 			}
 		}
@@ -265,7 +274,7 @@ func (ap *app) processMoodChange(
 	if !atBegin {
 		auLog.Logf(ctx, "the mood %q is ending", ap.au.curMood)
 		// Process the end of the current mood.
-		if err := ap.checkEvent(ctx, auLog, actionCh, collectorCh, auditableEvent{ts: ts, values: nil}); err != nil {
+		if err := ap.checkEvent(ctx, auLog, actionCh, collectorCh, atEnd /*final*/, auditableEvent{ts: ts, values: nil}); err != nil {
 			return err
 		}
 	}
@@ -276,7 +285,7 @@ func (ap *app) processMoodChange(
 	ap.au.curMood = newMood
 	auLog.Logf(ctx, "the mood %q is starting", newMood)
 	// Process the end of the current mood.
-	return ap.checkEvent(ctx, auLog, actionCh, collectorCh, auditableEvent{ts: ts, values: nil})
+	return ap.checkEvent(ctx, auLog, actionCh, collectorCh, false /*final*/, auditableEvent{ts: ts, values: nil})
 }
 
 func (ap *app) checkEvent(
@@ -284,6 +293,7 @@ func (ap *app) checkEvent(
 	auLog *log.SecondaryLogger,
 	actionCh chan<- actionReport,
 	collectorCh chan<- observation,
+	final bool,
 	ev auditableEvent,
 ) error {
 	// Mark all auditors as "dormant".
@@ -335,7 +345,7 @@ func (ap *app) checkEvent(
 		}
 		am := ap.cfg.audience[audienceName]
 		auCtx := logtags.AddTag(ctx, "auditor", audienceName)
-		if err := ap.checkEventForAuditor(auCtx, auLog, as, am, collectorCh, actionCh, ev); err != nil {
+		if err := ap.checkEventForAuditor(auCtx, auLog, as, am, collectorCh, actionCh, final, ev); err != nil {
 			return err
 		}
 	}
@@ -384,17 +394,28 @@ func (ap *app) checkEventForAuditor(
 	am *audienceMember,
 	collectorCh chan<- observation,
 	actionCh chan<- actionReport,
+	final bool,
 	ev auditableEvent,
 ) error {
-	// First order of business is to check whether we are auditing at this moment.
 	activateCtx := logtags.AddTag(ctx, "activate", nil)
-	if !am.auditor.activeCond.hasDeps(activateCtx, auLog, ap.au.curActivated) {
-		// Dependencies not satisfied. Nothing to do.
-		return nil
-	}
-	auditing, err := ap.evalBool(activateCtx, auLog, am.name, am.auditor.activeCond, ap.au.curVals)
-	if err != nil {
-		return err
+
+	var auditing bool
+	if final {
+		// When we are shutting down the audit, we do not consider what
+		// they auditor thinks about whether they want to be active, and
+		// we make them inactive no matter what.
+		auditing = false
+	} else {
+		// First order of business is to check whether we are auditing at this moment.
+		if !am.auditor.activeCond.hasDeps(activateCtx, auLog, ap.au.curActivated) {
+			// Dependencies not satisfied. Nothing to do.
+			return nil
+		}
+		var err error
+		auditing, err = ap.evalBool(activateCtx, auLog, am.name, am.auditor.activeCond, ap.au.curVals)
+		if err != nil {
+			return err
+		}
 	}
 
 	// atEnd will change the type of boolean event injected in the check
@@ -426,7 +447,7 @@ func (ap *app) checkEventForAuditor(
 
 	if atEnd {
 		// Auditor finishing its activation period.
-		ctx = logtags.AddTag(ctx, "atend", nil)
+		ctx = logtags.AddTag(ctx, "act-period-end", nil)
 		if err := ap.checkActivationPeriodEnd(ctx, auLog, ev.ts, am.name, as, &am.auditor, actionCh); err != nil {
 			return err
 		}

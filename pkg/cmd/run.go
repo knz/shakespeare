@@ -213,7 +213,8 @@ func (ap *app) runConduct(bctx context.Context) error {
 		// Block until one of the signals above is received or the stopper
 		// is stopped externally (for example, via a debug action).
 		select {
-		case returnErr = <-errChan:
+		case thisErr := <-errChan:
+			returnErr = combineErrors(returnErr, thisErr)
 			requestTermination()
 			exit = true
 
@@ -234,7 +235,7 @@ func (ap *app) runConduct(bctx context.Context) error {
 				// to terminate with a non-zero exit code; however SIGTERM is
 				// "legitimate" and should be acknowledged with a success exit
 				// code. So we keep the error state here for later.
-				returnErr = errors.New("interrupted")
+				returnErr = combineErrors(returnErr, errors.New("interrupted"))
 				msgDouble := "Note: a second interrupt will skip graceful shutdown and terminate forcefully"
 				ap.narrate(I, "🛑", msgDouble)
 			}
@@ -282,27 +283,34 @@ func (ap *app) runConduct(bctx context.Context) error {
 	// Meanwhile, we don't want to wait too long either, in case the
 	// process is getting stuck and doesn't shut down in a timely manner.
 	//
-	select {
-	case sig := <-signalCh:
-		// This new signal is not welcome, as it interferes with the graceful
-		// shutdown process.
-		log.Shout(shutdownCtx, log.Severity_ERROR, fmt.Sprintf(
-			"received signal '%s' during shutdown, initiating hard shutdown", sig))
-		// Reraise the signal. os.Signal is always sysutil.Signal.
-		signal.Reset(sig)
-		if err := unix.Kill(unix.Getpid(), sig.(sysutil.Signal)); err != nil {
-			log.Fatalf(context.Background(), "unable to forward signal %v: %v", sig, err)
+	exit = false
+	for !exit {
+		select {
+		case sig := <-signalCh:
+			// This new signal is not welcome, as it interferes with the graceful
+			// shutdown process.
+			log.Shout(shutdownCtx, log.Severity_ERROR, fmt.Sprintf(
+				"received signal '%s' during shutdown, initiating hard shutdown", sig))
+			// Reraise the signal. os.Signal is always sysutil.Signal.
+			signal.Reset(sig)
+			if err := unix.Kill(unix.Getpid(), sig.(sysutil.Signal)); err != nil {
+				log.Fatalf(context.Background(), "unable to forward signal %v: %v", sig, err)
+			}
+			// Block while we wait for the signal to be delivered.
+			select {}
+
+		case <-time.After(time.Minute):
+			return errors.Errorf("time limit reached, initiating hard shutdown")
+
+		case <-ap.stopper.IsStopped():
+			const msgDone = "the stage has been cleared"
+			log.Infof(shutdownCtx, msgDone)
+			ap.narrate(I, "🧹", msgDone)
+
+		case err := <-errChan:
+			returnErr = combineErrors(returnErr, err)
+			exit = true
 		}
-		// Block while we wait for the signal to be delivered.
-		select {}
-
-	case <-time.After(time.Minute):
-		return errors.Errorf("time limit reached, initiating hard shutdown")
-
-	case <-ap.stopper.IsStopped():
-		const msgDone = "the stage has been cleared"
-		log.Infof(shutdownCtx, msgDone)
-		ap.narrate(I, "🧹", msgDone)
 	}
 
 	return returnErr

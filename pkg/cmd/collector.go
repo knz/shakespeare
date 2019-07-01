@@ -76,6 +76,7 @@ func (ap *app) collect(
 	dataLogger *log.SecondaryLogger,
 	actionChan <-chan actionReport,
 	collectorChan <-chan observation,
+	termCh <-chan struct{},
 ) (err error) {
 	defer func() {
 		auditErr := ap.checkAuditViolations()
@@ -107,6 +108,11 @@ func (ap *app) collect(
 			t.Read = true
 			t.Reset(time.Second)
 			of.Flush()
+
+		case <-termCh:
+			// The audit loop has completed. No more work to do.
+			log.Info(ctx, "terminated by prompter, auditors have exited")
+			return nil
 
 		case ev := <-actionChan:
 			sinceBeginning := ev.startTime

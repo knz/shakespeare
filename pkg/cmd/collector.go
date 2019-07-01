@@ -211,8 +211,8 @@ func (ap *app) collect(
 
 			for _, obsName := range vr.watcherNames {
 				a := vr.watchers[obsName]
-				a.observer.hasData = true
 				if ov, ok := a.observer.obsVars[ev.varName]; ok {
+					a.observer.hasData = true
 					ov.hasData = true
 				}
 

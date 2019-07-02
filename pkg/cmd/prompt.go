@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"html"
+	"strings"
 	"sync"
 	"time"
 
@@ -364,7 +365,7 @@ func (a *actor) runAction(
 		action:    action,
 		result:    result,
 		output:    html.EscapeString(combinedErrOutput),
-		extOutput: outdata,
+		extOutput: strings.TrimSpace(outdata),
 	}
 	return ev, nil
 }

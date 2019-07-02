@@ -16,13 +16,6 @@ import (
 	"github.com/knz/shakespeare/pkg/crdb/timeutil"
 )
 
-var tmpDir = func() string {
-	if d, ok := os.LookupEnv("TMPDIR"); ok {
-		return d
-	}
-	return "/tmp"
-}
-
 func TestRun(t *testing.T) {
 	includePath := []string{filepath.Join("testdata", "include"), ""}
 	datadriven.Walk(t, filepath.Join("testdata", "run"), func(t *testing.T, path string) {

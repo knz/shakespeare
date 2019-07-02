@@ -42,6 +42,10 @@ type config struct {
 	avoidTimeProgress bool
 	// Where to write the narration messages.
 	narration io.Writer
+	// How big each text plot should be (used in tests).
+	textPlotHeight, textPlotWidth int
+	// Terminal escape code mode to use (used in tests).
+	textPlotTerm string
 
 	// The list of directory to search for includes.
 	includePath []string
@@ -168,14 +172,17 @@ func (cfg *config) parseDefines() error {
 // newConfig creates a config with defaults.
 func newConfig() *config {
 	cfg := &config{
-		narration:  os.Stdout,
-		roles:      make(map[string]*role),
-		actors:     make(map[string]*actor),
-		sceneSpecs: make(map[byte]*sceneSpec),
-		pVars:      make(map[string]string),
-		tempo:      time.Second,
-		audience:   make(map[string]*audienceMember),
-		vars:       make(map[varName]*variable),
+		narration:      os.Stdout,
+		roles:          make(map[string]*role),
+		actors:         make(map[string]*actor),
+		sceneSpecs:     make(map[byte]*sceneSpec),
+		pVars:          make(map[string]string),
+		tempo:          time.Second,
+		audience:       make(map[string]*audienceMember),
+		vars:           make(map[varName]*variable),
+		textPlotHeight: 24,
+		textPlotWidth:  160,
+		textPlotTerm:   "ansi256",
 	}
 	if sh, ok := os.LookupEnv("SHELL"); ok {
 		cfg.shellPath = sh

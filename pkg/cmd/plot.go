@@ -97,7 +97,8 @@ func (ap *app) plot(ctx context.Context, foundFailure bool) error {
 			fmt.Fprintf(f, "set output 'lastplot.svg'\n")
 			fmt.Fprintf(f, "load 'lastplot.gp'\n")
 		}
-		fmt.Fprintf(f, "set term dumb size 160,%d ansi256 nofeed\n", 24*numPlots)
+		fmt.Fprintf(f, "set term dumb size %d,%d %s\n",
+			ap.cfg.textPlotWidth, ap.cfg.textPlotHeight*numPlots, ap.cfg.textPlotTerm)
 		fmt.Fprintf(f, "set output 'plot.txt'\n")
 		fmt.Fprintf(f, "set xtics nomirror\n")
 		fmt.Fprintf(f, "load 'plot.gp'\n")

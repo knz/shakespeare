@@ -1,0 +1,56 @@
+plot
+role test
+  cleanup true>log; echo "0" >cur
+  :a echo ".$(cat cur) foo: ping">>log; echo $(($(cat cur)+5))>cur
+  spotlight tail -f log
+  signal a event at (?P<ts_deltasecs>)(?P<event>.*ping)
+end
+cast
+  test plays test
+end
+audience
+  bob watches test a
+end
+script
+  tempo .5s
+  scene a entails for test: a
+  storyline aa
+end
+----
+----
+
+                 actions
+
+  +-----------------------------------+
+  |                                   |
+  |                                   |
+  | a                a                |
+  |-*................*..............+-|
+  | *                *                |
+  | F                F                |
+  |                                   |
+  |                                   |
+  +-----------------------------------+
+    +                               +
+    0                               1
+      test events (at y=1)
+
+              observer bob
+
+  +-----------------------------------+
+  |                                   |
+  |                                   |
+  |                                   |
+  |                                   |
+  |-+...............................+-|
+  | F               F                 |
+  |                                   |
+  |                                   |
+  |                                   |
+  +-----------------------------------+
+    +                               +
+    0                               1
+      test a (around y=1)    F
+
+----
+----

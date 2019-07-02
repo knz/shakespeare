@@ -26,6 +26,7 @@ func (cfg *config) parseCfg(ctx context.Context, rd *reader) error {
 		{actorsRe, cfg.parseActors},
 		{scriptRe, cfg.parseScript},
 		{audienceRe, cfg.parseAudience},
+		{interpretationRe, cfg.parseInterpretation},
 	}
 	for {
 		line, pos, stop, skip, err := rd.readLine(ctx, cfg)
@@ -127,6 +128,45 @@ func (cfg *config) parseSection(
 			return pos.wrapErr(err)
 		}
 	}
+}
+
+var interpretationRe = compileRe(`^interpretation$`)
+var foulRe = compileRe(`^(?P<mode>ignore|foul\s+upon|require)\s+(?P<target>\S+)\s+(?P<result>disappointment|satisfaction)$`)
+
+func (cfg *config) parseInterpretation(line string) error {
+	if p := pw(foulRe); p.m(line) {
+		aMode := p.get("mode")
+		aTarget, err := p.id("target")
+		if err != nil {
+			return err
+		}
+		aResult := p.get("result")
+
+		a, ok := cfg.audience[aTarget]
+		if !ok {
+			return errors.Newf("audience member %q not defined", aTarget)
+		}
+
+		var f foulCondition
+		switch {
+		case aMode == "ignore":
+			f = foulIgnore
+		case strings.HasPrefix(aMode, "foul"):
+			f = foulUponNonZero
+		case aMode == "require":
+			f = foulUponZero
+		}
+
+		switch aResult {
+		case "disappointment":
+			a.auditor.foulOnBad = f
+		case "satisfaction":
+			a.auditor.foulOnGood = f
+		}
+	} else {
+		return errors.New("unknown syntax")
+	}
+	return nil
 }
 
 var audienceRe = compileRe(`^audience$`)

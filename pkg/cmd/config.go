@@ -327,6 +327,7 @@ func (cfg *config) printCfg(w io.Writer, skipComments, skipVer, annot bool) {
 	fmt.Fprintln(w, fkw("end"))
 	// fmt.Fprintln(w)
 
+	var interpretation bytes.Buffer
 	if len(cfg.audience) == 0 {
 		if !skipComments {
 			fmt.Fprintln(w, "# no audience defined")
@@ -359,6 +360,7 @@ func (cfg *config) printCfg(w io.Writer, skipComments, skipVer, annot bool) {
 			}
 			if a.auditor.expectFsm != nil {
 				fmt.Fprintf(w, "  %s %s %s: %s\n", fann(a.name), fkw("expects"), fmod(a.auditor.expectFsm.name), fre(a.auditor.expectExpr.src))
+				a.auditor.fmtFoul(&interpretation, fkw, fann)
 			}
 			for _, varName := range a.observer.obsVarNames {
 				fmt.Fprintf(w, "  %s %s %s\n", fann(a.name), fkw("watches"), varName.fmt(fan, fsn))
@@ -371,6 +373,11 @@ func (cfg *config) printCfg(w io.Writer, skipComments, skipVer, annot bool) {
 			}
 		}
 		fmt.Fprintln(w, fkw("end"))
+	}
+	if interpretation.Len() > 0 {
+		fmt.Fprintln(w, "interpretation")
+		w.Write(interpretation.Bytes())
+		fmt.Fprintln(w, "end")
 	}
 }
 
@@ -571,6 +578,38 @@ type auditor struct {
 	// expectFsm and expectExpr are the expect condition, when active.
 	expectFsm  *fsm
 	expectExpr expr
+
+	// foulOnBad/Good indicate how to translate the FSM good/bad
+	// transition counts into an exit code.
+	foulOnBad  foulCondition
+	foulOnGood foulCondition
+}
+
+type foulCondition int
+
+const (
+	foulIgnore foulCondition = iota
+	foulUponNonZero
+	foulUponZero
+)
+
+func (a *auditor) fmtFoul(w io.Writer, fkw, fann func(string) string) {
+	switch a.foulOnBad {
+	case foulIgnore:
+		fmt.Fprintf(w, "  %s %s %s\n", fkw("ignore"), fann(a.name), fkw("disappointment"))
+	case foulUponNonZero:
+		fmt.Fprintf(w, "  %s %s %s\n", fkw("foul upon"), fann(a.name), fkw("disappointment"))
+	case foulUponZero:
+		fmt.Fprintf(w, "  %s %s %s\n", fkw("require"), fann(a.name), fkw("disappointment"))
+	}
+	switch a.foulOnGood {
+	case foulIgnore:
+		fmt.Fprintf(w, "  %s %s %s\n", fkw("ignore"), fann(a.name), fkw("satisfaction"))
+	case foulUponNonZero:
+		fmt.Fprintf(w, "  %s %s %s\n", fkw("foul upon"), fann(a.name), fkw("satisfaction"))
+	case foulUponZero:
+		fmt.Fprintf(w, "  %s %s %s\n", fkw("require"), fann(a.name), fkw("satisfaction"))
+	}
 }
 
 // assignment describes one of the "collects" or "computes" clauses in
@@ -654,6 +693,10 @@ type auditorState struct {
 	// hasData is set to true the first time the auditor
 	// derives an audit event.
 	hasData bool
+
+	// badCnt, goodCnd are the bad/good event counts throughout the
+	// audition. This is used to compute the exit code.
+	badCnt, goodCnt int
 }
 
 type auditorEvent struct {
@@ -715,6 +758,11 @@ func (cfg *config) addOrGetAudienceMember(name string) *audienceMember {
 			name: name,
 			observer: observer{
 				obsVars: make(map[varName]*collectedSignal),
+			},
+			auditor: auditor{
+				name:       name,
+				foulOnBad:  foulUponNonZero,
+				foulOnGood: foulIgnore,
 			},
 		}
 		cfg.audience[name] = a
@@ -862,7 +910,6 @@ func (cfg *config) updateRepeat() {
 	}
 	for i, part := range cfg.storyLine {
 		// Find the repetition point.
-		log.Warningf(context.TODO(), "WOO %q vs %s", part, cfg.repeatFrom)
 		if cfg.repeatFrom.MatchString(part) {
 			cfg.repeatActNum = i + 1
 			break

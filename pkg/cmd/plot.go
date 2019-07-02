@@ -97,6 +97,14 @@ func (ap *app) plot(ctx context.Context, foundFailure bool) error {
 			fmt.Fprintf(f, "set output 'lastplot.svg'\n")
 			fmt.Fprintf(f, "load 'lastplot.gp'\n")
 		}
+		fmt.Fprintf(f, "set term dumb size 160,%d ansi256 nofeed\n", 24*numPlots)
+		fmt.Fprintf(f, "set output 'plot.txt'\n")
+		fmt.Fprintf(f, "set xtics nomirror\n")
+		fmt.Fprintf(f, "load 'plot.gp'\n")
+		if hasRepeat {
+			fmt.Fprintf(f, "set output 'lastplot.txt'\n")
+			fmt.Fprintf(f, "load 'lastplot.gp'\n")
+		}
 
 		return nil
 	}(); err != nil {
@@ -343,7 +351,7 @@ faces[4] = ""
 		// Generate the act boundaries.
 		for i := 1; i < len(ap.au.actChanges); i++ {
 			ts := ap.au.actChanges[i].ts
-			fmt.Fprintf(f, "set arrow from %f, graph 0 to %f, graph 1 front nohead lc 'blue'\n", ts, ts)
+			fmt.Fprintf(f, "set arrow from %f, graph 0 to %f, graph 1 back nohead lc 'blue'\n", ts, ts)
 		}
 
 		// Generate the action plot. we do this before generating the mood
@@ -359,6 +367,7 @@ faces[4] = ""
 		fmt.Fprintf(f, "set ytics 1\n")
 		fmt.Fprintf(f, "set ylabel ''\n")
 		fmt.Fprintf(f, "set y2range [0:1]\n")
+		fmt.Fprintf(f, "set key bmargin center horizontal\n")
 		fmt.Fprintf(f, "set grid ytics\n")
 		if numActiveActors == 0 {
 			fmt.Fprintf(f, "plot .5 t 'nothingness!'\n")
@@ -402,7 +411,7 @@ faces[4] = ""
 			if !math.IsInf(amb.endTime, 0) {
 				xend = fmt.Sprintf("first %f", amb.endTime)
 			}
-			fmt.Fprintf(f, "set object %d rectangle from %s, graph 0 to %s, graph 1 fs solid 0.3 fc \"%s\"\n", i+1, xstart, xend, amb.mood)
+			fmt.Fprintf(f, "set object %d rectangle from %s, graph 0 to %s, graph 1 behind fs solid 0.3 fc \"%s\"\n", i+1, xstart, xend, amb.mood)
 		}
 
 		// Plot the curves.
@@ -452,9 +461,11 @@ func (ap *app) maybeRunGnuplot(ctx context.Context, hasRepeat bool) {
 	} else {
 		ap.narrate(I, "📄", "SVG plot: %s", filepath.Join(ap.cfg.dataDir, "plot.svg"))
 		ap.narrate(I, "📄", "PDF plot: %s", filepath.Join(ap.cfg.dataDir, "plot.pdf"))
+		ap.narrate(I, "📄", "ANSI plot: %s", filepath.Join(ap.cfg.dataDir, "plot.txt"))
 		if hasRepeat {
 			ap.narrate(I, "📄", "SVG plot: %s", filepath.Join(ap.cfg.dataDir, "lastplot.svg"))
 			ap.narrate(I, "📄", "PDF plot: %s", filepath.Join(ap.cfg.dataDir, "lastplot.pdf"))
+			ap.narrate(I, "📄", "ANSI plot: %s", filepath.Join(ap.cfg.dataDir, "lastplot.txt"))
 		}
 	}
 }

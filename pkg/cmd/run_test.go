@@ -42,16 +42,6 @@ func TestRun(t *testing.T) {
 			defer rd.close()
 			cfg := newConfig()
 
-			// Override the shell, to make error messages deterministic.
-			cfg.shellPath = "bash"
-
-			if err := cfg.parseCfg(context.TODO(), rd); err != nil {
-				t.Fatalf("parse error: %s\n", renderError(err))
-			}
-			if err := cfg.compileV2(); err != nil {
-				t.Fatalf("compile error: %s\n", renderError(err))
-			}
-
 			// Make the artifacts, etc. go to a separate directory for this test.
 			workDir, err := ioutil.TempDir("", "shakespeare-test")
 			if err != nil {
@@ -67,6 +57,16 @@ func TestRun(t *testing.T) {
 				}
 			}()
 			cfg.dataDir = workDir
+
+			// Override the shell, to make error messages deterministic.
+			cfg.shellPath = "bash"
+
+			if err := cfg.parseCfg(context.TODO(), rd); err != nil {
+				t.Fatalf("parse error: %s\n", renderError(err))
+			}
+			if err := cfg.compileV2(); err != nil {
+				t.Fatalf("compile error: %s\n", renderError(err))
+			}
 
 			// Disable plotting.
 			cfg.skipPlot = true

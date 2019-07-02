@@ -22,7 +22,7 @@ func (ap *app) manageSpotlights(
 	termCh <-chan struct{},
 ) (err error) {
 	// errCh collects the errors from the concurrent spotlights.
-	errCh := make(chan error, len(ap.cfg.actors))
+	errCh := make(chan error, len(ap.cfg.actors)+1)
 
 	// This context is to cancel other spotlights when one of them fails.
 	stopCtx, stopOnError := context.WithCancel(ctx)
@@ -40,6 +40,7 @@ func (ap *app) manageSpotlights(
 	var wg sync.WaitGroup
 	defer func() { wg.Wait() }()
 
+	numSpotlights := 0
 	for actName, thisActor := range ap.cfg.actors {
 		if thisActor.role.spotlightCmd == "" {
 			// No spotlight defined, don't start anything.
@@ -61,8 +62,34 @@ func (ap *app) manageSpotlights(
 			errCh <- err
 			log.Info(ctx, "<off>")
 		})
+		numSpotlights++
 	}
+	if numSpotlights == 0 {
+		// There are no spotlights defined! However we can't just
+		// let the spotlight worker terminate immediately, because
+		// this would cause the conductor to abort the play too early.
+		// Instead, we use a "do nothing" collector that simply forwards
+		// the prompt termination to the auditors.
+		errCh <- ap.pseudoSpotlight(ctx, auChan, termCh)
+	}
+
 	return nil
+}
+
+func (ap *app) pseudoSpotlight(
+	ctx context.Context, auCh chan<- auditableEvent, termCh <-chan struct{},
+) error {
+	ctx = logtags.AddTag(ctx, "pseudo-spotlight", nil)
+	select {
+	case <-termCh:
+		return nil
+	case <-ctx.Done():
+		log.Info(ctx, "interrupted")
+		return wrapCtxErr(ctx)
+	case <-ap.stopper.ShouldQuiesce():
+		log.Info(ctx, "terminated")
+		return nil
+	}
 }
 
 // spotlight stats the monitoring (spotlight) thread for a given actor.

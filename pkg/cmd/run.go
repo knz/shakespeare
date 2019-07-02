@@ -150,17 +150,6 @@ func (cfg *config) run(ctx context.Context) (err error) {
 		// We'll exit with the error later below.
 	}
 
-	if !errors.Is(err, errAuditViolation) {
-		// This happens in the common case when a play is left to
-		// terminate without early failure on audit errors: in that case,
-		// the collector's context is canceled, the cancel error overtakes
-		// the audit failure, and then dismissed (we're not reporting
-		// context cancellation as a process failure).
-		// In that case, we still want to verify whether there
-		// are failures remaining.
-		err = combineErrors(err, ap.checkAuditViolations())
-	}
-
 	if !cfg.skipPlot {
 		// Generate the plots.
 		plotErr := ap.plot(ctx, err != nil)

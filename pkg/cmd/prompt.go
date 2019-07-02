@@ -30,7 +30,7 @@ type prompter struct {
 	// Where the prompter should report mood changes.
 	moodChangeCh chan<- moodChange
 
-	// This channels is closed when the prompter reaches the end of
+	// This channel is closed when the prompter reaches the end of
 	// the script, it should instruct the spotlight to terminate.
 	termCh chan<- struct{}
 

@@ -583,6 +583,10 @@ type auditor struct {
 	// transition counts into an exit code.
 	foulOnBad  foulCondition
 	foulOnGood foulCondition
+
+	// hasData is set to true the first time the collector
+	// receives an audit violation/event for this auditor.
+	hasData bool
 }
 
 type foulCondition int
@@ -689,10 +693,6 @@ type auditorState struct {
 	// eval is the check FSM. Initialized every time auditing goes
 	// from false to true.
 	eval fsmEval
-
-	// hasData is set to true the first time the auditor
-	// derives an audit event.
-	hasData bool
 
 	// badCnt, goodCnd are the bad/good event counts throughout the
 	// audition. This is used to compute the exit code.

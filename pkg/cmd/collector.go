@@ -10,8 +10,45 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/knz/shakespeare/pkg/crdb/log"
+	"github.com/knz/shakespeare/pkg/crdb/stop"
 	"github.com/knz/shakespeare/pkg/crdb/timeutil"
 )
+
+// The workspace for the data collector
+type collector struct {
+	r       reporter
+	cfg     *config
+	stopper *stop.Stopper
+
+	logger *log.SecondaryLogger
+
+	// Where to receive action reports from.
+	// The prompter populates this
+	// (and for now the auditors too. This should change.)
+	actionCh <-chan actionReport
+
+	// Where to receive observations from.
+	obsCh <-chan observation
+
+	// The collector listens on this channel and terminates
+	// gracefull when it is closed.
+	termCh <-chan struct{}
+
+	// Where the collector should return errors.
+	// It also clsoes this when it terminates.
+	errCh chan<- error
+
+	// actorHasData
+
+	// auditViolations retains audit violation events during the audition;
+	// this is used to compute final error returns.
+	auditViolations []auditViolation
+
+	// auditReported is set to true after a violation was reported
+	// through the reporter at least once. This is to avoid duplicate
+	// outputs.
+	auditReported bool
+}
 
 type observation struct {
 	ts      float64
@@ -71,15 +108,9 @@ func csvFileName(observerName, actorName, sigName string) string {
 	return fmt.Sprintf("%s.%s.%s.csv", observerName, actorName, sigName)
 }
 
-func (ap *app) collect(
-	ctx context.Context,
-	dataLogger *log.SecondaryLogger,
-	actionChan <-chan actionReport,
-	collectorChan <-chan observation,
-	termCh <-chan struct{},
-) (err error) {
+func (col *collector) collect(ctx context.Context) (err error) {
 	defer func() {
-		auditErr := ap.checkAuditViolations()
+		auditErr := col.checkAuditViolations()
 		// The order of the two arguments here matter: the error
 		// collection returns the last error as its cause. We
 		// want to keep the original error object as cause.
@@ -96,7 +127,7 @@ func (ap *app) collect(
 
 	for {
 		select {
-		case <-ap.stopper.ShouldQuiesce():
+		case <-col.stopper.ShouldQuiesce():
 			log.Info(ctx, "interrupted")
 			return nil
 
@@ -109,36 +140,32 @@ func (ap *app) collect(
 			t.Reset(time.Second)
 			of.Flush()
 
-		case <-termCh:
+		case <-col.termCh:
 			// The audit loop has completed. No more work to do.
 			log.Info(ctx, "terminated by audience, auditors have exited")
 			return nil
 
-		case ev := <-actionChan:
+		case ev := <-col.actionCh:
 			sinceBeginning := ev.startTime
-			ap.expandTimeRange(sinceBeginning)
+			col.r.expandTimeRange(sinceBeginning)
 
 			switch ev.typ {
 			case reportMoodChange:
-				dataLogger.Logf(ctx, "%.2f mood set: %s", sinceBeginning, ev.output)
+				col.logger.Logf(ctx, "%.2f mood set: %s", sinceBeginning, ev.output)
 
 			case reportAuditViolation:
-				ac, ok := ap.cfg.audience[ev.actor]
+				ac, ok := col.cfg.audience[ev.actor]
 				if !ok {
 					return errors.Newf("event received for non-existent audience %q: %+v", ev.actor, ev)
 				}
 				ac.observer.hasData = true
 
-				a, ok := ap.theater.au.auditorStates[ev.actor]
-				if !ok {
-					return errors.Newf("event received for non-existent auditor: %+v", ev)
-				}
-				a.hasData = true
+				ac.auditor.hasData = true
 
 				status := int(ev.result)
 
-				dataLogger.Logf(ctx, "%.2f audit check by %s: %v (%q)", sinceBeginning, ev.actor, ev.result, ev.output)
-				fName := filepath.Join(ap.cfg.dataDir, fmt.Sprintf("audit-%s.csv", ev.actor))
+				col.logger.Logf(ctx, "%.2f audit check by %s: %v (%q)", sinceBeginning, ev.actor, ev.result, ev.output)
+				fName := filepath.Join(col.cfg.dataDir, fmt.Sprintf("audit-%s.csv", ev.actor))
 				w, err := of.getWriter(fName)
 				if err != nil {
 					return errors.Wrapf(err, "opening %q", fName)
@@ -152,21 +179,21 @@ func (ap *app) collect(
 				}
 
 				if ev.result == resErr || ev.result == resFailure {
-					ap.theater.au.auditViolations = append(ap.theater.au.auditViolations,
+					col.auditViolations = append(col.auditViolations,
 						auditViolation{
 							ts:           sinceBeginning,
 							result:       ev.result,
 							auditorName:  ev.actor,
 							failureState: ev.output,
 						})
-					if ap.cfg.earlyExit {
+					if col.cfg.earlyExit {
 						// the defer above will catch the violation.
 						return nil
 					}
 				}
 
 			case reportActionExec:
-				a, ok := ap.cfg.actors[ev.actor]
+				a, ok := col.cfg.actors[ev.actor]
 				if !ok {
 					return errors.Newf("event received for non-existent actor: %+v", ev)
 				}
@@ -174,9 +201,9 @@ func (ap *app) collect(
 
 				status := int(ev.result)
 
-				dataLogger.Logf(ctx, "%.2f action %s:%s (%.4fs)", sinceBeginning, ev.actor, ev.action, ev.duration)
+				col.logger.Logf(ctx, "%.2f action %s:%s (%.4fs)", sinceBeginning, ev.actor, ev.action, ev.duration)
 
-				fName := filepath.Join(ap.cfg.dataDir, fmt.Sprintf("%s.csv", ev.actor))
+				fName := filepath.Join(col.cfg.dataDir, fmt.Sprintf("%s.csv", ev.actor))
 				w, err := of.getWriter(fName)
 				if err != nil {
 					return errors.Wrapf(err, "opening %q", fName)
@@ -194,17 +221,17 @@ func (ap *app) collect(
 						sym = "🤨"
 						ref = "(see log for details)"
 					}
-					ap.narrate(level, sym,
+					col.r.narrate(level, sym,
 						"action %s:%s failed %s", ev.actor, ev.action, ref)
 				}
 			}
 
-		case ev := <-collectorChan:
-			ap.expandTimeRange(ev.ts)
+		case ev := <-col.obsCh:
+			col.r.expandTimeRange(ev.ts)
 
-			dataLogger.Logf(ctx, "%.2f %s %v", ev.ts, ev.varName.String(), ev.val)
+			col.logger.Logf(ctx, "%.2f %s %v", ev.ts, ev.varName.String(), ev.val)
 
-			vr, ok := ap.cfg.vars[ev.varName]
+			vr, ok := col.cfg.vars[ev.varName]
 			if !ok {
 				return errors.Newf("event received for non-existent variable %q: %+v", ev.varName.String(), ev)
 			}
@@ -216,7 +243,7 @@ func (ap *app) collect(
 					ov.hasData = true
 				}
 
-				fName := filepath.Join(ap.cfg.dataDir,
+				fName := filepath.Join(col.cfg.dataDir,
 					csvFileName(obsName, ev.varName.actorName, ev.varName.sigName))
 
 				w, err := of.getWriter(fName)

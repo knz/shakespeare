@@ -23,6 +23,11 @@ import (
 type reporter interface {
 	// start of the test.
 	epoch() time.Time
+	// update the time boundaries.
+	expandTimeRange(float64)
+	// retrieve the current time boundaries.
+	getTimeRange() (float64, float64)
+
 	// narrate reports messages in the left column.
 	narrate(_ urgency, _, _ string, _ ...interface{})
 	// witness reports messages in the middle column.
@@ -41,7 +46,13 @@ type app struct {
 	// measurements are relative to this moment.
 	startTime time.Time
 
-	auditReported bool
+	// minTime and maxTime are used to compute the x range of plots.
+	// They are updated by the collector. Either can become negative if
+	// the observed system has a clock running in the past relative to the
+	// conductor.
+	minTime float64
+	maxTime float64
+
 	isTerminal    bool
 	terminalWidth int32
 	endCh         chan struct{}
@@ -53,11 +64,11 @@ func newApp(cfg *config) *app {
 	r := &app{
 		cfg: cfg,
 		theater: theater{
-			au:      newAudition(cfg),
-			minTime: math.Inf(1),
-			maxTime: math.Inf(-1),
+			au: newAudition(cfg),
 		},
-		endCh: make(chan struct{}),
+		minTime: math.Inf(1),
+		maxTime: math.Inf(-1),
+		endCh:   make(chan struct{}),
 	}
 	r.prepareTerm()
 	return r
@@ -109,12 +120,16 @@ func (ap *app) close() {
 
 // expandTimeRange should be called for each processed event time stamp.
 func (ap *app) expandTimeRange(instant float64) {
-	if instant > ap.theater.maxTime {
-		ap.theater.maxTime = instant
+	if instant > ap.maxTime {
+		ap.maxTime = instant
 	}
-	if instant < ap.theater.minTime {
-		ap.theater.minTime = instant
+	if instant < ap.minTime {
+		ap.minTime = instant
 	}
+}
+
+func (ap *app) getTimeRange() (float64, float64) {
+	return ap.minTime, ap.maxTime
 }
 
 type urgency ttycolor.Code

@@ -20,31 +20,31 @@ func (ap *app) plot(ctx context.Context, foundFailure bool) error {
 	log.Info(ctx, "generating scripts")
 
 	// Sanity checking.
-	if math.IsInf(ap.theater.maxTime, 0) || math.IsInf(ap.theater.minTime, 0) {
+	if math.IsInf(ap.maxTime, 0) || math.IsInf(ap.minTime, 0) {
 		ap.expandTimeRange(0)
 	}
 
-	if ap.theater.maxTime < ap.theater.minTime {
-		ap.theater.minTime, ap.theater.maxTime = ap.theater.maxTime, ap.theater.minTime
+	if ap.maxTime < ap.minTime {
+		ap.minTime, ap.maxTime = ap.maxTime, ap.minTime
 	}
 	// Ensure the x axis always start at zero, even if no
 	// event was received until later on the time line.
-	if ap.theater.minTime > 0 {
-		ap.theater.minTime = 0
+	if ap.minTime > 0 {
+		ap.minTime = 0
 	}
 	// Sanity check.
-	if ap.theater.maxTime < 0 {
-		ap.theater.maxTime = 1
+	if ap.maxTime < 0 {
+		ap.maxTime = 1
 	}
 	// More sanity check.
-	if ap.theater.maxTime < ap.theater.minTime+1 {
-		ap.theater.maxTime = ap.theater.minTime + 1
+	if ap.maxTime < ap.minTime+1 {
+		ap.maxTime = ap.minTime + 1
 	}
 
 	ap.narrate(I, "ℹ️ ", "the timeline extends from %.2fs to %.2fs, relative to %s",
-		ap.theater.minTime, ap.theater.maxTime, ap.epoch())
+		ap.minTime, ap.maxTime, ap.epoch())
 
-	numPlots, err := ap.subPlots(ctx, "plot.gp", ap.theater.minTime, ap.theater.maxTime)
+	numPlots, err := ap.subPlots(ctx, "plot.gp", ap.minTime, ap.maxTime)
 	if err != nil {
 		return err
 	}
@@ -67,7 +67,7 @@ func (ap *app) plot(ctx context.Context, foundFailure bool) error {
 	}
 	hasRepeat := !math.IsInf(repeatTs, 0)
 	if hasRepeat {
-		if _, err := ap.subPlots(ctx, "lastplot.gp", repeatTs, ap.theater.maxTime); err != nil {
+		if _, err := ap.subPlots(ctx, "lastplot.gp", repeatTs, ap.maxTime); err != nil {
 			return err
 		}
 	}
@@ -162,7 +162,7 @@ pre,code{font-family: 'Nova Mono', monospace;}
 		fmt.Fprintln(f, `<div style="margin-left: auto; margin-right: auto; max-width: 1024px"><embed id="E" src="plot.svg"/></div>`)
 		if hasRepeat {
 			fmt.Fprintln(f, divider)
-			fmt.Fprintf(f, "<p>For your delicate eyes, the last %.1f seconds of the play:</p>\n", ap.theater.maxTime-repeatTs)
+			fmt.Fprintf(f, "<p>For your delicate eyes, the last %.1f seconds of the play:</p>\n", ap.maxTime-repeatTs)
 			fmt.Fprintln(f, `<div style="margin-left: auto; margin-right: auto; max-width: 1024px"><embed id="E" src="lastplot.svg"/></div>`)
 		}
 		if len(ap.cfg.seeAlso) > 0 {
@@ -286,7 +286,7 @@ func (ap *app) subPlots(
 		}
 
 		// Find the timeserie(s) to plot for the auditor.
-		if as, ok := ap.theater.au.auditorStates[a.name]; ok && as.hasData {
+		if am, ok := ap.cfg.audience[a.name]; ok && am.auditor.hasData {
 			fName := fmt.Sprintf("audit-%s.csv", a.name)
 
 			ap.narrate(I, "📈", "observer %s found audit data: %s",
@@ -341,7 +341,7 @@ faces[4] = ""
 		// If we did not do that, each plot may get a different x range
 		// (adjusted automatically based on the data collected for that plot).
 		fmt.Fprintf(f, "set xrange [%f:%f]\n", minTime, maxTime)
-		if ap.theater.maxTime < 10 {
+		if ap.maxTime < 10 {
 			fmt.Fprintf(f, "set xtics out 1\n")
 			fmt.Fprintf(f, "set mxtics 2\n")
 		} else {

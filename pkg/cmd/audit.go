@@ -39,10 +39,6 @@ type audition struct {
 	// Morally this should be keyed by varName, but the
 	// upstream "govaluate" package prefers string keys.
 	curVals map[string]interface{}
-
-	// auditViolations retains audit violation events during the audition;
-	// this is used to compute final error returns.
-	auditViolations []auditViolation
 }
 
 // auditViolation describes one audit failure.
@@ -692,27 +688,27 @@ func (ap *app) setAndActivateVar(
 
 var errAuditViolation = errors.New("audit violation")
 
-func (ap *app) checkAuditViolations() error {
-	if len(ap.theater.au.auditViolations) == 0 {
+func (col *collector) checkAuditViolations() error {
+	if len(col.auditViolations) == 0 {
 		// No violation, nothing to do.
 		return nil
 	}
 
-	if !ap.auditReported {
+	if !col.auditReported {
 		// Avoid printing out the audit errors twice.
-		ap.auditReported = true
-		ap.narrate(E, "😞", "%d audit violations:", len(ap.theater.au.auditViolations))
-		for _, v := range ap.theater.au.auditViolations {
+		col.auditReported = true
+		col.r.narrate(E, "😞", "%d audit violations:", len(col.auditViolations))
+		for _, v := range col.auditViolations {
 			var buf bytes.Buffer
 			fmt.Fprintf(&buf, "%s (at ~%.2fs", v.auditorName, v.ts)
 			if v.failureState != "" {
 				fmt.Fprintf(&buf, ", %s", v.failureState)
 			}
 			buf.WriteByte(')')
-			ap.narrate(E, "😿", "%s", buf.String())
+			col.r.narrate(E, "😿", "%s", buf.String())
 		}
 	}
 
-	err := errors.Newf("%d audit violations", len(ap.theater.au.auditViolations))
+	err := errors.Newf("%d audit violations", len(col.auditViolations))
 	return errors.Mark(err, errAuditViolation)
 }

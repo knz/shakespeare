@@ -14,13 +14,6 @@ import (
 // theater is where the play takes place.
 // This is mostly supervised by the conductor.
 type theater struct {
-	// minTime and maxTime are used to compute the x range of plots.
-	// They are updated by the collector. Either can become negative if
-	// the observed system has a clock running in the past relative to the
-	// conductor.
-	minTime float64
-	maxTime float64
-
 	// The audition - what the auditors in the audience think of the play.
 	au *audition
 }
@@ -75,7 +68,29 @@ func (ap *app) conduct(ctx context.Context) (err error) {
 	// Start the collector.
 	var wgcol sync.WaitGroup
 	colErrCh := make(chan error)
-	colDone := ap.startCollector(ctx, &wgcol, dataLogger, actionChan, collectorChan, colErrCh, collTermCh)
+	col := collector{
+		r:        ap,
+		cfg:      ap.cfg,
+		stopper:  ap.stopper,
+		logger:   dataLogger,
+		actionCh: actionChan,
+		obsCh:    collectorChan,
+		termCh:   collTermCh,
+		errCh:    colErrCh,
+	}
+	colDone := col.startCollector(ctx, &wgcol)
+	defer func() {
+		if !errors.Is(err, errAuditViolation) {
+			// This happens in the common case when a play is left to
+			// terminate without early failure on audit errors: in that case,
+			// the collector's context is canceled, the cancel error overtakes
+			// the audit failure, and then dismissed (we're not reporting
+			// context cancellation as a process failure).
+			// In that case, we still want to verify whether there
+			// are failures remaining.
+			err = combineErrors(err, col.checkAuditViolations())
+		}
+	}()
 
 	// Start the spotlights.
 	var wgspot sync.WaitGroup
@@ -253,29 +268,21 @@ func (ap *app) startAudition(
 }
 
 // startCollector starts the collector in the background.
-func (ap *app) startCollector(
-	ctx context.Context,
-	wg *sync.WaitGroup,
-	dataLogger *log.SecondaryLogger,
-	actionChan <-chan actionReport,
-	collectorChan <-chan observation,
-	errCh chan<- error,
-	termCh <-chan struct{},
-) (cancelFunc func()) {
+func (col *collector) startCollector(ctx context.Context, wg *sync.WaitGroup) (cancelFunc func()) {
 	colCtx, colDone := context.WithCancel(ctx)
 	colCtx = logtags.AddTag(colCtx, "collector", nil)
 	wg.Add(1)
-	runWorker(colCtx, ap.stopper, func(ctx context.Context) {
+	runWorker(colCtx, col.stopper, func(ctx context.Context) {
 		defer func() {
 			// Indicate to the conductor that we are terminating.
 			wg.Done()
 			// Also indicate to the conductor there will be no further error
 			// reported.
-			close(errCh)
+			close(col.errCh)
 			log.Info(ctx, "<exit>")
 		}()
 		log.Info(ctx, "<intrat>")
-		errCh <- errors.WithContextTags(ap.collect(ctx, dataLogger, actionChan, collectorChan, termCh), ctx)
+		col.errCh <- errors.WithContextTags(col.collect(ctx), ctx)
 	})
 	return colDone
 }

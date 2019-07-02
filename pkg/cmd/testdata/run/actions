@@ -1,4 +1,30 @@
-# Check that action failure is detected
+# Check that multiple actions are executed in order.
+run
+role test
+  :a true
+  :b true
+end
+cast
+  test plays test
+end
+script
+  scene A entails for test: a; b
+  storyline A
+end
+----
+👏 please welcome a cast of 1 actors, playing 1 roles
+🎭 dramatis personæ: test
+🎶 the play is starting; expected duration: 1s
+🎬 act 1 starts
+📢 act 1, scene 1:
+🥁     test: a!
+🥁     test: b!
+👏 the play is terminating
+🧹 the stage has been cleared
+😘 good day! come again soon.
+
+
+# Check that action failure is detected.
 run error
 role test
   :a exit 123

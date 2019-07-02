@@ -193,9 +193,7 @@ func (ap *app) runConduct(bctx context.Context) error {
 			log.Flush()
 			close(errChan)
 		}()
-		if err := ap.conduct(ctx); err != nil {
-			errChan <- errors.WithContextTags(err, ctx)
-		}
+		errChan <- errors.WithContextTags(ap.conduct(ctx), ctx)
 	})
 
 	// Log shutdown activity in a different context.
@@ -297,37 +295,30 @@ func (ap *app) runConduct(bctx context.Context) error {
 	// Meanwhile, we don't want to wait too long either, in case the
 	// process is getting stuck and doesn't shut down in a timely manner.
 	//
-	exit = false
-	for !exit {
-		select {
-		case sig := <-signalCh:
-			// This new signal is not welcome, as it interferes with the graceful
-			// shutdown process.
-			log.Shout(shutdownCtx, log.Severity_ERROR, fmt.Sprintf(
-				"received signal '%s' during shutdown, initiating hard shutdown", sig))
-			// Reraise the signal. os.Signal is always sysutil.Signal.
-			signal.Reset(sig)
-			if err := unix.Kill(unix.Getpid(), sig.(sysutil.Signal)); err != nil {
-				log.Fatalf(context.Background(), "unable to forward signal %v: %v", sig, err)
-			}
-			// Block while we wait for the signal to be delivered.
-			select {}
-
-		case <-time.After(time.Minute):
-			return errors.Errorf("time limit reached, initiating hard shutdown")
-
-		case <-ap.stopper.IsStopped():
-			const msgDone = "the stage has been cleared"
-			log.Infof(shutdownCtx, msgDone)
-			ap.narrate(I, "🧹", msgDone)
-
-		case err := <-errChan:
-			returnErr = combineErrors(returnErr, err)
-			exit = true
+	select {
+	case sig := <-signalCh:
+		// This new signal is not welcome, as it interferes with the graceful
+		// shutdown process.
+		log.Shout(shutdownCtx, log.Severity_ERROR, fmt.Sprintf(
+			"received signal '%s' during shutdown, initiating hard shutdown", sig))
+		// Reraise the signal. os.Signal is always sysutil.Signal.
+		signal.Reset(sig)
+		if err := unix.Kill(unix.Getpid(), sig.(sysutil.Signal)); err != nil {
+			log.Fatalf(context.Background(), "unable to forward signal %v: %v", sig, err)
 		}
+		// Block while we wait for the signal to be delivered.
+		select {}
+
+	case <-time.After(time.Minute):
+		return errors.Errorf("time limit reached, initiating hard shutdown")
+
+	case <-ap.stopper.IsStopped():
+		const msgDone = "the stage has been cleared"
+		log.Infof(shutdownCtx, msgDone)
+		ap.narrate(I, "🧹", msgDone)
 	}
 
-	return returnErr
+	return combineErrors(returnErr, <-errChan)
 }
 
 func (cfg *config) setupLogging(ctx context.Context) error {

@@ -41,6 +41,8 @@ type config struct {
 	// Disables reporting of progress using time, to make the output more deterministic
 	// (used in tests).
 	avoidTimeProgress bool
+	// Where to write the narration messages.
+	narration io.Writer
 
 	// The list of directory to search for includes.
 	includePath []string
@@ -184,6 +186,7 @@ func (cfg *config) parseDefines() error {
 // newConfig creates a config with defaults.
 func newConfig() *config {
 	cfg := &config{
+		narration:  os.Stdout,
 		roles:      make(map[string]*role),
 		actors:     make(map[string]*actor),
 		sceneSpecs: make(map[byte]*sceneSpec),

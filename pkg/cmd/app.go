@@ -33,6 +33,7 @@ type app struct {
 	maxTime float64
 
 	auditReported bool
+	isTerminal    bool
 	terminalWidth int32
 	endCh         chan struct{}
 }
@@ -45,20 +46,30 @@ func newApp(cfg *config) *app {
 		maxTime: math.Inf(-1),
 		endCh:   make(chan struct{}),
 	}
-	r.setTerminalSize()
-	if isTerminal {
-		go r.handleResize()
-	}
+	r.prepareTerm()
 	return r
 }
 
-func (ap *app) handleResize() {
+func (ap *app) prepareTerm() {
+	f, ok := ap.cfg.narration.(*os.File)
+	if !ok {
+		return
+	}
+	stdout := f.Fd()
+	ap.isTerminal = isatty.IsTerminal(stdout)
+	ap.setTerminalSize(stdout)
+	if ap.isTerminal {
+		go ap.handleResize(stdout)
+	}
+}
+
+func (ap *app) handleResize(fd uintptr) {
 	sigCh := make(chan os.Signal)
 	signal.Notify(sigCh, syscall.SIGWINCH)
 	for {
 		select {
 		case <-sigCh:
-			ap.setTerminalSize()
+			ap.setTerminalSize(fd)
 		case <-ap.endCh:
 			signal.Stop(sigCh)
 			return
@@ -66,8 +77,8 @@ func (ap *app) handleResize() {
 	}
 }
 
-func (ap *app) setTerminalSize() {
-	width, _, err := terminal.GetSize(1 /*stdout*/)
+func (ap *app) setTerminalSize(fd uintptr) {
+	width, _, err := terminal.GetSize(int(fd))
 	if err == nil {
 		atomic.StoreInt32(&ap.terminalWidth, int32(width))
 	}
@@ -110,10 +121,10 @@ func (ap *app) narrate(urgency urgency, symbol string, format string, args ...in
 		}
 		s = symbol + " " + s
 	}
-	if isTerminal && urgency != I {
-		fmt.Printf("%s%s%s\n", ttycolor.StdoutProfile[ttycolor.Code(urgency)], s, ttycolor.StdoutProfile[ttycolor.Reset])
+	if ap.isTerminal && urgency != I {
+		fmt.Fprintf(ap.cfg.narration, "%s%s%s\n", ttycolor.StdoutProfile[ttycolor.Code(urgency)], s, ttycolor.StdoutProfile[ttycolor.Reset])
 	} else {
-		fmt.Println(s)
+		fmt.Fprintln(ap.cfg.narration, s)
 	}
 }
 
@@ -127,13 +138,13 @@ func (ap *app) witness(ctx context.Context, format string, args ...interface{}) 
 		s = "👀 " + s
 	}
 	width := int(atomic.LoadInt32(&ap.terminalWidth))
-	if width == 0 || !isTerminal {
-		fmt.Println(s)
+	if width == 0 || !ap.isTerminal {
+		fmt.Fprintln(ap.cfg.narration, s)
 	} else {
 		if len(s) > 2*width/3-3 {
 			s = s[:2*width/3-3] + "..."
 		}
-		fmt.Printf("%*s%s\n", width/3-3, " ", s)
+		fmt.Fprintf(ap.cfg.narration, "%*s%s\n", width/3-3, " ", s)
 	}
 }
 
@@ -147,13 +158,13 @@ func (ap *app) judge(ctx context.Context, u urgency, sym, format string, args ..
 		s = sym + s
 	}
 	width := int(atomic.LoadInt32(&ap.terminalWidth))
-	if width == 0 || !isTerminal {
-		fmt.Println(s)
+	if width == 0 || !ap.isTerminal {
+		fmt.Fprintln(ap.cfg.narration, s)
 	} else {
 		if len(s) > width/3-3 {
 			s = s[:width/3-3] + "..."
 		}
-		fmt.Printf("%*s%s%s%s\n", 2*width/3-1, " ",
+		fmt.Fprintf(ap.cfg.narration, "%*s%s%s%s\n", 2*width/3-1, " ",
 			ttycolor.StdoutProfile[ttycolor.Code(u)],
 			s,
 			ttycolor.StdoutProfile[ttycolor.Reset])
@@ -183,8 +194,6 @@ func (ap *app) intro() {
 	}
 	ap.narrate(I, "🎶", "the play is starting; expected duration: %s", ap.cfg.tempo*time.Duration(len(ap.cfg.play)))
 }
-
-var isTerminal = func() bool { return isatty.IsTerminal(os.Stdout.Fd()) }()
 
 func joinAnd(s []string) string {
 	switch len(s) {

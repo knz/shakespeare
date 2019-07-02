@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/datadriven"
+	"github.com/knz/shakespeare/pkg/crdb/leaktest"
 	"github.com/knz/shakespeare/pkg/crdb/log"
 	"github.com/knz/shakespeare/pkg/crdb/timeutil"
 )
@@ -26,6 +27,8 @@ func TestRun(t *testing.T) {
 		}
 		includePath[1] = filepath.Dir(path)
 		datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
+			defer leaktest.AfterTest(t)()
+
 			// Prepare a log scope for the test.
 			sc := log.Scope(t)
 			defer sc.Close(t)

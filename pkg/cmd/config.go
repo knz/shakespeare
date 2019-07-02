@@ -105,16 +105,6 @@ type config struct {
 }
 
 func (cfg *config) initArgs(ctx context.Context) error {
-	if sh, ok := os.LookupEnv("SHELL"); ok {
-		cfg.shellPath = sh
-	} else {
-		cfg.shellPath = "/bin/bash"
-	}
-	if gp, ok := os.LookupEnv("GNUPLOT"); ok {
-		cfg.gnuplotPath = gp
-	} else {
-		cfg.gnuplotPath = "gnuplot"
-	}
 	pflag.StringVarP(&cfg.dataDir, "output-dir", "o", ".", "output data directory")
 	pflag.BoolVarP(&cfg.doPrint, "print-cfg", "p", false, "print out the parsed configuration")
 	pflag.BoolVarP(&cfg.parseOnly, "dry-run", "n", false, "do not execute anything, just check the configuration")
@@ -194,6 +184,16 @@ func newConfig() *config {
 		tempo:      time.Second,
 		audience:   make(map[string]*audienceMember),
 		vars:       make(map[varName]*variable),
+	}
+	if sh, ok := os.LookupEnv("SHELL"); ok {
+		cfg.shellPath = sh
+	} else {
+		cfg.shellPath = "/bin/bash"
+	}
+	if gp, ok := os.LookupEnv("GNUPLOT"); ok {
+		cfg.gnuplotPath = gp
+	} else {
+		cfg.gnuplotPath = "gnuplot"
 	}
 	cfg.maybeAddVar(nil, varName{sigName: "t"}, false)
 	cfg.maybeAddVar(nil, varName{sigName: "mood"}, false)

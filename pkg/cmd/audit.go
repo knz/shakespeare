@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"math"
 	"reflect"
-	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -15,10 +14,6 @@ import (
 )
 
 type audition struct {
-	// epoch is the instant at which the collector started collecting events.
-	// audition instants are relative to this moment.
-	epoch time.Time
-
 	// curMood is the current mood.
 	curMood string
 	// curMoodStart is the time at which the current mode started,
@@ -125,14 +120,14 @@ func newAudition(cfg *config) *audition {
 	return au
 }
 
-func (au *audition) start(ctx context.Context) {
-	au.epoch = timeutil.Now()
+func (th *theater) openDoors(ctx context.Context) {
+	th.epoch = timeutil.Now()
 }
 
 func (ap *app) resetSigVars() {
 	for v := range ap.cfg.vars {
 		if v.actorName != "" {
-			ap.au.curActivated[v] = false
+			ap.theater.au.curActivated[v] = false
 		}
 	}
 }
@@ -216,10 +211,10 @@ func (ap *app) checkFinal(
 	actionCh chan<- actionReport,
 	collectorCh chan<- observation,
 ) error {
-	au := ap.au
+	au := ap.theater.au
 	// Close the mood chapter, if one was open.
 	now := timeutil.Now()
-	elapsed := now.Sub(au.epoch).Seconds()
+	elapsed := now.Sub(ap.theater.epoch).Seconds()
 	if au.curMood != "clear" {
 		au.moodPeriods = append(au.moodPeriods, moodPeriod{
 			startTime: au.curMoodStart,
@@ -234,7 +229,7 @@ func (ap *app) checkFinal(
 func (ap *app) collectAndAuditActChange(
 	ctx context.Context, auLog *log.SecondaryLogger, ev actChange,
 ) error {
-	ap.au.actChanges = append(ap.au.actChanges, ev)
+	ap.theater.au.actChanges = append(ap.theater.au.actChanges, ev)
 	return nil
 }
 
@@ -246,7 +241,7 @@ func (ap *app) collectAndAuditMood(
 	evtTime float64,
 	mood string,
 ) error {
-	au := ap.au
+	au := ap.theater.au
 	if mood == au.curMood {
 		// No mood change - do nothing.
 		return nil
@@ -272,7 +267,7 @@ func (ap *app) processMoodChange(
 	newMood string,
 ) error {
 	if !atBegin {
-		auLog.Logf(ctx, "the mood %q is ending", ap.au.curMood)
+		auLog.Logf(ctx, "the mood %q is ending", ap.theater.au.curMood)
 		// Process the end of the current mood.
 		if err := ap.checkEvent(ctx, auLog, actionCh, collectorCh, atEnd /*final*/, auditableEvent{ts: ts, values: nil}); err != nil {
 			return err
@@ -281,8 +276,8 @@ func (ap *app) processMoodChange(
 	if atEnd {
 		return nil
 	}
-	ap.au.curMoodStart = ts
-	ap.au.curMood = newMood
+	ap.theater.au.curMoodStart = ts
+	ap.theater.au.curMood = newMood
 	auLog.Logf(ctx, "the mood %q is starting", newMood)
 	// Process the end of the current mood.
 	return ap.checkEvent(ctx, auLog, actionCh, collectorCh, false /*final*/, auditableEvent{ts: ts, values: nil})
@@ -297,7 +292,7 @@ func (ap *app) checkEvent(
 	ev auditableEvent,
 ) error {
 	// Mark all auditors as "dormant".
-	ap.au.resetAuditors()
+	ap.theater.au.resetAuditors()
 	// Mark all signal (non-computed) variables as not activated.
 	ap.resetSigVars()
 
@@ -306,16 +301,16 @@ func (ap *app) checkEvent(
 	if err := ap.setAndActivateVar(ctx, auLog, collectorCh, ev.ts, sigTypScalar, varName{sigName: "t"}, ev.ts, false); err != nil {
 		return err
 	}
-	if err := ap.setAndActivateVar(ctx, auLog, collectorCh, ev.ts, sigTypEvent, varName{sigName: "mood"}, ap.au.curMood, false); err != nil {
+	if err := ap.setAndActivateVar(ctx, auLog, collectorCh, ev.ts, sigTypEvent, varName{sigName: "mood"}, ap.theater.au.curMood, false); err != nil {
 		return err
 	}
 
 	// Update moodt, the mood time/duration.
 	var moodt float64
-	if math.IsInf(ap.au.curMoodStart, 0) {
+	if math.IsInf(ap.theater.au.curMoodStart, 0) {
 		moodt = ev.ts
 	} else {
-		moodt = ev.ts - ap.au.curMoodStart
+		moodt = ev.ts - ap.theater.au.curMoodStart
 	}
 	if err := ap.setAndActivateVar(ctx, auLog, collectorCh, ev.ts, sigTypScalar, varName{sigName: "moodt"}, moodt, false); err != nil {
 		return err
@@ -338,7 +333,7 @@ func (ap *app) checkEvent(
 	// auditor may perform some assignments that will wake up later
 	// auditors in the loop.
 	for _, audienceName := range ap.cfg.audienceNames {
-		as, ok := ap.au.auditorStates[audienceName]
+		as, ok := ap.theater.au.auditorStates[audienceName]
 		if !ok || !as.activated {
 			// audience still dormant: not interested.
 			continue
@@ -407,12 +402,12 @@ func (ap *app) checkEventForAuditor(
 		auditing = false
 	} else {
 		// First order of business is to check whether we are auditing at this moment.
-		if !am.auditor.activeCond.hasDeps(activateCtx, auLog, ap.au.curActivated) {
+		if !am.auditor.activeCond.hasDeps(activateCtx, auLog, ap.theater.au.curActivated) {
 			// Dependencies not satisfied. Nothing to do.
 			return nil
 		}
 		var err error
-		auditing, err = ap.evalBool(activateCtx, auLog, am.name, am.auditor.activeCond, ap.au.curVals)
+		auditing, err = ap.evalBool(activateCtx, auLog, am.name, am.auditor.activeCond, ap.theater.au.curVals)
 		if err != nil {
 			return err
 		}
@@ -486,11 +481,11 @@ func (ap *app) processAssignments(
 ) error {
 	for _, va := range am.assignments {
 		ctx := logtags.AddTag(baseCtx, "assign", va.targetVar)
-		if !va.expr.hasDeps(ctx, auLog, ap.au.curActivated) {
+		if !va.expr.hasDeps(ctx, auLog, ap.theater.au.curActivated) {
 			// Dependencies not satisifed. Skip assignment.
 			continue
 		}
-		value, err := ap.evalExpr(ctx, auLog, am.name, va.expr, ap.au.curVals)
+		value, err := ap.evalExpr(ctx, auLog, am.name, va.expr, ap.theater.au.curVals)
 		if err != nil {
 			// FIXME: action event for error
 			return errors.Wrapf(err, "assigning variable %s", va.targetVar)
@@ -500,7 +495,7 @@ func (ap *app) processAssignments(
 			// Nothing to do.
 		default:
 			// We're aggregating.
-			curVal := ap.au.curVals[va.targetVar]
+			curVal := ap.theater.au.curVals[va.targetVar]
 			curArray, ok := curVal.([]interface{})
 			if !ok {
 				if curVal != nil {
@@ -565,7 +560,7 @@ func (ap *app) checkExpect(
 
 	ctx = logtags.AddTag(ctx, "expect", nil)
 
-	if !am.expectExpr.hasDeps(ctx, auLog, ap.au.curActivated) {
+	if !am.expectExpr.hasDeps(ctx, auLog, ap.theater.au.curActivated) {
 		// Dependencies not satisfied. Nothing to do.
 		return nil
 	}
@@ -577,7 +572,7 @@ func (ap *app) checkExpect(
 		result:    resErr,
 	}
 
-	checkVal, err := ap.evalBool(ctx, auLog, auditorName, am.expectExpr, ap.au.curVals)
+	checkVal, err := ap.evalBool(ctx, auLog, auditorName, am.expectExpr, ap.theater.au.curVals)
 	if err != nil {
 		ev.output = fmt.Sprintf("%v", err)
 		return ap.sendActionReport(ctx, actionCh, ev)
@@ -675,13 +670,13 @@ func (ap *app) setAndActivateVar(
 	}
 	auLog.Logf(ctx, "%s := %v", vn, val)
 	varNameS := vn.String()
-	prevV := ap.au.curVals[varNameS]
-	ap.au.curVals[varNameS] = val
-	ap.au.curActivated[vn] = true
+	prevV := ap.theater.au.curVals[varNameS]
+	ap.theater.au.curVals[varNameS] = val
+	ap.theater.au.curActivated[vn] = true
 	v := ap.cfg.vars[vn]
 	if len(v.watchers) > 0 {
 		for w := range v.watchers {
-			as, ok := ap.au.auditorStates[w]
+			as, ok := ap.theater.au.auditorStates[w]
 			if ok && !as.activated {
 				auLog.Logf(ctx, "activating auditor %s", w)
 				as.activated = true
@@ -702,7 +697,7 @@ func (ap *app) setAndActivateVar(
 var errAuditViolation = errors.New("audit violation")
 
 func (ap *app) checkAuditViolations() error {
-	if len(ap.au.auditViolations) == 0 {
+	if len(ap.theater.au.auditViolations) == 0 {
 		// No violation, nothing to do.
 		return nil
 	}
@@ -710,8 +705,8 @@ func (ap *app) checkAuditViolations() error {
 	if !ap.auditReported {
 		// Avoid printing out the audit errors twice.
 		ap.auditReported = true
-		ap.narrate(E, "😞", "%d audit violations:", len(ap.au.auditViolations))
-		for _, v := range ap.au.auditViolations {
+		ap.narrate(E, "😞", "%d audit violations:", len(ap.theater.au.auditViolations))
+		for _, v := range ap.theater.au.auditViolations {
 			var buf bytes.Buffer
 			fmt.Fprintf(&buf, "%s (at ~%.2fs", v.auditorName, v.ts)
 			if v.failureState != "" {
@@ -722,6 +717,6 @@ func (ap *app) checkAuditViolations() error {
 		}
 	}
 
-	err := errors.Newf("%d audit violations", len(ap.au.auditViolations))
+	err := errors.Newf("%d audit violations", len(ap.theater.au.auditViolations))
 	return errors.Mark(err, errAuditViolation)
 }

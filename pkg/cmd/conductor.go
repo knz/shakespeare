@@ -43,7 +43,7 @@ func (ap *app) conduct(ctx context.Context) (err error) {
 
 	// Start the audition. This initializes the epoch, and thus needs to
 	// happen before the collector and the auditors start.
-	ap.au.start(ctx)
+	ap.theater.openDoors(ctx)
 
 	collectorChan := make(chan observation, len(ap.cfg.actors))
 	auChan := make(chan auditableEvent, len(ap.cfg.actors))

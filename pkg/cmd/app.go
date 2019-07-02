@@ -23,7 +23,19 @@ type app struct {
 	cfg     *config
 	stopper *stop.Stopper
 
-	au *audition
+	theater theater
+
+	auditReported bool
+	isTerminal    bool
+	terminalWidth int32
+	endCh         chan struct{}
+}
+
+// theater is where the play takes place.
+type theater struct {
+	// epoch is the instant at which the collector started collecting events.
+	// measurement instants are relative to this moment.
+	epoch time.Time
 
 	// minTime and maxTime are used to compute the x range of plots.
 	// They are updated by the collector. Either can become negative if
@@ -32,19 +44,19 @@ type app struct {
 	minTime float64
 	maxTime float64
 
-	auditReported bool
-	isTerminal    bool
-	terminalWidth int32
-	endCh         chan struct{}
+	// The audition - what the auditors in the audience think of the play.
+	au *audition
 }
 
 func newApp(cfg *config) *app {
 	r := &app{
-		cfg:     cfg,
-		au:      newAudition(cfg),
-		minTime: math.Inf(1),
-		maxTime: math.Inf(-1),
-		endCh:   make(chan struct{}),
+		cfg: cfg,
+		theater: theater{
+			au:      newAudition(cfg),
+			minTime: math.Inf(1),
+			maxTime: math.Inf(-1),
+		},
+		endCh: make(chan struct{}),
 	}
 	r.prepareTerm()
 	return r
@@ -90,11 +102,11 @@ func (ap *app) close() {
 
 // expandTimeRange should be called for each processed event time stamp.
 func (ap *app) expandTimeRange(instant float64) {
-	if instant > ap.maxTime {
-		ap.maxTime = instant
+	if instant > ap.theater.maxTime {
+		ap.theater.maxTime = instant
 	}
-	if instant < ap.minTime {
-		ap.minTime = instant
+	if instant < ap.theater.minTime {
+		ap.theater.minTime = instant
 	}
 }
 

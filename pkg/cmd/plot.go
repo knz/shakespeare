@@ -20,31 +20,31 @@ func (ap *app) plot(ctx context.Context, foundFailure bool) error {
 	log.Info(ctx, "generating scripts")
 
 	// Sanity checking.
-	if math.IsInf(ap.maxTime, 0) || math.IsInf(ap.minTime, 0) {
+	if math.IsInf(ap.theater.maxTime, 0) || math.IsInf(ap.theater.minTime, 0) {
 		ap.expandTimeRange(0)
 	}
 
-	if ap.maxTime < ap.minTime {
-		ap.minTime, ap.maxTime = ap.maxTime, ap.minTime
+	if ap.theater.maxTime < ap.theater.minTime {
+		ap.theater.minTime, ap.theater.maxTime = ap.theater.maxTime, ap.theater.minTime
 	}
 	// Ensure the x axis always start at zero, even if no
 	// event was received until later on the time line.
-	if ap.minTime > 0 {
-		ap.minTime = 0
+	if ap.theater.minTime > 0 {
+		ap.theater.minTime = 0
 	}
 	// Sanity check.
-	if ap.maxTime < 0 {
-		ap.maxTime = 1
+	if ap.theater.maxTime < 0 {
+		ap.theater.maxTime = 1
 	}
 	// More sanity check.
-	if ap.maxTime < ap.minTime+1 {
-		ap.maxTime = ap.minTime + 1
+	if ap.theater.maxTime < ap.theater.minTime+1 {
+		ap.theater.maxTime = ap.theater.minTime + 1
 	}
 
 	ap.narrate(I, "ℹ️ ", "the timeline extends from %.2fs to %.2fs, relative to %s",
-		ap.minTime, ap.maxTime, ap.au.epoch)
+		ap.theater.minTime, ap.theater.maxTime, ap.theater.epoch)
 
-	numPlots, err := ap.subPlots(ctx, "plot.gp", ap.minTime, ap.maxTime)
+	numPlots, err := ap.subPlots(ctx, "plot.gp", ap.theater.minTime, ap.theater.maxTime)
 	if err != nil {
 		return err
 	}
@@ -53,7 +53,7 @@ func (ap *app) plot(ctx context.Context, foundFailure bool) error {
 	beforeLastTs := repeatTs
 	if ap.cfg.repeatActNum > 0 {
 		// Find the timestamp where the last repetition started.
-		for _, acn := range ap.au.actChanges {
+		for _, acn := range ap.theater.au.actChanges {
 			if acn.actNum == ap.cfg.repeatActNum {
 				beforeLastTs = repeatTs
 				repeatTs = acn.ts
@@ -67,7 +67,7 @@ func (ap *app) plot(ctx context.Context, foundFailure bool) error {
 	}
 	hasRepeat := !math.IsInf(repeatTs, 0)
 	if hasRepeat {
-		if _, err := ap.subPlots(ctx, "lastplot.gp", repeatTs, ap.maxTime); err != nil {
+		if _, err := ap.subPlots(ctx, "lastplot.gp", repeatTs, ap.theater.maxTime); err != nil {
 			return err
 		}
 	}
@@ -151,7 +151,7 @@ pre,code{font-family: 'Nova Mono', monospace;}
 		if len(ap.cfg.authors) > 0 {
 			fmt.Fprintf(f, "<h3>Written by %s</h3>\n", html.EscapeString(joinAnd(ap.cfg.authors)))
 		}
-		fmt.Fprintf(f, "<p>%s<p>\n", formatDatePretty(ap.au.epoch))
+		fmt.Fprintf(f, "<p>%s<p>\n", formatDatePretty(ap.theater.epoch))
 		if foundFailure {
 			fmt.Fprintln(f, "<p>Avert your eyes! For this tale, alas, does not end well.<p>")
 		} else {
@@ -162,7 +162,7 @@ pre,code{font-family: 'Nova Mono', monospace;}
 		fmt.Fprintln(f, `<div style="margin-left: auto; margin-right: auto; max-width: 1024px"><embed id="E" src="plot.svg"/></div>`)
 		if hasRepeat {
 			fmt.Fprintln(f, divider)
-			fmt.Fprintf(f, "<p>For your delicate eyes, the last %.1f seconds of the play:</p>\n", ap.maxTime-repeatTs)
+			fmt.Fprintf(f, "<p>For your delicate eyes, the last %.1f seconds of the play:</p>\n", ap.theater.maxTime-repeatTs)
 			fmt.Fprintln(f, `<div style="margin-left: auto; margin-right: auto; max-width: 1024px"><embed id="E" src="lastplot.svg"/></div>`)
 		}
 		if len(ap.cfg.seeAlso) > 0 {
@@ -286,7 +286,7 @@ func (ap *app) subPlots(
 		}
 
 		// Find the timeserie(s) to plot for the auditor.
-		if as, ok := ap.au.auditorStates[a.name]; ok && as.hasData {
+		if as, ok := ap.theater.au.auditorStates[a.name]; ok && as.hasData {
 			fName := fmt.Sprintf("audit-%s.csv", a.name)
 
 			ap.narrate(I, "📈", "observer %s found audit data: %s",
@@ -341,7 +341,7 @@ faces[4] = ""
 		// If we did not do that, each plot may get a different x range
 		// (adjusted automatically based on the data collected for that plot).
 		fmt.Fprintf(f, "set xrange [%f:%f]\n", minTime, maxTime)
-		if ap.maxTime < 10 {
+		if ap.theater.maxTime < 10 {
 			fmt.Fprintf(f, "set xtics out 1\n")
 			fmt.Fprintf(f, "set mxtics 2\n")
 		} else {
@@ -350,8 +350,8 @@ faces[4] = ""
 		}
 
 		// Generate the act boundaries.
-		for i := 1; i < len(ap.au.actChanges); i++ {
-			ts := ap.au.actChanges[i].ts
+		for i := 1; i < len(ap.theater.au.actChanges); i++ {
+			ts := ap.theater.au.actChanges[i].ts
 			fmt.Fprintf(f, "set arrow from %f, graph 0 to %f, graph 1 back nohead lc 'blue'\n", ts, ts)
 		}
 
@@ -403,7 +403,7 @@ faces[4] = ""
 		// fmt.Fprintln(f, "set jitter overlap 1 spread .25 vertical")
 
 		// Generate the mood overlays.
-		for i, amb := range ap.au.moodPeriods {
+		for i, amb := range ap.theater.au.moodPeriods {
 			xstart := "graph 0"
 			if !math.IsInf(amb.startTime, 0) {
 				xstart = fmt.Sprintf("first %f", amb.startTime)
@@ -439,7 +439,7 @@ faces[4] = ""
 		}
 
 		// End the plot set.
-		for i := range ap.au.moodPeriods {
+		for i := range ap.theater.au.moodPeriods {
 			fmt.Fprintf(f, "unset object %d\n", i+1)
 		}
 		fmt.Fprintln(f, "unset arrow")

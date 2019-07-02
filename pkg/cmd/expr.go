@@ -115,7 +115,7 @@ func (ap *app) evalBool(
 	expr expr,
 	vars map[string]interface{},
 ) (bool, error) {
-	value, err := ap.evalExpr(ctx, auLog, auditorName, expr, ap.au.curVals)
+	value, err := ap.evalExpr(ctx, auLog, auditorName, expr, ap.theater.au.curVals)
 	if err != nil {
 		return false, err
 	}

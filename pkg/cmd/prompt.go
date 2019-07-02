@@ -79,7 +79,7 @@ func (ap *app) prompt(
 			extraMsg := ""
 			if !ap.cfg.avoidTimeProgress {
 				var extra bytes.Buffer
-				elapsedTotal := sceneTime.Sub(ap.au.epoch)
+				elapsedTotal := sceneTime.Sub(ap.theater.epoch)
 				elapsedAct := sceneTime.Sub(actStart)
 				fmt.Fprintf(&extra, " (~%ds total, ~%ds in act", int(elapsedTotal.Seconds()), int(elapsedAct.Seconds()))
 				if toWait < -time.Duration(1)*time.Millisecond {
@@ -227,7 +227,7 @@ func (ap *app) runLine(
 				qc = '?'
 			}
 			ap.narrate(I, "🥁", "    %s: %s%c", a.name, step.action, qc)
-			ev, err := a.runAction(stepCtx, ap.stopper, ap.au.epoch, step.action, actionChan)
+			ev, err := a.runAction(stepCtx, ap.stopper, ap.theater.epoch, step.action, actionChan)
 			if err != nil {
 				return err
 			}
@@ -251,7 +251,7 @@ func (ap *app) signalActChange(
 	ctx context.Context, actCh chan<- actChange, actStart time.Time, actNum int,
 ) error {
 	ap.narrate(I, "🎬", "act %d starts", actNum)
-	elapsed := actStart.Sub(ap.au.epoch).Seconds()
+	elapsed := actStart.Sub(ap.theater.epoch).Seconds()
 	ev := actChange{ts: elapsed, actNum: actNum}
 	select {
 	case <-ap.stopper.ShouldQuiesce():
@@ -271,7 +271,7 @@ func (ap *app) runMoodChange(
 ) error {
 	ap.narrate(I, "🎊", "    (mood %s)", newMood)
 	now := timeutil.Now()
-	elapsed := now.Sub(ap.au.epoch).Seconds()
+	elapsed := now.Sub(ap.theater.epoch).Seconds()
 	if err := reportMoodEvent(ctx, ap.stopper, moodCh,
 		moodChange{ts: elapsed, newMood: newMood}); err != nil {
 		return err

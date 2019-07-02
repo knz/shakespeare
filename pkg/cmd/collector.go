@@ -129,7 +129,7 @@ func (ap *app) collect(
 				}
 				ac.observer.hasData = true
 
-				a, ok := ap.au.auditorStates[ev.actor]
+				a, ok := ap.theater.au.auditorStates[ev.actor]
 				if !ok {
 					return errors.Newf("event received for non-existent auditor: %+v", ev)
 				}
@@ -152,7 +152,7 @@ func (ap *app) collect(
 				}
 
 				if ev.result == resErr || ev.result == resFailure {
-					ap.au.auditViolations = append(ap.au.auditViolations,
+					ap.theater.au.auditViolations = append(ap.theater.au.auditViolations,
 						auditViolation{
 							ts:           sinceBeginning,
 							result:       ev.result,

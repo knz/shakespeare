@@ -151,11 +151,20 @@ func (ap *app) detectSignals(
 		var ts time.Time
 
 		// Parse the timestamp.
-		if rp.reGroup == "" {
+		switch rp.reGroup {
+		case "":
 			// If the reGroup is empty, that means we're OK with
 			// the auto-generated "now" timestamp.
 			ts = timeutil.Now()
-		} else {
+		case "ts_deltasecs":
+			logTime := rp.re.ReplaceAllString(line, "${ts_deltasecs}")
+			delta, err := strconv.ParseFloat(logTime, 64)
+			if err != nil {
+				monLogger.Logf(ctx, "signal %s: invalid second delta %q: %+v", rp.name, logTime, err)
+				continue
+			}
+			ts = ap.au.epoch.Add(time.Duration(delta * float64(time.Second)))
+		default:
 			var err error
 			logTime := rp.re.ReplaceAllString(line, "${"+rp.reGroup+"}")
 			ts, err = time.Parse(rp.timeLayout, logTime)

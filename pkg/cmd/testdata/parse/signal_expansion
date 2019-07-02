@@ -53,6 +53,23 @@ end
 parse
 role test
   spotlight true
+  signal test event at (?P<ts_deltasecs>)(?P<event>.*)
+end
+----
+role test
+  spotlight true
+  signal test event at (?P<ts_deltasecs>(?:\d+(?:\.\d+)?|\.\d+))(?P<event>.*)
+end
+# no cast defined
+script
+  tempo 1s
+  # no storyline defined, play will terminate immediately
+end
+# no audience defined
+
+parse
+role test
+  spotlight true
   signal test event at (?P<event>.*)
 end
 ----
@@ -62,7 +79,7 @@ while parsing:
 <testdata>:1     role test
 <testdata>:2       spotlight true
 <testdata>:3   >   signal test event at (?P<event>.*)
-HINT: available formats: ts_log, ts_now, ts_rfc3339
+HINT: available formats: ts_deltasecs, ts_log, ts_now, ts_rfc3339
 
 
 parse

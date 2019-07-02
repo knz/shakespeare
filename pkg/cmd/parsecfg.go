@@ -439,6 +439,7 @@ func (cfg *config) parseRole(
 			// Expand commonly known time formats.
 			reS = strings.Replace(reS, `(?P<ts_rfc3339>)`, `(?P<ts_rfc3339>\d\d\d\d-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)Z)`, 1)
 			reS = strings.Replace(reS, `(?P<ts_log>)`, `(?P<ts_log>\d{6} \d\d:\d\d:\d\d\.\d{6})`, 1)
+			reS = strings.Replace(reS, `(?P<ts_deltasecs>)`, `(?P<ts_deltasecs>(?:\d+(?:\.\d+)?|\.\d+))`, 1)
 
 			re, err := regexp.Compile(reS)
 			if err != nil {
@@ -483,10 +484,13 @@ func (cfg *config) parseRole(
 			} else if hasSubexp(re, "ts_now") {
 				// Special "format": there is actually no timestamp. We'll auto-generate values.
 				rp.reGroup = ""
+			} else if hasSubexp(re, "ts_deltasecs") {
+				// Relative seconds.
+				rp.reGroup = "ts_deltasecs"
 			} else {
 				return explainAlternativesList(
 					errors.New("unknown or missing time stamp format (?P<ts_...>) in regexp"),
-					"formats", "ts_now", "ts_log", "ts_rfc3339")
+					"formats", "ts_now", "ts_log", "ts_rfc3339", "ts_deltasecs")
 			}
 
 			thisRole.sigParsers = append(thisRole.sigParsers, &rp)

@@ -260,6 +260,11 @@ Behavior:
     that matches a date/time printed using the CockroachDB log format,
     which is then used to determine the timestamp from the sportlight input.
 
+  - the pseudo-pattern `(?P<ts_deltasecs>)` expands to a regular
+    expression that matches a decimal number (either `123`, `123.456`
+    or `.456`) and interprets it as a duration in seconds since the
+    start of the test.
+
   In general, it is preferrable to have the underlying system
   process log and report (via a spotlight) its own time measurements.
   This is useful especially in cases where the process runs remotely,

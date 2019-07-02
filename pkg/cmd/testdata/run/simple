@@ -1,0 +1,56 @@
+# This test ensures that everything is fine when there is no
+# spotlight defined and at least one action.
+run
+role test
+  :a echo 123
+end
+cast
+  test plays test
+end
+script
+  scene a entails for test: a
+  storyline a
+end
+----
+👏 please welcome a cast of 1 actors, playing 1 roles
+🎭 dramatis personæ: test
+🎶 the play is starting; expected duration: 1s
+🎬 act 1 starts
+📢 act 1, scene 1:
+🥁     test: a!
+👏 the play is terminating
+🧹 the stage has been cleared
+😘 good day! come again soon.
+
+# this test ensures everything is fine when
+# there is a spotlight but there are no actions.
+run
+role test
+  spotlight while true; do sleep 1; echo 123; done
+end
+cast
+  test plays test
+end
+----
+👏 please welcome a cast of 1 actors, playing 1 roles
+🎭 dramatis personæ: test
+🎶 the play is starting; expected duration: 0s
+👏 the play is terminating
+🧹 the stage has been cleared
+😘 good day! come again soon.
+
+# this test ensures everything is fine when
+# there are actions but no actors.
+run
+script
+  scene a mood starts red
+  storyline a
+end
+----
+🎶 the play is starting; expected duration: 1s
+🎬 act 1 starts
+📢 act 1, scene 1:
+🎊     (mood red)
+👏 the play is terminating
+🧹 the stage has been cleared
+😘 good day! come again soon.

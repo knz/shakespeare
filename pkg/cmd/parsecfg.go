@@ -704,11 +704,12 @@ func (cfg *config) parseScript(line string) error {
 			if part == "" {
 				continue
 			}
+			checkAct := part
 			if strings.HasSuffix(part, "?") {
-				part = part[:len(part)-1]
+				checkAct = part[:len(part)-1]
 			}
-			if _, ok := r.actionCmds[part]; !ok {
-				return explainAlternatives(errors.Newf("action :%s is not defined for role %q", part, r.name),
+			if _, ok := r.actionCmds[checkAct]; !ok {
+				return explainAlternatives(errors.Newf("action :%s is not defined for role %q", checkAct, r.name),
 					fmt.Sprintf("actions for role %s", r.name), r.actionCmds)
 			}
 			actions = append(actions, part)

@@ -1,0 +1,35 @@
+###
+### Tolerable actions
+###
+
+parse
+role test
+  :a true
+end
+cast
+  test plays test
+end
+script
+  scene a entails for test: a?
+  storyline a
+end
+----
+role test
+  :a true
+end
+cast
+  test plays test
+  # test plays from working directory test
+end
+script
+  tempo 1s
+  scene a entails for test: a?
+  storyline a
+end
+# no audience defined
+# play
+# -- ACT 1: a --
+#  1:  test: a?
+#  2:  (wait until 1s)
+# end
+

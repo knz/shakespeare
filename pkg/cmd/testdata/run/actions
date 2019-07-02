@@ -1,0 +1,55 @@
+# Check that action failure is detected
+run error
+role test
+  :a exit 123
+end
+cast
+  test plays test
+end
+script
+  scene a entails for test: a
+  storyline a
+end
+----
+----
+👏 please welcome a cast of 1 actors, playing 1 roles
+🎭 dramatis personæ: test
+🎶 the play is starting; expected duration: 1s
+🎬 act 1 starts
+📢 act 1, scene 1:
+🥁     test: a!
+😞 action test:a failed (see below for details)
+👏 the play is terminating
+🧹 the stage has been cleared
+😱 an error has occurred!
+run error: prompt: action test:a failed: exit status 123
++ exit 123
+
+--
+(context of error: play,prompter,act=1,scene=1,actor=test,role=test,step=1)
+----
+----
+
+# Check that action failure can be tolerated
+run
+role test
+  :a exit 123
+end
+cast
+  test plays test
+end
+script
+  scene a entails for test: a?
+  storyline a
+end
+----
+👏 please welcome a cast of 1 actors, playing 1 roles
+🎭 dramatis personæ: test
+🎶 the play is starting; expected duration: 1s
+🎬 act 1 starts
+📢 act 1, scene 1:
+🥁     test: a?
+🤨 action test:a failed (see log for details)
+👏 the play is terminating
+🧹 the stage has been cleared
+😘 good day! come again soon.

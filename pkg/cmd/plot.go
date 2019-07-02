@@ -42,7 +42,7 @@ func (ap *app) plot(ctx context.Context, foundFailure bool) error {
 	}
 
 	ap.narrate(I, "ℹ️ ", "the timeline extends from %.2fs to %.2fs, relative to %s",
-		ap.theater.minTime, ap.theater.maxTime, ap.theater.epoch)
+		ap.theater.minTime, ap.theater.maxTime, ap.epoch())
 
 	numPlots, err := ap.subPlots(ctx, "plot.gp", ap.theater.minTime, ap.theater.maxTime)
 	if err != nil {
@@ -151,7 +151,7 @@ pre,code{font-family: 'Nova Mono', monospace;}
 		if len(ap.cfg.authors) > 0 {
 			fmt.Fprintf(f, "<h3>Written by %s</h3>\n", html.EscapeString(joinAnd(ap.cfg.authors)))
 		}
-		fmt.Fprintf(f, "<p>%s<p>\n", formatDatePretty(ap.theater.epoch))
+		fmt.Fprintf(f, "<p>%s<p>\n", formatDatePretty(ap.epoch()))
 		if foundFailure {
 			fmt.Fprintln(f, "<p>Avert your eyes! For this tale, alas, does not end well.<p>")
 		} else {

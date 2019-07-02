@@ -163,7 +163,7 @@ func (ap *app) detectSignals(
 				monLogger.Logf(ctx, "signal %s: invalid second delta %q: %+v", rp.name, logTime, err)
 				continue
 			}
-			ts = ap.theater.epoch.Add(time.Duration(delta * float64(time.Second)))
+			ts = ap.epoch().Add(time.Duration(delta * float64(time.Second)))
 		default:
 			var err error
 			logTime := rp.re.ReplaceAllString(line, "${"+rp.reGroup+"}")
@@ -174,7 +174,7 @@ func (ap *app) detectSignals(
 			}
 		}
 
-		elapsed := ts.Sub(ap.theater.epoch).Seconds()
+		elapsed := ts.Sub(ap.epoch()).Seconds()
 
 		ev, ok := evs[elapsed]
 		if !ok {

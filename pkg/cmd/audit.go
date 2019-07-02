@@ -120,10 +120,6 @@ func newAudition(cfg *config) *audition {
 	return au
 }
 
-func (th *theater) openDoors(ctx context.Context) {
-	th.epoch = timeutil.Now()
-}
-
 func (ap *app) resetSigVars() {
 	for v := range ap.cfg.vars {
 		if v.actorName != "" {
@@ -214,7 +210,7 @@ func (ap *app) checkFinal(
 	au := ap.theater.au
 	// Close the mood chapter, if one was open.
 	now := timeutil.Now()
-	elapsed := now.Sub(ap.theater.epoch).Seconds()
+	elapsed := now.Sub(ap.epoch()).Seconds()
 	if au.curMood != "clear" {
 		au.moodPeriods = append(au.moodPeriods, moodPeriod{
 			startTime: au.curMoodStart,

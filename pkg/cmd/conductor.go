@@ -11,6 +11,20 @@ import (
 	"github.com/knz/shakespeare/pkg/crdb/log"
 )
 
+// theater is where the play takes place.
+// This is mostly supervised by the conductor.
+type theater struct {
+	// minTime and maxTime are used to compute the x range of plots.
+	// They are updated by the collector. Either can become negative if
+	// the observed system has a clock running in the past relative to the
+	// conductor.
+	minTime float64
+	maxTime float64
+
+	// The audition - what the auditors in the audience think of the play.
+	au *audition
+}
+
 // conduct runs the play.
 func (ap *app) conduct(ctx context.Context) (err error) {
 	// Prepare all the working directories.
@@ -43,7 +57,7 @@ func (ap *app) conduct(ctx context.Context) (err error) {
 
 	// Start the audition. This initializes the epoch, and thus needs to
 	// happen before the collector and the auditors start.
-	ap.theater.openDoors(ctx)
+	ap.openDoors(ctx)
 
 	collectorChan := make(chan observation, len(ap.cfg.actors))
 	auChan := make(chan auditableEvent, len(ap.cfg.actors))
@@ -71,7 +85,17 @@ func (ap *app) conduct(ctx context.Context) (err error) {
 	// Start the prompter.
 	var wgPrompt sync.WaitGroup
 	promptErrCh := make(chan error)
-	promptDone := ap.startPrompter(ctx, &wgPrompt, actionChan, moodCh, actCh, spotTermCh, promptErrCh)
+	pr := prompter{
+		r:            ap,
+		cfg:          ap.cfg,
+		stopper:      ap.stopper,
+		actionCh:     actionChan,
+		actChangeCh:  actCh,
+		moodChangeCh: moodCh,
+		termCh:       spotTermCh,
+		errCh:        promptErrCh,
+	}
+	promptDone := pr.startPrompter(ctx, &wgPrompt)
 
 	// The shutdown sequence without cancellation/stopper is:
 	// - prompter exits, this closes spotTermCh
@@ -174,31 +198,23 @@ func (ap *app) conduct(ctx context.Context) (err error) {
 }
 
 // startPrompter runs the prompter until completion.
-func (ap *app) startPrompter(
-	ctx context.Context,
-	wg *sync.WaitGroup,
-	actionChan chan<- actionReport,
-	moodCh chan<- moodChange,
-	actCh chan<- actChange,
-	termCh chan<- struct{},
-	errCh chan<- error,
-) func() {
+func (pr *prompter) startPrompter(ctx context.Context, wg *sync.WaitGroup) func() {
 	promptCtx, promptDone := context.WithCancel(ctx)
 	promptCtx = logtags.AddTag(promptCtx, "prompter", nil)
 	wg.Add(1)
-	runWorker(promptCtx, ap.stopper, func(ctx context.Context) {
+	runWorker(promptCtx, pr.stopper, func(ctx context.Context) {
 		defer func() {
 			// Inform the spotlights to terminate.
-			close(termCh)
+			close(pr.termCh)
 			// Indicate to the conductor that we are terminating.
 			wg.Done()
 			// Also indicate to the conductor there will be no further error
 			// reported.
-			close(errCh)
+			close(pr.errCh)
 			log.Info(ctx, "<exit>")
 		}()
 		log.Info(ctx, "<intrat>")
-		errCh <- errors.WithContextTags(ap.prompt(ctx, actionChan, moodCh, actCh), ctx)
+		pr.errCh <- errors.WithContextTags(pr.prompt(ctx), ctx)
 	})
 	return promptDone
 }

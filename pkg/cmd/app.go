@@ -15,9 +15,21 @@ import (
 	"github.com/cockroachdb/ttycolor"
 	"github.com/knz/shakespeare/pkg/crdb/log"
 	"github.com/knz/shakespeare/pkg/crdb/stop"
+	"github.com/knz/shakespeare/pkg/crdb/timeutil"
 	isatty "github.com/mattn/go-isatty"
 	"golang.org/x/crypto/ssh/terminal"
 )
+
+type reporter interface {
+	// start of the test.
+	epoch() time.Time
+	// narrate reports messages in the left column.
+	narrate(_ urgency, _, _ string, _ ...interface{})
+	// witness reports messages in the middle column.
+	witness(_ context.Context, _ string, _ ...interface{})
+	// judge reports message in the right column.
+	judge(_ context.Context, _ urgency, _, _ string, _ ...interface{})
+}
 
 type app struct {
 	cfg     *config
@@ -25,28 +37,17 @@ type app struct {
 
 	theater theater
 
+	// startTime is the instant at which the conductor initiates the play.
+	// measurements are relative to this moment.
+	startTime time.Time
+
 	auditReported bool
 	isTerminal    bool
 	terminalWidth int32
 	endCh         chan struct{}
 }
 
-// theater is where the play takes place.
-type theater struct {
-	// epoch is the instant at which the collector started collecting events.
-	// measurement instants are relative to this moment.
-	epoch time.Time
-
-	// minTime and maxTime are used to compute the x range of plots.
-	// They are updated by the collector. Either can become negative if
-	// the observed system has a clock running in the past relative to the
-	// conductor.
-	minTime float64
-	maxTime float64
-
-	// The audition - what the auditors in the audience think of the play.
-	au *audition
-}
+var _ reporter = (*app)(nil)
 
 func newApp(cfg *config) *app {
 	r := &app{
@@ -60,6 +61,12 @@ func newApp(cfg *config) *app {
 	}
 	r.prepareTerm()
 	return r
+}
+
+func (ap *app) epoch() time.Time { return ap.startTime }
+
+func (ap *app) openDoors(ctx context.Context) {
+	ap.startTime = timeutil.Now()
 }
 
 func (ap *app) prepareTerm() {

@@ -16,24 +16,42 @@ import (
 	"github.com/knz/shakespeare/pkg/crdb/timeutil"
 )
 
+type prompter struct {
+	r       reporter
+	cfg     *config
+	stopper *stop.Stopper
+
+	// Where the prompter should report performed actions.
+	actionCh chan<- actionReport
+
+	// Where the prompter should report act changes.
+	actChangeCh chan<- actChange
+
+	// Where the prompter should report mood changes.
+	moodChangeCh chan<- moodChange
+
+	// This channels is closed when the prompter reaches the end of
+	// the script, it should instruct the spotlight to terminate.
+	termCh chan<- struct{}
+
+	// Where the prompter should return errors. The prompter
+	// also closes this when it terminates.
+	errCh chan<- error
+}
+
 // prompt directs the actors to perform actions in accordance with the script.
-func (ap *app) prompt(
-	ctx context.Context,
-	actionChan chan<- actionReport,
-	moodCh chan<- moodChange,
-	actCh chan<- actChange,
-) error {
+func (pr *prompter) prompt(ctx context.Context) error {
 	// surpriseDur is the duration of a scene beyond which the prompter
 	// will express surprise.
-	surpriseDur := 2 * ap.cfg.tempo.Seconds()
+	surpriseDur := 2 * pr.cfg.tempo.Seconds()
 
 	// Play.
-	for j := 0; j < len(ap.cfg.play); j++ {
-		act := ap.cfg.play[j]
+	for j := 0; j < len(pr.cfg.play); j++ {
+		act := pr.cfg.play[j]
 		actNum := j + 1
 		actCtx := logtags.AddTag(ctx, "act", actNum)
 		actStart := timeutil.Now()
-		if err := ap.signalActChange(actCtx, actCh, actStart, actNum); err != nil {
+		if err := pr.signalActChange(actCtx, actStart, actNum); err != nil {
 			return err
 		}
 
@@ -59,7 +77,7 @@ func (ap *app) prompt(
 			// test the context cancellation or stopper.ShouldQuiesce().
 			tm := time.After(toWait)
 			select {
-			case <-ap.stopper.ShouldQuiesce():
+			case <-pr.stopper.ShouldQuiesce():
 				log.Info(sceneCtx, "terminated")
 				return nil
 			case <-ctx.Done():
@@ -77,9 +95,9 @@ func (ap *app) prompt(
 			sceneTime := timeutil.Now()
 
 			extraMsg := ""
-			if !ap.cfg.avoidTimeProgress {
+			if !pr.cfg.avoidTimeProgress {
 				var extra bytes.Buffer
-				elapsedTotal := sceneTime.Sub(ap.theater.epoch)
+				elapsedTotal := sceneTime.Sub(pr.r.epoch())
 				elapsedAct := sceneTime.Sub(actStart)
 				fmt.Fprintf(&extra, " (~%ds total, ~%ds in act", int(elapsedTotal.Seconds()), int(elapsedAct.Seconds()))
 				if toWait < -time.Duration(1)*time.Millisecond {
@@ -89,17 +107,17 @@ func (ap *app) prompt(
 				extraMsg = extra.String()
 			}
 
-			ap.narrate(I, "", "act %d, scene %d%s:", actNum, sceneNum, extraMsg)
+			pr.r.narrate(I, "", "act %d, scene %d%s:", actNum, sceneNum, extraMsg)
 
 			// Now run the scene.
-			err := ap.runScene(sceneCtx, scene.concurrentLines, actionChan, moodCh)
+			err := pr.runScene(sceneCtx, scene.concurrentLines)
 
 			// In any case, make a statement about the duration.
-			if ap.cfg.tempo != 0 && !ap.cfg.avoidTimeProgress {
+			if pr.cfg.tempo != 0 && !pr.cfg.avoidTimeProgress {
 				sceneDur := timeutil.Now().Sub(sceneTime).Seconds()
 				if sceneDur >= surpriseDur {
-					ap.narrate(W, "😮", "woah! scene %d lasted %.1fx longer than expected!",
-						sceneNum, sceneDur/ap.cfg.tempo.Seconds())
+					pr.r.narrate(W, "😮", "woah! scene %d lasted %.1fx longer than expected!",
+						sceneNum, sceneDur/pr.cfg.tempo.Seconds())
 				}
 			}
 
@@ -110,10 +128,10 @@ func (ap *app) prompt(
 		}
 
 		// End of act. Are we looping?
-		if ap.cfg.repeatActNum > 0 && j == len(ap.cfg.play)-1 {
-			ap.narrate(I, "🔁", "restarting from act %d", ap.cfg.repeatActNum)
+		if pr.cfg.repeatActNum > 0 && j == len(pr.cfg.play)-1 {
+			pr.r.narrate(I, "🔁", "restarting from act %d", pr.cfg.repeatActNum)
 			// "num" is 1-indexed, but j is 0-indexed. shift.
-			repeatIdx := ap.cfg.repeatActNum - 1
+			repeatIdx := pr.cfg.repeatActNum - 1
 			// the loop iteration will increment j before
 			// the next iteration, so start one lower.
 			j = repeatIdx - 1
@@ -125,9 +143,7 @@ func (ap *app) prompt(
 
 // runScene runs one scene.
 // A scene is the concurrent execution of each actor's lines.
-func (ap *app) runScene(
-	ctx context.Context, lines []scriptLine, actionChan chan<- actionReport, moodCh chan<- moodChange,
-) (err error) {
+func (pr *prompter) runScene(ctx context.Context, lines []scriptLine) (err error) {
 	// errCh collects the errors from the concurrent actors.
 	errCh := make(chan error, len(lines)+1)
 
@@ -157,7 +173,7 @@ func (ap *app) runScene(
 			if len(line.steps) != 1 || (len(line.steps) > 0 && line.steps[0].typ != stepAmbiance) {
 				return errors.WithContextTags(errors.AssertionFailedf("unexpected missing actor"), ctx)
 			}
-			if err := ap.runMoodChange(ctx, line.steps[0].action, actionChan, moodCh); err != nil {
+			if err := pr.runMoodChange(ctx, line.steps[0].action); err != nil {
 				return err
 			}
 			continue
@@ -170,9 +186,9 @@ func (ap *app) runScene(
 		// we use runAsyncTask() here instead of runWorker(), so that if
 		// the stopper is requesting a stop by the time we reach this
 		// point, the task won't even start.
-		if err := runAsyncTask(lineCtx, ap.stopper, func(ctx context.Context) {
+		if err := runAsyncTask(lineCtx, pr.stopper, func(ctx context.Context) {
 			defer wg.Done()
-			err := ap.runLine(ctx, a, steps, actionChan, moodCh)
+			err := pr.runLine(ctx, a, steps)
 			if errors.Is(err, context.Canceled) {
 				// It's ok if an action gets aborted.
 				err = nil
@@ -205,19 +221,13 @@ func (ap *app) runScene(
 }
 
 // runLine runs a script scene for just one actor.
-func (ap *app) runLine(
-	ctx context.Context,
-	a *actor,
-	steps []step,
-	actionChan chan<- actionReport,
-	moodCh chan<- moodChange,
-) error {
+func (pr *prompter) runLine(ctx context.Context, a *actor, steps []step) error {
 	for stepNum, step := range steps {
 		stepCtx := logtags.AddTag(ctx, "step", stepNum+1)
 
 		switch step.typ {
 		case stepAmbiance:
-			if err := ap.runMoodChange(stepCtx, step.action, actionChan, moodCh); err != nil {
+			if err := pr.runMoodChange(stepCtx, step.action); err != nil {
 				return err
 			}
 
@@ -226,13 +236,13 @@ func (ap *app) runLine(
 			if step.failOk {
 				qc = '?'
 			}
-			ap.narrate(I, "🥁", "    %s: %s%c", a.name, step.action, qc)
-			ev, err := a.runAction(stepCtx, ap.stopper, ap.theater.epoch, step.action, actionChan)
+			pr.r.narrate(I, "🥁", "    %s: %s%c", a.name, step.action, qc)
+			ev, err := a.runAction(stepCtx, pr, step.action)
 			if err != nil {
 				return err
 			}
 			ev.failOk = step.failOk
-			reportErr := reportActionEvent(stepCtx, ap.stopper, actionChan, ev)
+			reportErr := pr.reportActionEvent(stepCtx, ev)
 			if ev.result != resOk && !step.failOk {
 				return combineErrors(reportErr,
 					errors.WithContextTags(
@@ -247,33 +257,28 @@ func (ap *app) runLine(
 	return nil
 }
 
-func (ap *app) signalActChange(
-	ctx context.Context, actCh chan<- actChange, actStart time.Time, actNum int,
-) error {
-	ap.narrate(I, "🎬", "act %d starts", actNum)
-	elapsed := actStart.Sub(ap.theater.epoch).Seconds()
+func (pr *prompter) signalActChange(ctx context.Context, actStart time.Time, actNum int) error {
+	pr.r.narrate(I, "🎬", "act %d starts", actNum)
+	elapsed := actStart.Sub(pr.r.epoch()).Seconds()
 	ev := actChange{ts: elapsed, actNum: actNum}
 	select {
-	case <-ap.stopper.ShouldQuiesce():
+	case <-pr.stopper.ShouldQuiesce():
 		log.Info(ctx, "terminated")
 		return nil
 	case <-ctx.Done():
 		log.Info(ctx, "interrupted")
 		return wrapCtxErr(ctx)
-	case actCh <- ev:
+	case pr.actChangeCh <- ev:
 		// ok
 	}
 	return nil
 }
 
-func (ap *app) runMoodChange(
-	ctx context.Context, newMood string, actionChan chan<- actionReport, moodCh chan<- moodChange,
-) error {
-	ap.narrate(I, "🎊", "    (mood %s)", newMood)
+func (pr *prompter) runMoodChange(ctx context.Context, newMood string) error {
+	pr.r.narrate(I, "🎊", "    (mood %s)", newMood)
 	now := timeutil.Now()
-	elapsed := now.Sub(ap.theater.epoch).Seconds()
-	if err := reportMoodEvent(ctx, ap.stopper, moodCh,
-		moodChange{ts: elapsed, newMood: newMood}); err != nil {
+	elapsed := now.Sub(pr.r.epoch()).Seconds()
+	if err := pr.reportMoodEvent(ctx, moodChange{ts: elapsed, newMood: newMood}); err != nil {
 		return err
 	}
 	ev := actionReport{
@@ -281,48 +286,38 @@ func (ap *app) runMoodChange(
 		startTime: elapsed,
 		output:    newMood,
 	}
-	return reportActionEvent(ctx, ap.stopper, actionChan, ev)
+	return pr.reportActionEvent(ctx, ev)
 }
 
-func reportActionEvent(
-	ctx context.Context, stopper *stop.Stopper, actionChan chan<- actionReport, ev actionReport,
-) error {
+func (pr *prompter) reportActionEvent(ctx context.Context, ev actionReport) error {
 	select {
-	case <-stopper.ShouldQuiesce():
+	case <-pr.stopper.ShouldQuiesce():
 		log.Info(ctx, "terminated")
 		return nil
 	case <-ctx.Done():
 		log.Info(ctx, "interrupted")
 		return wrapCtxErr(ctx)
-	case actionChan <- ev:
+	case pr.actionCh <- ev:
 		// ok
 	}
 	return nil
 }
 
-func reportMoodEvent(
-	ctx context.Context, stopper *stop.Stopper, moodCh chan<- moodChange, chg moodChange,
-) error {
+func (pr *prompter) reportMoodEvent(ctx context.Context, chg moodChange) error {
 	select {
-	case <-stopper.ShouldQuiesce():
+	case <-pr.stopper.ShouldQuiesce():
 		log.Info(ctx, "terminated")
 		return nil
 	case <-ctx.Done():
 		log.Info(ctx, "interrupted")
 		return wrapCtxErr(ctx)
-	case moodCh <- chg:
+	case pr.moodChangeCh <- chg:
 		// ok
 	}
 	return nil
 }
 
-func (a *actor) runAction(
-	ctx context.Context,
-	stopper *stop.Stopper,
-	epoch time.Time,
-	action string,
-	actionChan chan<- actionReport,
-) (actionReport, error) {
+func (a *actor) runAction(ctx context.Context, pr *prompter, action string) (actionReport, error) {
 	aCmd, ok := a.role.actionCmds[action]
 	if !ok {
 		return actionReport{}, errors.Errorf("unknown action: %q", action)
@@ -330,7 +325,7 @@ func (a *actor) runAction(
 	ctx = logtags.AddTag(ctx, "action", action)
 
 	actStart := timeutil.Now()
-	outdata, ps, err, exitErr := a.runActorCommand(ctx, stopper, 0 /*timeout*/, true /*interruptible*/, aCmd)
+	outdata, ps, err, exitErr := a.runActorCommand(ctx, pr.stopper, 0 /*timeout*/, true /*interruptible*/, aCmd)
 	actEnd := timeutil.Now()
 
 	dur := actEnd.Sub(actStart)
@@ -359,7 +354,7 @@ func (a *actor) runAction(
 	}
 	ev := actionReport{
 		typ:       reportActionExec,
-		startTime: actStart.Sub(epoch).Seconds(),
+		startTime: actStart.Sub(pr.r.epoch()).Seconds(),
 		duration:  dur.Seconds(),
 		actor:     a.name,
 		action:    action,

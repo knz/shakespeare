@@ -38,18 +38,6 @@ func Run() (err error) {
 		return errors.WithDetail(err, "(while initializing the logging subsystem)")
 	}
 
-	// After this point, if a panic occurs on the main thread it will be hidden
-	// when logging to file is enabled and no log messages are configured
-	// to appear on stderr.
-	// Ensure we reveal the panic on stderr too.
-	// (This is not needed for workers -- the stopper does this reporting already)
-	defer func() {
-		if r := recover(); r != nil {
-			log.ReportPanic(ctx, r)
-			panic(r)
-		}
-	}()
-
 	// Read the configuration(s).
 	files := []string{"-"}
 	if pflag.NArg() < 1 {
@@ -117,6 +105,30 @@ func Run() (err error) {
 		// No execution: stop before anything gets actually executed.
 		return nil
 	}
+
+	return cfg.run(ctx)
+}
+
+func (cfg *config) run(ctx context.Context) (err error) {
+	// Derive the artifacts directory.
+	cfg.artifactsDir = filepath.Join(cfg.dataDir, "artifacts")
+
+	// Ensure the output directory and artifacts dir exist.
+	if err := os.MkdirAll(cfg.artifactsDir, 0755); err != nil {
+		return err
+	}
+
+	// After this point, if a panic occurs on the main thread it will be hidden
+	// when logging to file is enabled and no log messages are configured
+	// to appear on stderr.
+	// Ensure we reveal the panic on stderr too.
+	// (This is not needed for workers -- the stopper does this reporting already)
+	defer func() {
+		if r := recover(); r != nil {
+			log.ReportPanic(ctx, r)
+			panic(r)
+		}
+	}()
 
 	// Create the app.
 	ap := newApp(cfg)

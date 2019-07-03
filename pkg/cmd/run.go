@@ -167,7 +167,7 @@ func (cfg *config) run(ctx context.Context) (err error) {
 
 	if !cfg.skipPlot {
 		// Generate the plots.
-		plotErr := ap.plot(ctx, err != nil)
+		plotErr := ap.plot(ctx, err)
 		if plotErr != nil {
 			log.Errorf(ctx, "plot error: %+v", plotErr)
 		}

@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"html"
@@ -15,7 +16,7 @@ import (
 	"github.com/knz/shakespeare/pkg/crdb/log"
 )
 
-func (ap *app) plot(ctx context.Context, foundFailure bool) error {
+func (ap *app) plot(ctx context.Context, foundErr error) error {
 	ctx = logtags.AddTag(ctx, "plotter", nil)
 	log.Info(ctx, "generating scripts")
 
@@ -133,8 +134,8 @@ func (ap *app) plot(ctx context.Context, foundFailure bool) error {
 		fmt.Fprintln(f, `<link href="https://fonts.googleapis.com/css?family=Pinyon+Script&display=swap" rel="stylesheet">`)
 		fmt.Fprintln(f, `<style type='text/css'>
 h1,h3,p,ul{text-align: center;}
-p,li{font-family:'Pinyon Script',cursive;}
-pre,code{font-family: 'Nova Mono', monospace;}
+p,li{font-family:'Pinyon Script',cursive;font-size: large;}
+pre,code{font-family: 'Nova Mono', monospace;font-size: small;}
 .kw{font-weight:bold;}
 .rn{color:blue;font-style:italic;}
 .acn{color:blue;font-style:italic;font-weight:bold;}
@@ -152,7 +153,7 @@ pre,code{font-family: 'Nova Mono', monospace;}
 			fmt.Fprintf(f, "<h3>Written by %s</h3>\n", html.EscapeString(joinAnd(ap.cfg.authors)))
 		}
 		fmt.Fprintf(f, "<p>%s<p>\n", formatDatePretty(ap.epoch()))
-		if foundFailure {
+		if foundErr != nil {
 			fmt.Fprintln(f, "<p>Avert your eyes! For this tale, alas, does not end well.<p>")
 		} else {
 			fmt.Fprintln(f, "<p>Rejoice! This tale ends well.<p>")
@@ -164,6 +165,14 @@ pre,code{font-family: 'Nova Mono', monospace;}
 			fmt.Fprintln(f, divider)
 			fmt.Fprintf(f, "<p>For your delicate eyes, the last %.1f seconds of the play:</p>\n", ap.maxTime-repeatTs)
 			fmt.Fprintln(f, `<div style="margin-left: auto; margin-right: auto; max-width: 1024px"><embed id="E" src="lastplot.svg"/></div>`)
+		}
+		if foundErr != nil {
+			fmt.Fprintln(f, divider)
+			fmt.Fprintln(f, "<p>A tragic ending!</p>")
+			fmt.Fprintln(f, "<div style='margin-left: auto; margin-right: auto; max-width: 800px'><pre>")
+			errS := renderError(foundErr)
+			fmt.Fprintln(f, html.EscapeString(errS))
+			fmt.Fprintln(f, "</pre></div>")
 		}
 		if len(ap.cfg.seeAlso) > 0 {
 			fmt.Fprintln(f, divider)
@@ -180,7 +189,7 @@ pre,code{font-family: 'Nova Mono', monospace;}
 		}
 		fmt.Fprintln(f, divider)
 		fmt.Fprintln(f, "<p>For your curious eyes, the full book for this play:</p>")
-		fmt.Fprintln(f, "<div style='margin-left: auto; margin-right: auto; max-width: 800px'><pre style='font-size: small'>")
+		fmt.Fprintln(f, "<div style='margin-left: auto; margin-right: auto; max-width: 800px'><pre>")
 		ap.cfg.printCfg(f, true /*skipComs*/, true /*skipVer*/, true /*annot*/)
 		ap.cfg.printSteps(f, true /*annot*/)
 		fmt.Fprintln(f, "</pre></div>")
@@ -492,4 +501,10 @@ func formatDatePretty(t time.Time) string {
 		day,
 		t.Format("2006"),
 		hour)
+}
+
+func renderError(err error) string {
+	var buf bytes.Buffer
+	RenderError(&buf, err)
+	return buf.String()
 }

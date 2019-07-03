@@ -37,7 +37,7 @@ alice starts auditing
 😱 an error has occurred!
 run error: alice was disappointed, fouling the play
 --
-(context of error: play,collector)
+(context: play,collector)
 
 
 # ensure both failures are reported if they occur
@@ -63,7 +63,7 @@ alice starts auditing
 😱 an error has occurred!
 run error: bob and alice were disappointed, fouling the play
 --
-(context of error: play,collector)
+(context: play,collector)
 
 # ensure an auditor being ignored does not cause an error
 run
@@ -114,7 +114,7 @@ alice starts auditing
 😱 an error has occurred!
 run error: alice was disappointed, fouling the play
 --
-(context of error: play,collector)
+(context: play,collector)
 
 # check for disappointment
 run
@@ -161,4 +161,4 @@ alice starts auditing
 😱 an error has occurred!
 run error: bob was never disappointed, fouling the play
 --
-(context of error: play,collector)
+(context: play,collector)

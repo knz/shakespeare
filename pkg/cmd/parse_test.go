@@ -75,9 +75,3 @@ func TestParse(t *testing.T) {
 		})
 	})
 }
-
-func renderError(err error) string {
-	var buf bytes.Buffer
-	RenderError(&buf, err)
-	return buf.String()
-}

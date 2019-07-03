@@ -52,7 +52,7 @@ end
 run error: prompt: action test:a failed: exit status 123
 + exit 123
 --
-(context of error: play,prompter,act=1,scene=1,actor=test,role=test,step=1)
+(context: play,prompter,act=1,scene=1,actor=test,role=test,step=1)
 
 
 # Check that action failure can be tolerated

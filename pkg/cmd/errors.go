@@ -87,7 +87,7 @@ func RenderError(w io.Writer, err error) {
 		for _, b := range bufs {
 			buf = buf.Merge(b)
 		}
-		fmt.Fprintf(w, "\n--\n(context of error: %s)", buf)
+		fmt.Fprintf(w, "\n--\n(context: %s)", buf)
 	}
 	if d := errors.FlattenDetails(err); d != "" {
 		fmt.Fprintf(w, "\n--\n%s", d)

@@ -20,6 +20,10 @@ func (ap *app) conduct(ctx context.Context) (err error) {
 		}
 	}
 
+	// Start the audition. This initializes the epoch, and thus needs to
+	// happen before the collector and the auditors start.
+	ap.openDoors(ctx)
+
 	// Initialize all the actors.
 	if err := ap.runCleanup(ctx); err != nil {
 		return err
@@ -28,6 +32,7 @@ func (ap *app) conduct(ctx context.Context) (err error) {
 	// Ensure the cleanup actions are run at the end
 	// even during early return.
 	defer func() {
+		ctx = logtags.AddTag(ctx, "atend", nil)
 		if cleanupErr := ap.runCleanup(ctx); cleanupErr != nil {
 			// Error during cleanup. runCleanup already
 			// printed out the details via log.Errorf.
@@ -40,10 +45,6 @@ func (ap *app) conduct(ctx context.Context) (err error) {
 
 	// Prepare the theater.
 	th := ap.makeTheater(ctx)
-
-	// Start the audition. This initializes the epoch, and thus needs to
-	// happen before the collector and the auditors start.
-	ap.openDoors(ctx)
 
 	// Start the audition.
 	var wgau sync.WaitGroup
@@ -371,7 +372,10 @@ func (ap *app) runForAllActors(
 			}()
 			// Start one actor.
 			log.Info(ctx, "<start>")
-			_, _, err, _ := a.runActorCommand(ctx, ap.stopper, 10*time.Second, false /*interruptible*/, pCmd)
+			_, ps, err, _ := a.runActorCommand(ctx, ap.stopper, 10*time.Second, false /*interruptible*/, pCmd)
+			if err == nil && ps != nil && !ps.Success() {
+				err = errors.Newf("command failed: %s", ps.String())
+			}
 			errCh <- errors.WithContextTags(err, ctx)
 		})
 	}

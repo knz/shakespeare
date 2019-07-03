@@ -6,7 +6,6 @@ import (
 
 	"github.com/Knetic/govaluate"
 	"github.com/cockroachdb/errors"
-	"github.com/knz/shakespeare/pkg/crdb/log"
 )
 
 // expr is a boolean or scalar expression used in
@@ -96,26 +95,18 @@ func (a *audienceMember) checkExpr(cfg *config, expSrc string) (expr, error) {
 }
 
 // hasDeps return true when all the dependencies of an expression are satisified.
-func (e *expr) hasDeps(
-	ctx context.Context, auLog *log.SecondaryLogger, curActivated map[varName]bool,
-) bool {
+func (au *audition) hasDeps(ctx context.Context, e *expr) bool {
 	for v := range e.deps {
-		if !curActivated[v] {
-			auLog.Logf(ctx, "%s: dependency not satisfied: %s", e.src, v)
+		if !au.st.curActivated[v] {
+			au.logger.Logf(ctx, "%s: dependency not satisfied: %s", e.src, v)
 			return false
 		}
 	}
 	return true
 }
 
-func (ap *app) evalBool(
-	ctx context.Context,
-	auLog *log.SecondaryLogger,
-	auditorName string,
-	expr expr,
-	vars map[string]interface{},
-) (bool, error) {
-	value, err := ap.evalExpr(ctx, auLog, auditorName, expr, ap.theater.au.curVals)
+func (au *audition) evalBool(ctx context.Context, auditorName string, expr expr) (bool, error) {
+	value, err := au.evalExpr(ctx, auditorName, expr)
 	if err != nil {
 		return false, err
 	}
@@ -125,17 +116,13 @@ func (ap *app) evalBool(
 	return false, nil
 }
 
-func (ap *app) evalExpr(
-	ctx context.Context,
-	auLog *log.SecondaryLogger,
-	auditorName string,
-	expr expr,
-	vars map[string]interface{},
+func (au *audition) evalExpr(
+	ctx context.Context, auditorName string, expr expr,
 ) (interface{}, error) {
-	value, err := expr.compiled.Eval(govaluate.MapParameters(vars))
-	auLog.Logf(ctx, "variables %+v; %s => %v (%v)", vars, expr.src, value, err)
+	value, err := expr.compiled.Eval(govaluate.MapParameters(au.st.curVals))
+	au.logger.Logf(ctx, "variables %+v; %s => %v (%v)", au.st.curVals, expr.src, value, err)
 	if err != nil {
-		ap.judge(ctx, E, "🙀", "%s: %v", auditorName, err)
+		au.r.judge(ctx, E, "🙀", "%s: %v", auditorName, err)
 	}
 	return value, errors.WithStack(err)
 }

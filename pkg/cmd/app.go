@@ -40,7 +40,7 @@ type app struct {
 	cfg     *config
 	stopper *stop.Stopper
 
-	theater theater
+	auRes auditionResults
 
 	// startTime is the instant at which the conductor initiates the play.
 	// measurements are relative to this moment.
@@ -62,10 +62,7 @@ var _ reporter = (*app)(nil)
 
 func newApp(cfg *config) *app {
 	r := &app{
-		cfg: cfg,
-		theater: theater{
-			au: newAudition(cfg),
-		},
+		cfg:     cfg,
 		minTime: math.Inf(1),
 		maxTime: math.Inf(-1),
 		endCh:   make(chan struct{}),

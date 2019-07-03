@@ -53,7 +53,7 @@ func (ap *app) plot(ctx context.Context, foundFailure bool) error {
 	beforeLastTs := repeatTs
 	if ap.cfg.repeatActNum > 0 {
 		// Find the timestamp where the last repetition started.
-		for _, acn := range ap.theater.au.actChanges {
+		for _, acn := range ap.auRes.actChanges {
 			if acn.actNum == ap.cfg.repeatActNum {
 				beforeLastTs = repeatTs
 				repeatTs = acn.ts
@@ -350,8 +350,8 @@ faces[4] = ""
 		}
 
 		// Generate the act boundaries.
-		for i := 1; i < len(ap.theater.au.actChanges); i++ {
-			ts := ap.theater.au.actChanges[i].ts
+		for i := 1; i < len(ap.auRes.actChanges); i++ {
+			ts := ap.auRes.actChanges[i].ts
 			fmt.Fprintf(f, "set arrow from %f, graph 0 to %f, graph 1 back nohead lc 'blue'\n", ts, ts)
 		}
 
@@ -403,7 +403,7 @@ faces[4] = ""
 		// fmt.Fprintln(f, "set jitter overlap 1 spread .25 vertical")
 
 		// Generate the mood overlays.
-		for i, amb := range ap.theater.au.moodPeriods {
+		for i, amb := range ap.auRes.moodPeriods {
 			xstart := "graph 0"
 			if !math.IsInf(amb.startTime, 0) {
 				xstart = fmt.Sprintf("first %f", amb.startTime)
@@ -439,7 +439,7 @@ faces[4] = ""
 		}
 
 		// End the plot set.
-		for i := range ap.theater.au.moodPeriods {
+		for i := range ap.auRes.moodPeriods {
 			fmt.Fprintf(f, "unset object %d\n", i+1)
 		}
 		fmt.Fprintln(f, "unset arrow")

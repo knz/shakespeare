@@ -12,17 +12,35 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/knz/shakespeare/pkg/crdb/log"
+	"github.com/knz/shakespeare/pkg/crdb/stop"
 	"github.com/knz/shakespeare/pkg/crdb/timeutil"
 )
 
-func (ap *app) manageSpotlights(
-	ctx context.Context,
-	monLogger *log.SecondaryLogger,
-	auChan chan<- auditableEvent,
-	termCh <-chan struct{},
-) (err error) {
+type spotMgr struct {
+	r       reporter
+	cfg     *config
+	stopper *stop.Stopper
+
+	// Where to log detected signals.
+	logger *log.SecondaryLogger
+
+	// The spotlight manager listens on this channel and terminates
+	// gracefully when it is closed.
+	termCh <-chan struct{}
+
+	// Where to send observed signals to.
+	// The spotlight manager also closes this when it finishes
+	// turning the spotlights off.
+	auditCh chan<- auditableEvent
+
+	// Where the spotlight manager should return errors.
+	// It also closes this when it terminates.
+	errCh chan<- error
+}
+
+func (spm *spotMgr) manageSpotlights(ctx context.Context) (err error) {
 	// errCh collects the errors from the concurrent spotlights.
-	errCh := make(chan error, len(ap.cfg.actors)+1)
+	errCh := make(chan error, len(spm.cfg.actors)+1)
 
 	// This context is to cancel other spotlights when one of them fails.
 	stopCtx, stopOnError := context.WithCancel(ctx)
@@ -41,7 +59,7 @@ func (ap *app) manageSpotlights(
 	defer func() { wg.Wait() }()
 
 	numSpotlights := 0
-	for actName, thisActor := range ap.cfg.actors {
+	for actName, thisActor := range spm.cfg.actors {
 		if thisActor.role.spotlightCmd == "" {
 			// No spotlight defined, don't start anything.
 			continue
@@ -51,10 +69,10 @@ func (ap *app) manageSpotlights(
 		spotCtx = logtags.AddTag(spotCtx, "role", thisActor.role.name)
 		a := thisActor
 		wg.Add(1)
-		runWorker(spotCtx, ap.stopper, func(ctx context.Context) {
+		runWorker(spotCtx, spm.stopper, func(ctx context.Context) {
 			defer wg.Done()
 			log.Info(spotCtx, "<shining>")
-			err := errors.WithContextTags(ap.spotlight(ctx, a, monLogger, auChan, termCh), ctx)
+			err := errors.WithContextTags(spm.spotlight(ctx, a), ctx)
 			if errors.Is(err, context.Canceled) {
 				// It's ok if a sportlight is canceled.
 				err = nil
@@ -70,23 +88,21 @@ func (ap *app) manageSpotlights(
 		// this would cause the conductor to abort the play too early.
 		// Instead, we use a "do nothing" collector that simply forwards
 		// the prompt termination to the auditors.
-		errCh <- ap.pseudoSpotlight(ctx, auChan, termCh)
+		errCh <- spm.pseudoSpotlight(ctx)
 	}
 
 	return nil
 }
 
-func (ap *app) pseudoSpotlight(
-	ctx context.Context, auCh chan<- auditableEvent, termCh <-chan struct{},
-) error {
+func (spm *spotMgr) pseudoSpotlight(ctx context.Context) error {
 	ctx = logtags.AddTag(ctx, "pseudo-spotlight", nil)
 	select {
-	case <-termCh:
+	case <-spm.termCh:
 		return nil
 	case <-ctx.Done():
 		log.Info(ctx, "interrupted")
 		return wrapCtxErr(ctx)
-	case <-ap.stopper.ShouldQuiesce():
+	case <-spm.stopper.ShouldQuiesce():
 		log.Info(ctx, "terminated")
 		return nil
 	}
@@ -94,18 +110,12 @@ func (ap *app) pseudoSpotlight(
 
 // spotlight stats the monitoring (spotlight) thread for a given actor.
 // The collected events are sent to the given auChan.
-func (ap *app) spotlight(
-	ctx context.Context,
-	a *actor,
-	monLogger *log.SecondaryLogger,
-	auChan chan<- auditableEvent,
-	termCh <-chan struct{},
-) error {
-	ps, err, exitErr := a.runActorCommandWithConsumer(ctx, ap.stopper, 0, true, a.role.spotlightCmd, termCh, func(line string) error {
-		monLogger.Logf(ctx, "clamors: %q", line)
+func (spm *spotMgr) spotlight(ctx context.Context, a *actor) error {
+	ps, err, exitErr := a.runActorCommandWithConsumer(ctx, spm.stopper, 0, true, a.role.spotlightCmd, spm.termCh, func(line string) error {
+		spm.logger.Logf(ctx, "clamors: %q", line)
 		sigCtx := logtags.AddTag(ctx, "signals", nil)
 		line = strings.TrimSpace(line)
-		ap.detectSignals(sigCtx, monLogger, a, auChan, line)
+		spm.detectSignals(sigCtx, a, line)
 		return nil
 	})
 	log.Infof(ctx, "spotlight terminated (%+v)", err)
@@ -114,7 +124,7 @@ func (ap *app) spotlight(
 		if st.Signaled() && st.Signal() == syscall.SIGHUP {
 			// It's expected that the spotlight gets a hangup at the end of execution. It's not worth reporting.
 		} else {
-			ap.narrate(E, "😞", "%s's spotlight failed: %s (see log for details)", a.name, exitErr)
+			spm.r.narrate(E, "😞", "%s's spotlight failed: %s (see log for details)", a.name, exitErr)
 			err = combineErrors(err, errors.WithContextTags(errors.Wrap(exitErr, "spotlight terminated abnormally"), ctx))
 		}
 	}
@@ -124,15 +134,11 @@ func (ap *app) spotlight(
 
 // detectSignals parses a line produced by the spotlight to detect any
 // signal is contains. Detected signals are sent to the auChan.
-func (ap *app) detectSignals(
-	ctx context.Context,
-	monLogger *log.SecondaryLogger,
-	a *actor,
-	auChan chan<- auditableEvent,
-	line string,
-) {
+func (spm *spotMgr) detectSignals(ctx context.Context, a *actor, line string) {
 	evs := map[float64]*auditableEvent{}
 	var tss []float64
+
+	epoch := spm.r.epoch()
 
 	for _, rp := range a.role.sigParsers {
 		sink, ok := a.sinks[rp.name]
@@ -160,21 +166,21 @@ func (ap *app) detectSignals(
 			logTime := rp.re.ReplaceAllString(line, "${ts_deltasecs}")
 			delta, err := strconv.ParseFloat(logTime, 64)
 			if err != nil {
-				monLogger.Logf(ctx, "signal %s: invalid second delta %q: %+v", rp.name, logTime, err)
+				spm.logger.Logf(ctx, "signal %s: invalid second delta %q: %+v", rp.name, logTime, err)
 				continue
 			}
-			ts = ap.epoch().Add(time.Duration(delta * float64(time.Second)))
+			ts = epoch.Add(time.Duration(delta * float64(time.Second)))
 		default:
 			var err error
 			logTime := rp.re.ReplaceAllString(line, "${"+rp.reGroup+"}")
 			ts, err = time.Parse(rp.timeLayout, logTime)
 			if err != nil {
-				monLogger.Logf(ctx, "signal %s: invalid log timestamp %q in %q: %+v", rp.name, logTime, line, err)
+				spm.logger.Logf(ctx, "signal %s: invalid log timestamp %q in %q: %+v", rp.name, logTime, line, err)
 				continue
 			}
 		}
 
-		elapsed := ts.Sub(ap.epoch()).Seconds()
+		elapsed := ts.Sub(epoch).Seconds()
 
 		ev, ok := evs[elapsed]
 		if !ok {
@@ -191,7 +197,7 @@ func (ap *app) detectSignals(
 			valS := rp.re.ReplaceAllString(line, "${scalar}")
 			x, err := strconv.ParseFloat(valS, 64)
 			if err != nil {
-				monLogger.Logf(ctx, "signal %s: invalid scalar %q in %q: %+v", rp.name, valS, line, err)
+				spm.logger.Logf(ctx, "signal %s: invalid scalar %q in %q: %+v", rp.name, valS, line, err)
 				continue
 			}
 			valHolder.val = x
@@ -199,14 +205,14 @@ func (ap *app) detectSignals(
 			curValS := rp.re.ReplaceAllString(line, "${delta}")
 			curVal, err := strconv.ParseFloat(curValS, 64)
 			if err != nil {
-				monLogger.Logf(ctx, "signal %s: error parsing %q for delta: %+v", rp.name, curValS, err)
+				spm.logger.Logf(ctx, "signal %s: error parsing %q for delta: %+v", rp.name, curValS, err)
 				continue
 			}
 			valHolder.val = curVal - sink.lastVal
 			sink.lastVal = curVal
 		}
 
-		ap.witness(ctx, "(%s's %s:) %v", a.name, rp.name, valHolder.val)
+		spm.r.witness(ctx, "(%s's %s:) %v", a.name, rp.name, valHolder.val)
 		ev.values = append(ev.values, valHolder)
 	}
 
@@ -214,16 +220,16 @@ func (ap *app) detectSignals(
 
 	for _, ts := range tss {
 		ev := *evs[ts]
-		monLogger.Logf(ctx, "at %.2fs, found event: %+v", ts, ev)
+		spm.logger.Logf(ctx, "at %.2fs, found event: %+v", ts, ev)
 		// Emit events to the audition.
 		select {
-		case <-ap.stopper.ShouldQuiesce():
+		case <-spm.stopper.ShouldQuiesce():
 			log.Info(ctx, "interrupted")
 			return
 		case <-ctx.Done():
 			log.Info(ctx, "canceled")
 			return
-		case auChan <- ev:
+		case spm.auditCh <- ev:
 			// ok
 		}
 	}

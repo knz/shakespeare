@@ -11,13 +11,6 @@ import (
 	"github.com/knz/shakespeare/pkg/crdb/log"
 )
 
-// theater is where the play takes place.
-// This is mostly supervised by the conductor.
-type theater struct {
-	// The audition - what the auditors in the audience think of the play.
-	au *audition
-}
-
 // conduct runs the play.
 func (ap *app) conduct(ctx context.Context) (err error) {
 	// Prepare all the working directories.
@@ -63,7 +56,22 @@ func (ap *app) conduct(ctx context.Context) (err error) {
 	// Start the audition.
 	var wgau sync.WaitGroup
 	auErrCh := make(chan error)
-	auDone := ap.startAudition(ctx, &wgau, auLogger, auChan, actionChan, collectorChan, moodCh, actCh, collTermCh, auErrCh)
+	au := audition{
+		r:            ap,
+		cfg:          ap.cfg,
+		stopper:      ap.stopper,
+		logger:       auLogger,
+		res:          &ap.auRes,
+		st:           makeAuditionState(ap.cfg),
+		moodChangeCh: moodCh,
+		actChangeCh:  actCh,
+		auditCh:      auChan,
+		actionCh:     actionChan,
+		obsCh:        collectorChan,
+		termCh:       collTermCh,
+		errCh:        auErrCh,
+	}
+	auDone := au.startAudition(ctx, &wgau)
 
 	// Start the collector.
 	var wgcol sync.WaitGroup
@@ -95,7 +103,16 @@ func (ap *app) conduct(ctx context.Context) (err error) {
 	// Start the spotlights.
 	var wgspot sync.WaitGroup
 	spotErrCh := make(chan error)
-	allSpotsDone := ap.startSpotlights(ctx, &wgspot, monLogger, auChan, spotTermCh, spotErrCh)
+	spm := spotMgr{
+		r:       ap,
+		cfg:     ap.cfg,
+		stopper: ap.stopper,
+		logger:  monLogger,
+		auditCh: auChan,
+		termCh:  spotTermCh,
+		errCh:   spotErrCh,
+	}
+	allSpotsDone := spm.startSpotlights(ctx, &wgspot)
 
 	// Start the prompter.
 	var wgPrompt sync.WaitGroup
@@ -235,34 +252,23 @@ func (pr *prompter) startPrompter(ctx context.Context, wg *sync.WaitGroup) func(
 }
 
 // startAudition starts the audition in the background.
-func (ap *app) startAudition(
-	ctx context.Context,
-	wg *sync.WaitGroup,
-	auLogger *log.SecondaryLogger,
-	auChan <-chan auditableEvent,
-	actionCh chan<- actionReport,
-	collectorCh chan<- observation,
-	moodCh <-chan moodChange,
-	actCh <-chan actChange,
-	collTermCh chan<- struct{},
-	errCh chan<- error,
-) (cancelFunc func()) {
+func (au *audition) startAudition(ctx context.Context, wg *sync.WaitGroup) (cancelFunc func()) {
 	auCtx, auDone := context.WithCancel(ctx)
 	auCtx = logtags.AddTag(auCtx, "audition", nil)
 	wg.Add(1)
-	runWorker(auCtx, ap.stopper, func(ctx context.Context) {
+	runWorker(auCtx, au.stopper, func(ctx context.Context) {
 		defer func() {
 			// Inform the collector to terminate.
-			close(collTermCh)
+			close(au.termCh)
 			// Indicate to the conductor that we are terminating.
 			wg.Done()
 			// Also indicate to the conductor there will be no further error
 			// reported.
-			close(errCh)
+			close(au.errCh)
 			log.Info(ctx, "<ends>")
 		}()
 		log.Info(ctx, "<begins>")
-		errCh <- errors.WithContextTags(ap.audit(ctx, auLogger, auChan, actionCh, collectorCh, moodCh, actCh), ctx)
+		au.errCh <- errors.WithContextTags(au.audit(ctx), ctx)
 	})
 	return auDone
 }
@@ -288,30 +294,23 @@ func (col *collector) startCollector(ctx context.Context, wg *sync.WaitGroup) (c
 }
 
 // startSpotlights starts all the spotlights in the background.
-func (ap *app) startSpotlights(
-	ctx context.Context,
-	wg *sync.WaitGroup,
-	monLogger *log.SecondaryLogger,
-	auChan chan<- auditableEvent,
-	termCh <-chan struct{},
-	errCh chan<- error,
-) (cancelFunc func()) {
+func (spm *spotMgr) startSpotlights(ctx context.Context, wg *sync.WaitGroup) (cancelFunc func()) {
 	spotCtx, spotDone := context.WithCancel(ctx)
 	spotCtx = logtags.AddTag(spotCtx, "spotlight-supervisor", nil)
 	wg.Add(1)
-	runWorker(spotCtx, ap.stopper, func(ctx context.Context) {
+	runWorker(spotCtx, spm.stopper, func(ctx context.Context) {
 		defer func() {
 			// Inform the audience to terminate.
-			close(auChan)
+			close(spm.auditCh)
 			// Indicate to the conductor that we are terminating.
 			wg.Done()
 			// Also indicate to the conductor there will be no further error
 			// reported.
-			close(errCh)
+			close(spm.errCh)
 			log.Info(ctx, "<exit>")
 		}()
 		log.Info(ctx, "<intrat>")
-		errCh <- errors.WithContextTags(ap.manageSpotlights(ctx, monLogger, auChan, termCh), ctx)
+		spm.errCh <- errors.WithContextTags(spm.manageSpotlights(ctx), ctx)
 	})
 	return spotDone
 }

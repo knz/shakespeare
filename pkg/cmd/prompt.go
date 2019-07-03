@@ -348,7 +348,6 @@ func (a *actor) runAction(ctx context.Context, pr *prompter, action string) (*ac
 		combinedErrOutput = ps.String()
 	}
 	ev := &actionReport{
-		typ:       reportActionExec,
 		startTime: actStart.Sub(pr.r.epoch()).Seconds(),
 		duration:  dur.Seconds(),
 		actor:     a.name,

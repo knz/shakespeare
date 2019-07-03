@@ -523,12 +523,7 @@ func (au *audition) checkActivationPeriodEnd(
 		return nil
 	}
 
-	ev := &actionReport{
-		typ:       reportAuditViolation,
-		startTime: ts,
-		actor:     auditorName,
-		result:    resErr,
-	}
+	ev := &auditionReport{ts: ts, auditor: auditorName, result: resErr}
 	return au.processFsmStateChange(ctx, auditorName, as, ev, "end")
 }
 
@@ -548,17 +543,12 @@ func (au *audition) checkExpect(
 		return nil
 	}
 
-	ev := &actionReport{
-		typ:       reportAuditViolation,
-		startTime: ts,
-		actor:     auditorName,
-		result:    resErr,
-	}
+	ev := &auditionReport{ts: ts, auditor: auditorName, result: resErr}
 
 	checkVal, err := au.evalBool(ctx, auditorName, am.expectExpr)
 	if err != nil {
 		ev.output = fmt.Sprintf("%v", err)
-		return au.sendActionReport(ctx, ev)
+		return au.sendCollectorEvent(ctx, ev)
 	}
 
 	// We got a result. Determine its truthiness.
@@ -571,7 +561,7 @@ func (au *audition) checkExpect(
 }
 
 func (au *audition) processFsmStateChange(
-	ctx context.Context, auditorName string, as *auditorState, ev *actionReport, label string,
+	ctx context.Context, auditorName string, as *auditorState, ev *auditionReport, label string,
 ) error {
 	// Advance the fsm.
 	prevState := as.eval.state()
@@ -612,10 +602,10 @@ func (au *audition) processFsmStateChange(
 	// Note: we terminate the program in the collector,
 	// to ensure that the violation is also saved
 	// to the output (eg csv) files.
-	return au.sendActionReport(ctx, ev)
+	return au.sendCollectorEvent(ctx, ev)
 }
 
-func (au *audition) sendActionReport(ctx context.Context, ev *actionReport) error {
+func (au *audition) sendCollectorEvent(ctx context.Context, ev collectorEvent) error {
 	select {
 	case <-ctx.Done():
 		log.Info(ctx, "interrupted")

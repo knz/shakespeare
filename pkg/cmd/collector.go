@@ -49,6 +49,7 @@ var _ collectorEvent = terminate{}
 var _ collectorEvent = (*observation)(nil)
 var _ collectorEvent = (*actionReport)(nil)
 var _ collectorEvent = (*moodChange)(nil)
+var _ collectorEvent = (*auditionReport)(nil)
 
 func (*moodChange) collectorEvent() {}
 func (terminate) collectorEvent()   {}
@@ -63,27 +64,19 @@ type observation struct {
 func (*observation) collectorEvent() {}
 
 type actionReport struct {
-	typ       actReportType
 	startTime float64
-	// duration is the duration of the command (in seconds) for regular
-	// action reports.
+	// duration is the duration of the command (in seconds).
 	duration float64
-	// actor is the observed actor for regular action reports,
-	// or the auditor name for violation reports.
+	// actor is the actor that ran the action.
 	actor string
-	// action is the executed action for regular action reports,
-	// unused otherwise.
+	// action is the executed action.
 	action string
 	// result indicates whether:
-	// - resOk - the action succeeded, or auditor was happy
-	// - resErr - the action could not run, or auditor failed to evaluate
-	// - resFailure - the action exited with non-zero, or auditor was unhappy
-	// - resInfo - the auditor was activated but did not report anything special
+	// - resOk - the action succeeded
+	// - resErr - the action could not run
+	// - resFailure - the action exited with non-zero
 	result result
-	// output represents
-	// - for regular action reports, the one line process exit status
-	// - for mood changes, the new mood
-	// it is short and oneline so it is suitable for printing out in event graphs
+	// output encodes the one line process exit status.
 	output string
 	// extOutput is stdout/stderr for commands.
 	extOutput string
@@ -93,6 +86,23 @@ type actionReport struct {
 
 func (*actionReport) collectorEvent() {}
 
+type auditionReport struct {
+	ts      float64
+	auditor string
+	// result indicates whether:
+	// - resOk - auditor was happy
+	// - resErr - auditor failed to evaluate
+	// - resFailure - auditor was unhappy
+	// - resInfo - the auditor was activated but did not report anything special
+	result result
+	// output indicates:
+	// - for resErr, the detail of the evaluation error
+	// - otherwise, the new FSM state
+	output string
+}
+
+func (*auditionReport) collectorEvent() {}
+
 type result int
 
 const (
@@ -101,13 +111,6 @@ const (
 	resErr            = 1
 	resFailure        = 2
 	resInfo           = 3
-)
-
-type actReportType int
-
-const (
-	reportActionExec actReportType = iota
-	reportAuditViolation
 )
 
 func csvFileName(observerName, actorName, sigName string) string {
@@ -155,6 +158,11 @@ func (col *collector) collect(ctx context.Context) (err error) {
 
 			case *actionReport:
 				if err := col.collectActionReport(ctx, of, ev); err != nil {
+					return err
+				}
+
+			case *auditionReport:
+				if earlyExit, err := col.collectAuditionReport(ctx, of, ev); earlyExit || err != nil {
 					return err
 				}
 
@@ -218,84 +226,88 @@ func (col *collector) collectMoodChange(
 	return nil
 }
 
+func (col *collector) collectAuditionReport(
+	ctx context.Context, of *outputFiles, ev *auditionReport,
+) (earlyExit bool, err error) {
+	col.r.expandTimeRange(ev.ts)
+
+	ac, ok := col.cfg.audience[ev.auditor]
+	if !ok {
+		return true, errors.Newf("event received for non-existent audience %q: %+v", ev.auditor, ev)
+	}
+	ac.observer.hasData = true
+
+	ac.auditor.hasData = true
+
+	status := int(ev.result)
+
+	col.logger.Logf(ctx, "%.2f audit check by %s: %v (%q)", ev.ts, ev.auditor, ev.result, ev.output)
+	fName := filepath.Join(col.cfg.dataDir, fmt.Sprintf("audit-%s.csv", ev.auditor))
+	w, err := of.getWriter(fName)
+	if err != nil {
+		return true, errors.Wrapf(err, "opening %q", fName)
+	}
+
+	if ev.output != "" {
+		t := html.EscapeString(ev.output)
+		fmt.Fprintf(w, "%.4f %d %q\n", ev.ts, status, fmt.Sprintf("%s: %s", ev.auditor, t))
+	} else {
+		fmt.Fprintf(w, "%.4f %d\n", ev.ts, status)
+	}
+
+	if ev.result == resErr || ev.result == resFailure {
+		col.auditViolations = append(col.auditViolations,
+			auditViolation{
+				ts:           ev.ts,
+				result:       ev.result,
+				auditorName:  ev.auditor,
+				failureState: ev.output,
+			})
+		if col.cfg.earlyExit {
+			// the defer above will catch the violation.
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
 func (col *collector) collectActionReport(
 	ctx context.Context, of *outputFiles, ev *actionReport,
 ) error {
 	sinceBeginning := ev.startTime
 	col.r.expandTimeRange(sinceBeginning)
 
-	switch ev.typ {
-	case reportAuditViolation:
-		ac, ok := col.cfg.audience[ev.actor]
-		if !ok {
-			return errors.Newf("event received for non-existent audience %q: %+v", ev.actor, ev)
+	a, ok := col.cfg.actors[ev.actor]
+	if !ok {
+		return errors.Newf("event received for non-existent actor: %+v", ev)
+	}
+	a.hasData = true
+
+	status := int(ev.result)
+
+	col.logger.Logf(ctx, "%.2f action %s:%s (%.4fs)", sinceBeginning, ev.actor, ev.action, ev.duration)
+
+	fName := filepath.Join(col.cfg.dataDir, fmt.Sprintf("%s.csv", ev.actor))
+	w, err := of.getWriter(fName)
+	if err != nil {
+		return errors.Wrapf(err, "opening %q", fName)
+	}
+
+	fmt.Fprintf(w, "%.4f %.4f %s %d %q\n",
+		sinceBeginning, ev.duration, ev.action, status, ev.output)
+
+	if ev.result != resOk {
+		level := E
+		sym := "😞"
+		ref := "(see below for details)"
+		if ev.failOk {
+			level = W
+			sym = "🤨"
+			ref = "(see log for details)"
 		}
-		ac.observer.hasData = true
-
-		ac.auditor.hasData = true
-
-		status := int(ev.result)
-
-		col.logger.Logf(ctx, "%.2f audit check by %s: %v (%q)", sinceBeginning, ev.actor, ev.result, ev.output)
-		fName := filepath.Join(col.cfg.dataDir, fmt.Sprintf("audit-%s.csv", ev.actor))
-		w, err := of.getWriter(fName)
-		if err != nil {
-			return errors.Wrapf(err, "opening %q", fName)
-		}
-
-		if ev.output != "" {
-			t := html.EscapeString(ev.output)
-			fmt.Fprintf(w, "%.4f %d %q\n", sinceBeginning, status, fmt.Sprintf("%s: %s", ev.actor, t))
-		} else {
-			fmt.Fprintf(w, "%.4f %d\n", sinceBeginning, status)
-		}
-
-		if ev.result == resErr || ev.result == resFailure {
-			col.auditViolations = append(col.auditViolations,
-				auditViolation{
-					ts:           sinceBeginning,
-					result:       ev.result,
-					auditorName:  ev.actor,
-					failureState: ev.output,
-				})
-			if col.cfg.earlyExit {
-				// the defer above will catch the violation.
-				return nil
-			}
-		}
-
-	case reportActionExec:
-		a, ok := col.cfg.actors[ev.actor]
-		if !ok {
-			return errors.Newf("event received for non-existent actor: %+v", ev)
-		}
-		a.hasData = true
-
-		status := int(ev.result)
-
-		col.logger.Logf(ctx, "%.2f action %s:%s (%.4fs)", sinceBeginning, ev.actor, ev.action, ev.duration)
-
-		fName := filepath.Join(col.cfg.dataDir, fmt.Sprintf("%s.csv", ev.actor))
-		w, err := of.getWriter(fName)
-		if err != nil {
-			return errors.Wrapf(err, "opening %q", fName)
-		}
-
-		fmt.Fprintf(w, "%.4f %.4f %s %d %q\n",
-			sinceBeginning, ev.duration, ev.action, status, ev.output)
-
-		if ev.result != resOk {
-			level := E
-			sym := "😞"
-			ref := "(see below for details)"
-			if ev.failOk {
-				level = W
-				sym = "🤨"
-				ref = "(see log for details)"
-			}
-			col.r.narrate(level, sym,
-				"action %s:%s failed %s", ev.actor, ev.action, ref)
-		}
+		col.r.narrate(level, sym,
+			"action %s:%s failed %s", ev.actor, ev.action, ref)
 	}
 
 	return nil

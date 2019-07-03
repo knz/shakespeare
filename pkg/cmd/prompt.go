@@ -239,7 +239,7 @@ func (pr *prompter) runLine(ctx context.Context, a *actor, steps []step) error {
 				return err
 			}
 			ev.failOk = step.failOk
-			reportErr := pr.reportActionEvent(stepCtx, ev)
+			reportErr := pr.reportCollectorEvent(stepCtx, ev)
 			if ev.result != resOk && !step.failOk {
 				return combineErrors(reportErr,
 					errors.WithContextTags(
@@ -275,18 +275,16 @@ func (pr *prompter) runMoodChange(ctx context.Context, newMood string) error {
 	pr.r.narrate(I, "🎊", "    (mood %s)", newMood)
 	now := timeutil.Now()
 	elapsed := now.Sub(pr.r.epoch()).Seconds()
-	if err := pr.reportMoodEvent(ctx, &moodChange{ts: elapsed, newMood: newMood}); err != nil {
+
+	ev := &moodChange{ts: elapsed, newMood: newMood}
+
+	if err := pr.reportMoodEvent(ctx, ev); err != nil {
 		return err
 	}
-	ev := &actionReport{
-		typ:       reportMoodChange,
-		startTime: elapsed,
-		output:    newMood,
-	}
-	return pr.reportActionEvent(ctx, ev)
+	return pr.reportCollectorEvent(ctx, ev)
 }
 
-func (pr *prompter) reportActionEvent(ctx context.Context, ev *actionReport) error {
+func (pr *prompter) reportCollectorEvent(ctx context.Context, ev collectorEvent) error {
 	select {
 	case <-pr.stopper.ShouldQuiesce():
 		log.Info(ctx, "terminated")

@@ -48,8 +48,10 @@ type collectorEvent interface {
 var _ collectorEvent = terminate{}
 var _ collectorEvent = (*observation)(nil)
 var _ collectorEvent = (*actionReport)(nil)
+var _ collectorEvent = (*moodChange)(nil)
 
-func (terminate) collectorEvent() {}
+func (*moodChange) collectorEvent() {}
+func (terminate) collectorEvent()   {}
 
 type observation struct {
 	ts      float64
@@ -105,7 +107,6 @@ type actReportType int
 
 const (
 	reportActionExec actReportType = iota
-	reportMoodChange
 	reportAuditViolation
 )
 
@@ -157,6 +158,11 @@ func (col *collector) collect(ctx context.Context) (err error) {
 					return err
 				}
 
+			case *moodChange:
+				if err := col.collectMoodChange(ctx, of, ev); err != nil {
+					return err
+				}
+
 			case *observation:
 				if err := col.collectObservation(ctx, of, ev); err != nil {
 					return err
@@ -204,6 +210,14 @@ func (col *collector) collectObservation(
 	return nil
 }
 
+func (col *collector) collectMoodChange(
+	ctx context.Context, of *outputFiles, ev *moodChange,
+) error {
+	col.r.expandTimeRange(ev.ts)
+	col.logger.Logf(ctx, "%.2f mood set: %s", ev.ts, ev.newMood)
+	return nil
+}
+
 func (col *collector) collectActionReport(
 	ctx context.Context, of *outputFiles, ev *actionReport,
 ) error {
@@ -211,9 +225,6 @@ func (col *collector) collectActionReport(
 	col.r.expandTimeRange(sinceBeginning)
 
 	switch ev.typ {
-	case reportMoodChange:
-		col.logger.Logf(ctx, "%.2f mood set: %s", sinceBeginning, ev.output)
-
 	case reportAuditViolation:
 		ac, ok := col.cfg.audience[ev.actor]
 		if !ok {

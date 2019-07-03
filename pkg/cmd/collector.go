@@ -20,6 +20,7 @@ type collector struct {
 	cfg     *config
 	stopper *stop.Stopper
 
+	// Where to log collected data.
 	logger *log.SecondaryLogger
 
 	// Where to receive action reports from.
@@ -31,14 +32,12 @@ type collector struct {
 	obsCh <-chan observation
 
 	// The collector listens on this channel and terminates
-	// gracefull when it is closed.
+	// gracefully when it is closed.
 	termCh <-chan struct{}
 
 	// Where the collector should return errors.
-	// It also clsoes this when it terminates.
+	// It also closes this when it terminates.
 	errCh chan<- error
-
-	// actorHasData
 
 	// auditViolations retains audit violation events during the audition;
 	// this is used to compute final error returns.

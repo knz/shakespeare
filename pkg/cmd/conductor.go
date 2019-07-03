@@ -108,13 +108,13 @@ func (ap *app) conduct(ctx context.Context) (err error) {
 	if interrupt {
 		log.Info(ctx, "something went wrong other than prompter, cancelling everything")
 		promptDone()
-		finalErr = combineErrors(<-th.prErrCh, finalErr)
+		finalErr = combineErrors(ignCancel(<-th.prErrCh), finalErr)
 		allSpotsDone()
-		finalErr = combineErrors(<-th.spotErrCh, finalErr)
+		finalErr = combineErrors(ignCancel(<-th.spotErrCh), finalErr)
 		auDone()
-		finalErr = combineErrors(<-th.auErrCh, finalErr)
+		finalErr = combineErrors(ignCancel(<-th.auErrCh), finalErr)
 		colDone()
-		finalErr = combineErrors(<-th.colErrCh, finalErr)
+		finalErr = combineErrors(ignCancel(<-th.colErrCh), finalErr)
 		interrupt = false
 	}
 	wgPrompt.Wait()
@@ -135,11 +135,11 @@ func (ap *app) conduct(ctx context.Context) (err error) {
 	if interrupt {
 		log.Info(ctx, "something went wrong after prompter terminated: cancelling spotlights, audience and collector")
 		allSpotsDone()
-		finalErr = combineErrors(<-th.spotErrCh, finalErr)
+		finalErr = combineErrors(ignCancel(<-th.spotErrCh), finalErr)
 		auDone()
-		finalErr = combineErrors(<-th.auErrCh, finalErr)
+		finalErr = combineErrors(ignCancel(<-th.auErrCh), finalErr)
 		colDone()
-		finalErr = combineErrors(<-th.colErrCh, finalErr)
+		finalErr = combineErrors(ignCancel(<-th.colErrCh), finalErr)
 		interrupt = false
 	}
 	wgspot.Wait()
@@ -157,16 +157,16 @@ func (ap *app) conduct(ctx context.Context) (err error) {
 	if interrupt {
 		log.Info(ctx, "something went wrong after spotlights terminated, cancelling audience and collector")
 		auDone()
-		finalErr = combineErrors(<-th.auErrCh, finalErr)
+		finalErr = combineErrors(ignCancel(<-th.auErrCh), finalErr)
 		colDone()
-		finalErr = combineErrors(<-th.colErrCh, finalErr)
+		finalErr = combineErrors(ignCancel(<-th.colErrCh), finalErr)
 		interrupt = false
 	}
 	wgau.Wait()
 	auDone() // in case not called before.
 
 	// Fourth stage: wait for the collector to finish.
-	finalErr = combineErrors(<-th.colErrCh, finalErr)
+	finalErr = combineErrors(ignCancel(<-th.colErrCh), finalErr)
 	wgcol.Wait()
 	colDone() // in case not called before.
 
@@ -414,3 +414,10 @@ func collectErrors(
 }
 
 type terminate struct{}
+
+func ignCancel(err error) error {
+	if errors.Is(err, context.Canceled) {
+		return nil
+	}
+	return err
+}

@@ -42,6 +42,9 @@ func (pr *prompter) prompt(ctx context.Context) error {
 	// will express surprise.
 	surpriseDur := 2 * pr.cfg.tempo.Seconds()
 
+	var repeatStart time.Time
+	numRepeats := 0
+
 	// Play.
 	for j := 0; j < len(pr.cfg.play); j++ {
 		act := pr.cfg.play[j]
@@ -126,12 +129,28 @@ func (pr *prompter) prompt(ctx context.Context) error {
 
 		// End of act. Are we looping?
 		if pr.cfg.repeatActNum > 0 && j == len(pr.cfg.play)-1 {
-			pr.r.narrate(I, "🔁", "restarting from act %d", pr.cfg.repeatActNum)
-			// "num" is 1-indexed, but j is 0-indexed. shift.
-			repeatIdx := pr.cfg.repeatActNum - 1
-			// the loop iteration will increment j before
-			// the next iteration, so start one lower.
-			j = repeatIdx - 1
+			if numRepeats == 0 {
+				repeatStart = timeutil.Now()
+			}
+			doRepeat := true
+			if pr.cfg.repeatCount > 0 && numRepeats+1 >= pr.cfg.repeatCount {
+				pr.r.narrate(I, "🔁", "reached %d repeats", pr.cfg.repeatCount)
+				doRepeat = false
+			}
+			if pr.cfg.repeatTimeout >= 0 && timeutil.Now().Sub(repeatStart) > pr.cfg.repeatTimeout {
+				pr.r.narrate(I, "🕒", "not repeating beyond %s", pr.cfg.repeatTimeout)
+				doRepeat = false
+			}
+
+			if doRepeat {
+				pr.r.narrate(I, "🔁", "restarting from act %d", pr.cfg.repeatActNum)
+				// "num" is 1-indexed, but j is 0-indexed. shift.
+				repeatIdx := pr.cfg.repeatActNum - 1
+				// the loop iteration will increment j before
+				// the next iteration, so start one lower.
+				j = repeatIdx - 1
+				numRepeats++
+			}
 		}
 	}
 

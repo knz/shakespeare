@@ -381,11 +381,18 @@ script
 
   # zero or more repeat specifiers
   [ repeat from <regexp> ] ...
+
+  # zero or more repeat max count
+  [ repeat {always | <number> times} ] ....
+
+  # zero or more repeat max durations
+  [ repeat time {unconstrained | <duration>} ] ...
 end
 ```
 
-The tempo duration uses the Go duration syntax: a number followed by a
-time unit. For example `1s`, `100ms`, etc.
+The `tempo` and `repeat time` durations use the Go duration syntax,
+for example a number followed by a time unit. For example `1s`,
+`100m50us`, etc.
 
 Actions in a scene are defined by the `scene` keyword, followed by a
 scene handle (ASCII letter or number), followed by the `entails for`
@@ -456,13 +463,20 @@ Semantics:
 - If a `repeat from` clause is specified, `shakespeare` will find the
   first act that matches the provided regexp. During execution of the
   play, every time the last act is reached, the play will continue,
-  restarting at the matching act. In this mode, the play only
-  terminates when an error is encountered.
+  restarting at the matching act.
 
   Additionally, in the generated plots, a "zoomed in" plot will be
   generated for the last two iterations of the repeated act(s).
 
   Subsequent `repeat` clauses override each other.
+
+- The `repeat always` / `repeat N times` clause specifies the maximum
+  number of repetitions of the play after the act specified by `repeat
+  from`. `repeat always` (no maximum repetition count) is the default.
+
+- The `repeat time` clause specifies the maximum duration of the
+  repeated part of the play. `repeat time unconstrained` (no maximum
+  duration) is the default.
 
 ## Audience configuration
 

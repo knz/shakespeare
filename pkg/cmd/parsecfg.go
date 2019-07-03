@@ -652,6 +652,9 @@ func (cfg *config) parseActors(line string) error {
 
 var scriptRe = compileRe(`^script$`)
 var tempoRe = compileRe(`^tempo\s+(?P<dur>.*)$`)
+var repeatCountRe = compileRe(`^repeat\s+(?P<count>\d+)\s+times$`)
+var repeatAlwaysRe = compileRe(`^repeat\s+always$`)
+var repeatTimeoutRe = compileRe(`^repeat\s+time\s+(?P<dur>.*)$`)
 
 // V2 rules
 var entailsRe = compileRe(`^scene\s+(?P<char>\S)\s+entails\s+for\s+(?P<target>every\s+\S+|\S+)\s*:\s*(?P<actions>.*)$`)
@@ -668,6 +671,26 @@ func (cfg *config) parseScript(line string) error {
 			return errors.Wrap(err, "parsing tempo")
 		}
 		cfg.tempo = dur
+	} else if p := pw(repeatAlwaysRe); p.m(line) {
+		cfg.repeatCount = -1
+	} else if p := pw(repeatCountRe); p.m(line) {
+		count := p.get("count")
+		n, err := strconv.Atoi(count)
+		if err != nil {
+			return err
+		}
+		cfg.repeatCount = n
+	} else if p := pw(repeatTimeoutRe); p.m(line) {
+		dur := p.get("dur")
+		if dur == "unconstrained" {
+			cfg.repeatTimeout = -1
+		} else {
+			d, err := time.ParseDuration(dur)
+			if err != nil {
+				return err
+			}
+			cfg.repeatTimeout = d
+		}
 	} else if p := pw(repeatRe); p.m(line) {
 		repeat := p.get("repeat")
 		re, err := regexp.Compile(repeat)

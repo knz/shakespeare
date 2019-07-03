@@ -89,8 +89,10 @@ type config struct {
 	// storyLine is the list of act specifications.
 	storyLine []string
 	// repeatFrom/repeatActNum is the point at which acts will be repeated.
-	repeatFrom   *regexp.Regexp
-	repeatActNum int
+	repeatFrom    *regexp.Regexp
+	repeatActNum  int
+	repeatTimeout time.Duration
+	repeatCount   int
 
 	// play is the list of actions to play.
 	// This is populated by compile().
@@ -186,6 +188,8 @@ func newConfig() *config {
 		textPlotHeight: 24,
 		textPlotWidth:  160,
 		textPlotTerm:   "ansi256",
+		repeatCount:    -1,
+		repeatTimeout:  -1,
 	}
 	if sh, ok := os.LookupEnv("SHELL"); ok {
 		cfg.shellPath = sh
@@ -324,6 +328,16 @@ func (cfg *config) printCfg(w io.Writer, skipComments, skipVer, annot bool) {
 				fmt.Fprintf(w, "  # (repeating act %d and following)\n", cfg.repeatActNum)
 			} else {
 				fmt.Fprintln(w, "  # (no matching act, nothing is repeated)")
+			}
+			if cfg.repeatTimeout < 0 {
+				fmt.Fprintf(w, "  %s\n", fkw("repeat time unconstrained"))
+			} else {
+				fmt.Fprintf(w, "  %s %s\n", fkw("repeat time"), cfg.repeatTimeout)
+			}
+			if cfg.repeatCount >= 0 {
+				fmt.Fprintf(w, "  %s %d %s\n", fkw("repeat"), cfg.repeatCount, fkw("times"))
+			} else {
+				fmt.Fprintf(w, "  %s\n", fkw("repeat always"))
 			}
 		}
 	}

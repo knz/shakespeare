@@ -400,6 +400,8 @@ script
   storyline ... a ...
   repeat from a
   # (repeating act 2 and following)
+  repeat time unconstrained
+  repeat always
 end
 # no audience defined
 # play
@@ -428,6 +430,8 @@ script
   storyline ... a ...
   repeat from b
   # (no matching act, nothing is repeated)
+  repeat time unconstrained
+  repeat always
 end
 # no audience defined
 # play
@@ -440,6 +444,88 @@ end
 #  1:  (wait until 3s)
 # end
 
+# Override the repeat count
+parse
+script
+  scene a mood ends red
+  storyline a
+  repeat from a
+  repeat 3 times
+  repeat always
+end
+----
+# no roles defined
+# no cast defined
+script
+  tempo 1s
+  scene a mood ends red
+  storyline a
+  repeat from a
+  # (repeating act 1 and following)
+  repeat time unconstrained
+  repeat always
+end
+# no audience defined
+# play
+# -- ACT 1: a --
+#  1:  (mood: red)
+#  2:  (wait until 1s)
+# -- REPEATING FROM ACT 1 --
+# end
+
+parse
+script
+  scene a mood ends red
+  storyline a
+  repeat from a
+  repeat 3 times
+end
+----
+# no roles defined
+# no cast defined
+script
+  tempo 1s
+  scene a mood ends red
+  storyline a
+  repeat from a
+  # (repeating act 1 and following)
+  repeat time unconstrained
+  repeat 3 times
+end
+# no audience defined
+# play
+# -- ACT 1: a --
+#  1:  (mood: red)
+#  2:  (wait until 1s)
+# -- REPEATING FROM ACT 1 --
+# end
+
+parse
+script
+  scene a mood ends red
+  storyline a
+  repeat from a
+  repeat time 3s
+end
+----
+# no roles defined
+# no cast defined
+script
+  tempo 1s
+  scene a mood ends red
+  storyline a
+  repeat from a
+  # (repeating act 1 and following)
+  repeat time 3s
+  repeat always
+end
+# no audience defined
+# play
+# -- ACT 1: a --
+#  1:  (mood: red)
+#  2:  (wait until 1s)
+# -- REPEATING FROM ACT 1 --
+# end
 
 ###
 ### storyline errors
@@ -509,3 +595,25 @@ while parsing:
 <testdata>:1     script
 <testdata>:2       scene b mood starts blue
 <testdata>:3   >   storyline b b++b
+
+parse
+script
+  repeat time 123
+end
+----
+parse error: <testdata>:2: time: missing unit in duration 123
+--
+while parsing:
+<testdata>:1     script
+<testdata>:2   >   repeat time 123
+
+parse
+script
+  repeat xx times
+end
+----
+parse error: <testdata>:2: unknown syntax
+--
+while parsing:
+<testdata>:1     script
+<testdata>:2   >   repeat xx times

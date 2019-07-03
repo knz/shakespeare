@@ -188,8 +188,8 @@ type theater struct {
 }
 
 func (ap *app) makeTheater(ctx context.Context) (th theater) {
-	toCollectorCh := make(chan collectorEvent, 10)
-	toAuditionCh := make(chan auditableEvent, len(ap.cfg.actors))
+	prompterAndAuditiontoCollectorCh := make(chan collectorEvent, 10)
+	prompterAndSpotlightsToAuditionCh := make(chan auditableEvent, len(ap.cfg.actors))
 	prompterToConductorErrCh := make(chan error, 1)
 	prompterToSpotlightsTermCh := make(chan struct{})
 	th.prErrCh = prompterToConductorErrCh
@@ -197,8 +197,8 @@ func (ap *app) makeTheater(ctx context.Context) (th theater) {
 		r:       ap,
 		cfg:     ap.cfg,
 		stopper: ap.stopper,
-		collCh:  toCollectorCh,
-		auditCh: toAuditionCh,
+		collCh:  prompterAndAuditiontoCollectorCh,
+		auditCh: prompterAndSpotlightsToAuditionCh,
 		termCh:  prompterToSpotlightsTermCh,
 		errCh:   prompterToConductorErrCh,
 	}
@@ -210,7 +210,7 @@ func (ap *app) makeTheater(ctx context.Context) (th theater) {
 		cfg:     ap.cfg,
 		stopper: ap.stopper,
 		logger:  log.NewSecondaryLogger(ctx, nil, "spotlight", true /*enableGc*/, false /*forceSyncWrite*/),
-		auditCh: toAuditionCh,
+		auditCh: prompterAndSpotlightsToAuditionCh,
 		termCh:  prompterToSpotlightsTermCh,
 		errCh:   spotlightsToConductorErrCh,
 	}
@@ -226,10 +226,9 @@ func (ap *app) makeTheater(ctx context.Context) (th theater) {
 		res:    &ap.auRes,
 		st:     makeAuditionState(ap.cfg),
 
-		eventCh: toAuditionCh,
+		eventCh: prompterAndSpotlightsToAuditionCh,
+		collCh:  prompterAndAuditiontoCollectorCh,
 		errCh:   auditionToConductorErrCh,
-
-		collCh: toCollectorCh,
 	}
 
 	collectorToConductorErrCh := make(chan error, 1)
@@ -239,7 +238,7 @@ func (ap *app) makeTheater(ctx context.Context) (th theater) {
 		cfg:     ap.cfg,
 		stopper: ap.stopper,
 		logger:  log.NewSecondaryLogger(ctx, nil, "collector", true /*enableGc*/, false /*forceSyncWrite*/),
-		eventCh: toCollectorCh,
+		eventCh: prompterAndAuditiontoCollectorCh,
 		errCh:   collectorToConductorErrCh,
 	}
 

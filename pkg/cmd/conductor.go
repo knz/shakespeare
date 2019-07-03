@@ -35,58 +35,23 @@ func (ap *app) conduct(ctx context.Context) (err error) {
 		}
 	}()
 
-	// We'll log all the monitored and extracted data to a secondary logger.
-	auLogger := log.NewSecondaryLogger(ctx, nil, "audit", true /*enableGc*/, false /*forceSyncWrite*/)
-	monLogger := log.NewSecondaryLogger(ctx, nil, "spotlight", true /*enableGc*/, false /*forceSyncWrite*/)
-	dataLogger := log.NewSecondaryLogger(ctx, nil, "collector", true /*enableGc*/, false /*forceSyncWrite*/)
+	// Ensure the data gets to the log by the end of the play.
 	defer func() { log.Flush() }()
+
+	// Prepare the theater.
+	th := ap.makeTheater(ctx)
 
 	// Start the audition. This initializes the epoch, and thus needs to
 	// happen before the collector and the auditors start.
 	ap.openDoors(ctx)
 
-	collectorChan := make(chan observation, len(ap.cfg.actors))
-	auChan := make(chan auditableEvent, len(ap.cfg.actors))
-	actionChan := make(chan actionReport, len(ap.cfg.actors))
-	moodCh := make(chan moodChange, 1)
-	actCh := make(chan actChange, 1)
-	spotTermCh := make(chan struct{})
-	collTermCh := make(chan struct{})
-
 	// Start the audition.
 	var wgau sync.WaitGroup
-	auErrCh := make(chan error)
-	au := audition{
-		r:            ap,
-		cfg:          ap.cfg,
-		stopper:      ap.stopper,
-		logger:       auLogger,
-		res:          &ap.auRes,
-		st:           makeAuditionState(ap.cfg),
-		moodChangeCh: moodCh,
-		actChangeCh:  actCh,
-		auditCh:      auChan,
-		actionCh:     actionChan,
-		obsCh:        collectorChan,
-		termCh:       collTermCh,
-		errCh:        auErrCh,
-	}
-	auDone := au.startAudition(ctx, &wgau)
+	auDone := th.au.startAudition(ctx, &wgau)
 
 	// Start the collector.
 	var wgcol sync.WaitGroup
-	colErrCh := make(chan error)
-	col := collector{
-		r:        ap,
-		cfg:      ap.cfg,
-		stopper:  ap.stopper,
-		logger:   dataLogger,
-		actionCh: actionChan,
-		obsCh:    collectorChan,
-		termCh:   collTermCh,
-		errCh:    colErrCh,
-	}
-	colDone := col.startCollector(ctx, &wgcol)
+	colDone := th.col.startCollector(ctx, &wgcol)
 	defer func() {
 		if !errors.Is(err, errAuditViolation) {
 			// This happens in the common case when a play is left to
@@ -96,38 +61,17 @@ func (ap *app) conduct(ctx context.Context) (err error) {
 			// context cancellation as a process failure).
 			// In that case, we still want to verify whether there
 			// are failures remaining.
-			err = combineErrors(err, col.checkAuditViolations())
+			err = combineErrors(err, th.col.checkAuditViolations())
 		}
 	}()
 
 	// Start the spotlights.
 	var wgspot sync.WaitGroup
-	spotErrCh := make(chan error)
-	spm := spotMgr{
-		r:       ap,
-		cfg:     ap.cfg,
-		stopper: ap.stopper,
-		logger:  monLogger,
-		auditCh: auChan,
-		termCh:  spotTermCh,
-		errCh:   spotErrCh,
-	}
-	allSpotsDone := spm.startSpotlights(ctx, &wgspot)
+	allSpotsDone := th.spm.startSpotlights(ctx, &wgspot)
 
 	// Start the prompter.
 	var wgPrompt sync.WaitGroup
-	promptErrCh := make(chan error)
-	pr := prompter{
-		r:            ap,
-		cfg:          ap.cfg,
-		stopper:      ap.stopper,
-		actionCh:     actionChan,
-		actChangeCh:  actCh,
-		moodChangeCh: moodCh,
-		termCh:       spotTermCh,
-		errCh:        promptErrCh,
-	}
-	promptDone := pr.startPrompter(ctx, &wgPrompt)
+	promptDone := th.pr.startPrompter(ctx, &wgPrompt)
 
 	// The shutdown sequence without cancellation/stopper is:
 	// - prompter exits, this closes spotTermCh
@@ -148,29 +92,29 @@ func (ap *app) conduct(ctx context.Context) (err error) {
 	var interrupt bool
 	// First stage of shutdown: wait for the prompter to finish.
 	select {
-	case err := <-promptErrCh:
+	case err := <-th.prErrCh:
 		finalErr = combineErrors(err, finalErr)
 		// ok
-	case err := <-spotErrCh:
+	case err := <-th.spotErrCh:
 		finalErr = combineErrors(err, finalErr)
 		interrupt = true
-	case err := <-auErrCh:
+	case err := <-th.auErrCh:
 		finalErr = combineErrors(err, finalErr)
 		interrupt = true
-	case err := <-colErrCh:
+	case err := <-th.colErrCh:
 		finalErr = combineErrors(err, finalErr)
 		interrupt = true
 	}
 	if interrupt {
 		log.Info(ctx, "something went wrong other than prompter, cancelling everything")
 		promptDone()
-		finalErr = combineErrors(<-promptErrCh, finalErr)
+		finalErr = combineErrors(<-th.prErrCh, finalErr)
 		allSpotsDone()
-		finalErr = combineErrors(<-spotErrCh, finalErr)
+		finalErr = combineErrors(<-th.spotErrCh, finalErr)
 		auDone()
-		finalErr = combineErrors(<-auErrCh, finalErr)
+		finalErr = combineErrors(<-th.auErrCh, finalErr)
 		colDone()
-		finalErr = combineErrors(<-colErrCh, finalErr)
+		finalErr = combineErrors(<-th.colErrCh, finalErr)
 		interrupt = false
 	}
 	wgPrompt.Wait()
@@ -178,24 +122,24 @@ func (ap *app) conduct(ctx context.Context) (err error) {
 
 	// Second stage: wait for the spotlights to finish.
 	select {
-	case err := <-spotErrCh:
+	case err := <-th.spotErrCh:
 		finalErr = combineErrors(err, finalErr)
 		// ok
-	case err := <-auErrCh:
+	case err := <-th.auErrCh:
 		finalErr = combineErrors(err, finalErr)
 		interrupt = true
-	case err := <-colErrCh:
+	case err := <-th.colErrCh:
 		finalErr = combineErrors(err, finalErr)
 		interrupt = true
 	}
 	if interrupt {
 		log.Info(ctx, "something went wrong after prompter terminated: cancelling spotlights, audience and collector")
 		allSpotsDone()
-		finalErr = combineErrors(<-spotErrCh, finalErr)
+		finalErr = combineErrors(<-th.spotErrCh, finalErr)
 		auDone()
-		finalErr = combineErrors(<-auErrCh, finalErr)
+		finalErr = combineErrors(<-th.auErrCh, finalErr)
 		colDone()
-		finalErr = combineErrors(<-colErrCh, finalErr)
+		finalErr = combineErrors(<-th.colErrCh, finalErr)
 		interrupt = false
 	}
 	wgspot.Wait()
@@ -203,30 +147,114 @@ func (ap *app) conduct(ctx context.Context) (err error) {
 
 	// Third stage: wait for the auditors to finish.
 	select {
-	case err := <-auErrCh:
+	case err := <-th.auErrCh:
 		finalErr = combineErrors(err, finalErr)
 		// ok
-	case err := <-colErrCh:
+	case err := <-th.colErrCh:
 		finalErr = combineErrors(err, finalErr)
 		interrupt = true
 	}
 	if interrupt {
 		log.Info(ctx, "something went wrong after spotlights terminated, cancelling audience and collector")
 		auDone()
-		finalErr = combineErrors(<-auErrCh, finalErr)
+		finalErr = combineErrors(<-th.auErrCh, finalErr)
 		colDone()
-		finalErr = combineErrors(<-colErrCh, finalErr)
+		finalErr = combineErrors(<-th.colErrCh, finalErr)
 		interrupt = false
 	}
 	wgau.Wait()
 	auDone() // in case not called before.
 
 	// Fourth stage: wait for the collector to finish.
-	finalErr = combineErrors(<-colErrCh, finalErr)
+	finalErr = combineErrors(<-th.colErrCh, finalErr)
 	wgcol.Wait()
 	colDone() // in case not called before.
 
 	return finalErr
+}
+
+type theater struct {
+	auErrCh <-chan error
+	au      audition
+
+	prErrCh <-chan error
+	pr      prompter
+
+	colErrCh <-chan error
+	col      collector
+
+	spotErrCh <-chan error
+	spm       spotMgr
+}
+
+func (ap *app) makeTheater(ctx context.Context) (th theater) {
+	auditionAndPrompterToCollectorCh := make(chan actionReport, len(ap.cfg.actors))
+	prompterToConductorErrCh := make(chan error, 1)
+	prompterToSpotlightsTermCh := make(chan struct{})
+	prompterToAuditionMoodChangeCh := make(chan moodChange, 1)
+	prompterToAuditionActChangeCh := make(chan actChange, 1)
+	th.prErrCh = prompterToConductorErrCh
+	th.pr = prompter{
+		r:            ap,
+		cfg:          ap.cfg,
+		stopper:      ap.stopper,
+		actionCh:     auditionAndPrompterToCollectorCh,
+		actChangeCh:  prompterToAuditionActChangeCh,
+		moodChangeCh: prompterToAuditionMoodChangeCh,
+		termCh:       prompterToSpotlightsTermCh,
+		errCh:        prompterToConductorErrCh,
+	}
+
+	spotlightsToAuditionCh := make(chan auditableEvent, len(ap.cfg.actors))
+	spotlightsToConductorErrCh := make(chan error, 1)
+	th.spotErrCh = spotlightsToConductorErrCh
+	th.spm = spotMgr{
+		r:       ap,
+		cfg:     ap.cfg,
+		stopper: ap.stopper,
+		logger:  log.NewSecondaryLogger(ctx, nil, "spotlight", true /*enableGc*/, false /*forceSyncWrite*/),
+		auditCh: spotlightsToAuditionCh,
+		termCh:  prompterToSpotlightsTermCh,
+		errCh:   spotlightsToConductorErrCh,
+	}
+
+	auditionToCollectorObsCh := make(chan observation, len(ap.cfg.actors))
+	auditionToCollectorTermCh := make(chan struct{})
+	auditionToConductorErrCh := make(chan error, 1)
+	th.auErrCh = auditionToConductorErrCh
+	th.au = audition{
+		r:       ap,
+		cfg:     ap.cfg,
+		stopper: ap.stopper,
+
+		logger: log.NewSecondaryLogger(ctx, nil, "audit", true /*enableGc*/, false /*forceSyncWrite*/),
+		res:    &ap.auRes,
+		st:     makeAuditionState(ap.cfg),
+
+		moodChangeCh: prompterToAuditionMoodChangeCh,
+		actChangeCh:  prompterToAuditionActChangeCh,
+		auditCh:      spotlightsToAuditionCh,
+
+		actionCh: auditionAndPrompterToCollectorCh,
+		obsCh:    auditionToCollectorObsCh,
+		termCh:   auditionToCollectorTermCh,
+		errCh:    auditionToConductorErrCh,
+	}
+
+	collectorToConductorErrCh := make(chan error, 1)
+	th.colErrCh = collectorToConductorErrCh
+	th.col = collector{
+		r:        ap,
+		cfg:      ap.cfg,
+		stopper:  ap.stopper,
+		logger:   log.NewSecondaryLogger(ctx, nil, "collector", true /*enableGc*/, false /*forceSyncWrite*/),
+		actionCh: auditionAndPrompterToCollectorCh,
+		obsCh:    auditionToCollectorObsCh,
+		termCh:   auditionToCollectorTermCh,
+		errCh:    collectorToConductorErrCh,
+	}
+
+	return th
 }
 
 // startPrompter runs the prompter until completion.

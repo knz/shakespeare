@@ -22,13 +22,10 @@ type prompter struct {
 	stopper *stop.Stopper
 
 	// Where the prompter should report performed actions.
-	actionCh chan<- actionReport
+	collCh chan<- collectorEvent
 
-	// Where the prompter should report act changes.
-	actChangeCh chan<- actChange
-
-	// Where the prompter should report mood changes.
-	moodChangeCh chan<- moodChange
+	// Where the prompter should report mood and act changes.
+	auditCh chan<- auditableEvent
 
 	// This channel is closed when the prompter reaches the end of
 	// the script, it should instruct the spotlight to terminate.
@@ -260,7 +257,7 @@ func (pr *prompter) runLine(ctx context.Context, a *actor, steps []step) error {
 func (pr *prompter) signalActChange(ctx context.Context, actStart time.Time, actNum int) error {
 	pr.r.narrate(I, "🎬", "act %d starts", actNum)
 	elapsed := actStart.Sub(pr.r.epoch()).Seconds()
-	ev := actChange{ts: elapsed, actNum: actNum}
+	ev := &actChange{ts: elapsed, actNum: actNum}
 	select {
 	case <-pr.stopper.ShouldQuiesce():
 		log.Info(ctx, "terminated")
@@ -268,7 +265,7 @@ func (pr *prompter) signalActChange(ctx context.Context, actStart time.Time, act
 	case <-ctx.Done():
 		log.Info(ctx, "interrupted")
 		return wrapCtxErr(ctx)
-	case pr.actChangeCh <- ev:
+	case pr.auditCh <- ev:
 		// ok
 	}
 	return nil
@@ -278,10 +275,10 @@ func (pr *prompter) runMoodChange(ctx context.Context, newMood string) error {
 	pr.r.narrate(I, "🎊", "    (mood %s)", newMood)
 	now := timeutil.Now()
 	elapsed := now.Sub(pr.r.epoch()).Seconds()
-	if err := pr.reportMoodEvent(ctx, moodChange{ts: elapsed, newMood: newMood}); err != nil {
+	if err := pr.reportMoodEvent(ctx, &moodChange{ts: elapsed, newMood: newMood}); err != nil {
 		return err
 	}
-	ev := actionReport{
+	ev := &actionReport{
 		typ:       reportMoodChange,
 		startTime: elapsed,
 		output:    newMood,
@@ -289,7 +286,7 @@ func (pr *prompter) runMoodChange(ctx context.Context, newMood string) error {
 	return pr.reportActionEvent(ctx, ev)
 }
 
-func (pr *prompter) reportActionEvent(ctx context.Context, ev actionReport) error {
+func (pr *prompter) reportActionEvent(ctx context.Context, ev *actionReport) error {
 	select {
 	case <-pr.stopper.ShouldQuiesce():
 		log.Info(ctx, "terminated")
@@ -297,13 +294,13 @@ func (pr *prompter) reportActionEvent(ctx context.Context, ev actionReport) erro
 	case <-ctx.Done():
 		log.Info(ctx, "interrupted")
 		return wrapCtxErr(ctx)
-	case pr.actionCh <- ev:
+	case pr.collCh <- ev:
 		// ok
 	}
 	return nil
 }
 
-func (pr *prompter) reportMoodEvent(ctx context.Context, chg moodChange) error {
+func (pr *prompter) reportMoodEvent(ctx context.Context, chg *moodChange) error {
 	select {
 	case <-pr.stopper.ShouldQuiesce():
 		log.Info(ctx, "terminated")
@@ -311,16 +308,16 @@ func (pr *prompter) reportMoodEvent(ctx context.Context, chg moodChange) error {
 	case <-ctx.Done():
 		log.Info(ctx, "interrupted")
 		return wrapCtxErr(ctx)
-	case pr.moodChangeCh <- chg:
+	case pr.auditCh <- chg:
 		// ok
 	}
 	return nil
 }
 
-func (a *actor) runAction(ctx context.Context, pr *prompter, action string) (actionReport, error) {
+func (a *actor) runAction(ctx context.Context, pr *prompter, action string) (*actionReport, error) {
 	aCmd, ok := a.role.actionCmds[action]
 	if !ok {
-		return actionReport{}, errors.Errorf("unknown action: %q", action)
+		return nil, errors.Errorf("unknown action: %q", action)
 	}
 	ctx = logtags.AddTag(ctx, "action", action)
 
@@ -334,7 +331,7 @@ func (a *actor) runAction(ctx context.Context, pr *prompter, action string) (act
 	if err != nil && ps == nil {
 		// If we don't have a process status,
 		// the command was not even executed.
-		return actionReport{}, err
+		return nil, err
 	}
 	var result result
 	switch {
@@ -352,7 +349,7 @@ func (a *actor) runAction(ctx context.Context, pr *prompter, action string) (act
 	} else {
 		combinedErrOutput = ps.String()
 	}
-	ev := actionReport{
+	ev := &actionReport{
 		typ:       reportActionExec,
 		startTime: actStart.Sub(pr.r.epoch()).Seconds(),
 		duration:  dur.Seconds(),

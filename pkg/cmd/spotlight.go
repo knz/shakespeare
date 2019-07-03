@@ -29,7 +29,7 @@ type spotMgr struct {
 	termCh <-chan struct{}
 
 	// Where to send observed signals to.
-	// The spotlight manager also closes this when it finishes
+	// The spotlight manager also sends terminate when it finishes
 	// turning the spotlights off.
 	auditCh chan<- auditableEvent
 
@@ -52,6 +52,8 @@ func (spm *spotMgr) manageSpotlights(ctx context.Context) (err error) {
 		}
 		// Collect all the errors.
 		err = collectErrors(ctx, nil, errCh, "spotlight-supervisor")
+
+		err = combineErrors(spm.signalAuditTermination(ctx), err)
 	}()
 
 	// We'll cancel any remaining spotlights, and wait, at the end.
@@ -92,6 +94,19 @@ func (spm *spotMgr) manageSpotlights(ctx context.Context) (err error) {
 	}
 
 	return nil
+}
+
+func (spm *spotMgr) signalAuditTermination(ctx context.Context) error {
+	select {
+	case spm.auditCh <- terminate{}:
+		return nil
+	case <-ctx.Done():
+		log.Info(ctx, "interrupted")
+		return wrapCtxErr(ctx)
+	case <-spm.stopper.ShouldQuiesce():
+		log.Info(ctx, "terminated")
+		return nil
+	}
 }
 
 func (spm *spotMgr) pseudoSpotlight(ctx context.Context) error {
@@ -135,7 +150,7 @@ func (spm *spotMgr) spotlight(ctx context.Context, a *actor) error {
 // detectSignals parses a line produced by the spotlight to detect any
 // signal is contains. Detected signals are sent to the auChan.
 func (spm *spotMgr) detectSignals(ctx context.Context, a *actor, line string) {
-	evs := map[float64]*auditableEvent{}
+	evs := map[float64]*sigEvent{}
 	var tss []float64
 
 	epoch := spm.r.epoch()
@@ -184,7 +199,7 @@ func (spm *spotMgr) detectSignals(ctx context.Context, a *actor, line string) {
 
 		ev, ok := evs[elapsed]
 		if !ok {
-			ev = &auditableEvent{ts: elapsed}
+			ev = &sigEvent{ts: elapsed}
 			evs[elapsed] = ev
 			tss = append(tss, elapsed)
 		}
@@ -219,7 +234,7 @@ func (spm *spotMgr) detectSignals(ctx context.Context, a *actor, line string) {
 	sort.Float64s(tss)
 
 	for _, ts := range tss {
-		ev := *evs[ts]
+		ev := evs[ts]
 		spm.logger.Logf(ctx, "at %.2fs, found event: %+v", ts, ev)
 		// Emit events to the audition.
 		select {

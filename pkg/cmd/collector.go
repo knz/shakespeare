@@ -23,17 +23,9 @@ type collector struct {
 	// Where to log collected data.
 	logger *log.SecondaryLogger
 
-	// Where to receive action reports from.
-	// The prompter populates this
-	// (and for now the auditors too. This should change.)
-	actionCh <-chan actionReport
-
-	// Where to receive observations from.
-	obsCh <-chan observation
-
-	// The collector listens on this channel and terminates
-	// gracefully when it is closed.
-	termCh <-chan struct{}
+	// Where to receive events from.
+	// The prompter and auditors populate this.
+	eventCh <-chan collectorEvent
 
 	// Where the collector should return errors.
 	// It also closes this when it terminates.
@@ -49,12 +41,24 @@ type collector struct {
 	auditReported bool
 }
 
+type collectorEvent interface {
+	collectorEvent()
+}
+
+var _ collectorEvent = terminate{}
+var _ collectorEvent = (*observation)(nil)
+var _ collectorEvent = (*actionReport)(nil)
+
+func (terminate) collectorEvent() {}
+
 type observation struct {
 	ts      float64
 	typ     sigType
 	varName varName
 	val     string
 }
+
+func (*observation) collectorEvent() {}
 
 type actionReport struct {
 	typ       actReportType
@@ -84,6 +88,8 @@ type actionReport struct {
 	// failOk is set if the script tolerates a failure for this action.
 	failOk bool
 }
+
+func (*actionReport) collectorEvent() {}
 
 type result int
 
@@ -139,125 +145,147 @@ func (col *collector) collect(ctx context.Context) (err error) {
 			t.Reset(time.Second)
 			of.Flush()
 
-		case <-col.termCh:
-			// The audit loop has completed. No more work to do.
-			log.Info(ctx, "terminated by audience, auditors have exited")
-			return nil
+		case cev := <-col.eventCh:
+			switch ev := cev.(type) {
+			case terminate:
+				// The audit loop has completed. No more work to do.
+				log.Info(ctx, "terminated by audience, auditors have exited")
+				return nil
 
-		case ev := <-col.actionCh:
-			sinceBeginning := ev.startTime
-			col.r.expandTimeRange(sinceBeginning)
-
-			switch ev.typ {
-			case reportMoodChange:
-				col.logger.Logf(ctx, "%.2f mood set: %s", sinceBeginning, ev.output)
-
-			case reportAuditViolation:
-				ac, ok := col.cfg.audience[ev.actor]
-				if !ok {
-					return errors.Newf("event received for non-existent audience %q: %+v", ev.actor, ev)
-				}
-				ac.observer.hasData = true
-
-				ac.auditor.hasData = true
-
-				status := int(ev.result)
-
-				col.logger.Logf(ctx, "%.2f audit check by %s: %v (%q)", sinceBeginning, ev.actor, ev.result, ev.output)
-				fName := filepath.Join(col.cfg.dataDir, fmt.Sprintf("audit-%s.csv", ev.actor))
-				w, err := of.getWriter(fName)
-				if err != nil {
-					return errors.Wrapf(err, "opening %q", fName)
+			case *actionReport:
+				if err := col.collectActionReport(ctx, of, ev); err != nil {
+					return err
 				}
 
-				if ev.output != "" {
-					t := html.EscapeString(ev.output)
-					fmt.Fprintf(w, "%.4f %d %q\n", sinceBeginning, status, fmt.Sprintf("%s: %s", ev.actor, t))
-				} else {
-					fmt.Fprintf(w, "%.4f %d\n", sinceBeginning, status)
-				}
-
-				if ev.result == resErr || ev.result == resFailure {
-					col.auditViolations = append(col.auditViolations,
-						auditViolation{
-							ts:           sinceBeginning,
-							result:       ev.result,
-							auditorName:  ev.actor,
-							failureState: ev.output,
-						})
-					if col.cfg.earlyExit {
-						// the defer above will catch the violation.
-						return nil
-					}
-				}
-
-			case reportActionExec:
-				a, ok := col.cfg.actors[ev.actor]
-				if !ok {
-					return errors.Newf("event received for non-existent actor: %+v", ev)
-				}
-				a.hasData = true
-
-				status := int(ev.result)
-
-				col.logger.Logf(ctx, "%.2f action %s:%s (%.4fs)", sinceBeginning, ev.actor, ev.action, ev.duration)
-
-				fName := filepath.Join(col.cfg.dataDir, fmt.Sprintf("%s.csv", ev.actor))
-				w, err := of.getWriter(fName)
-				if err != nil {
-					return errors.Wrapf(err, "opening %q", fName)
-				}
-
-				fmt.Fprintf(w, "%.4f %.4f %s %d %q\n",
-					sinceBeginning, ev.duration, ev.action, status, ev.output)
-
-				if ev.result != resOk {
-					level := E
-					sym := "😞"
-					ref := "(see below for details)"
-					if ev.failOk {
-						level = W
-						sym = "🤨"
-						ref = "(see log for details)"
-					}
-					col.r.narrate(level, sym,
-						"action %s:%s failed %s", ev.actor, ev.action, ref)
-				}
-			}
-
-		case ev := <-col.obsCh:
-			col.r.expandTimeRange(ev.ts)
-
-			col.logger.Logf(ctx, "%.2f %s %v", ev.ts, ev.varName.String(), ev.val)
-
-			vr, ok := col.cfg.vars[ev.varName]
-			if !ok {
-				return errors.Newf("event received for non-existent variable %q: %+v", ev.varName.String(), ev)
-			}
-
-			for _, obsName := range vr.watcherNames {
-				a := vr.watchers[obsName]
-				if ov, ok := a.observer.obsVars[ev.varName]; ok {
-					a.observer.hasData = true
-					ov.hasData = true
-				}
-
-				fName := filepath.Join(col.cfg.dataDir,
-					csvFileName(obsName, ev.varName.actorName, ev.varName.sigName))
-
-				w, err := of.getWriter(fName)
-				if err != nil {
-					return errors.Wrapf(err, "opening %q", fName)
-				}
-				// shuffle is a random value between [-.25, +.25] used to randomize event plots.
-				shuffle := (.5 * rand.Float64()) - .25
-				if ev.typ == sigTypEvent {
-					fmt.Fprintf(w, "%.4f %q %.3f\n", ev.ts, html.EscapeString(ev.val), shuffle)
-				} else {
-					fmt.Fprintf(w, "%.4f %v %.3f\n", ev.ts, ev.val, shuffle)
+			case *observation:
+				if err := col.collectObservation(ctx, of, ev); err != nil {
+					return err
 				}
 			}
 		}
 	}
 	// unreachable
+}
+
+func (col *collector) collectObservation(
+	ctx context.Context, of *outputFiles, ev *observation,
+) error {
+	col.r.expandTimeRange(ev.ts)
+
+	col.logger.Logf(ctx, "%.2f %s %v", ev.ts, ev.varName.String(), ev.val)
+
+	vr, ok := col.cfg.vars[ev.varName]
+	if !ok {
+		return errors.Newf("event received for non-existent variable %q: %+v", ev.varName.String(), ev)
+	}
+
+	for _, obsName := range vr.watcherNames {
+		a := vr.watchers[obsName]
+		if ov, ok := a.observer.obsVars[ev.varName]; ok {
+			a.observer.hasData = true
+			ov.hasData = true
+		}
+
+		fName := filepath.Join(col.cfg.dataDir,
+			csvFileName(obsName, ev.varName.actorName, ev.varName.sigName))
+
+		w, err := of.getWriter(fName)
+		if err != nil {
+			return errors.Wrapf(err, "opening %q", fName)
+		}
+		// shuffle is a random value between [-.25, +.25] used to randomize event plots.
+		shuffle := (.5 * rand.Float64()) - .25
+		if ev.typ == sigTypEvent {
+			fmt.Fprintf(w, "%.4f %q %.3f\n", ev.ts, html.EscapeString(ev.val), shuffle)
+		} else {
+			fmt.Fprintf(w, "%.4f %v %.3f\n", ev.ts, ev.val, shuffle)
+		}
+	}
+	return nil
+}
+
+func (col *collector) collectActionReport(
+	ctx context.Context, of *outputFiles, ev *actionReport,
+) error {
+	sinceBeginning := ev.startTime
+	col.r.expandTimeRange(sinceBeginning)
+
+	switch ev.typ {
+	case reportMoodChange:
+		col.logger.Logf(ctx, "%.2f mood set: %s", sinceBeginning, ev.output)
+
+	case reportAuditViolation:
+		ac, ok := col.cfg.audience[ev.actor]
+		if !ok {
+			return errors.Newf("event received for non-existent audience %q: %+v", ev.actor, ev)
+		}
+		ac.observer.hasData = true
+
+		ac.auditor.hasData = true
+
+		status := int(ev.result)
+
+		col.logger.Logf(ctx, "%.2f audit check by %s: %v (%q)", sinceBeginning, ev.actor, ev.result, ev.output)
+		fName := filepath.Join(col.cfg.dataDir, fmt.Sprintf("audit-%s.csv", ev.actor))
+		w, err := of.getWriter(fName)
+		if err != nil {
+			return errors.Wrapf(err, "opening %q", fName)
+		}
+
+		if ev.output != "" {
+			t := html.EscapeString(ev.output)
+			fmt.Fprintf(w, "%.4f %d %q\n", sinceBeginning, status, fmt.Sprintf("%s: %s", ev.actor, t))
+		} else {
+			fmt.Fprintf(w, "%.4f %d\n", sinceBeginning, status)
+		}
+
+		if ev.result == resErr || ev.result == resFailure {
+			col.auditViolations = append(col.auditViolations,
+				auditViolation{
+					ts:           sinceBeginning,
+					result:       ev.result,
+					auditorName:  ev.actor,
+					failureState: ev.output,
+				})
+			if col.cfg.earlyExit {
+				// the defer above will catch the violation.
+				return nil
+			}
+		}
+
+	case reportActionExec:
+		a, ok := col.cfg.actors[ev.actor]
+		if !ok {
+			return errors.Newf("event received for non-existent actor: %+v", ev)
+		}
+		a.hasData = true
+
+		status := int(ev.result)
+
+		col.logger.Logf(ctx, "%.2f action %s:%s (%.4fs)", sinceBeginning, ev.actor, ev.action, ev.duration)
+
+		fName := filepath.Join(col.cfg.dataDir, fmt.Sprintf("%s.csv", ev.actor))
+		w, err := of.getWriter(fName)
+		if err != nil {
+			return errors.Wrapf(err, "opening %q", fName)
+		}
+
+		fmt.Fprintf(w, "%.4f %.4f %s %d %q\n",
+			sinceBeginning, ev.duration, ev.action, status, ev.output)
+
+		if ev.result != resOk {
+			level := E
+			sym := "😞"
+			ref := "(see below for details)"
+			if ev.failOk {
+				level = W
+				sym = "🤨"
+				ref = "(see log for details)"
+			}
+			col.r.narrate(level, sym,
+				"action %s:%s failed %s", ev.actor, ev.action, ref)
+		}
+	}
+
+	return nil
 }

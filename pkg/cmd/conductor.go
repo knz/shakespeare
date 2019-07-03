@@ -188,24 +188,21 @@ type theater struct {
 }
 
 func (ap *app) makeTheater(ctx context.Context) (th theater) {
-	auditionAndPrompterToCollectorCh := make(chan actionReport, len(ap.cfg.actors))
+	toCollectorCh := make(chan collectorEvent, 10)
+	toAuditionCh := make(chan auditableEvent, len(ap.cfg.actors))
 	prompterToConductorErrCh := make(chan error, 1)
 	prompterToSpotlightsTermCh := make(chan struct{})
-	prompterToAuditionMoodChangeCh := make(chan moodChange, 1)
-	prompterToAuditionActChangeCh := make(chan actChange, 1)
 	th.prErrCh = prompterToConductorErrCh
 	th.pr = prompter{
-		r:            ap,
-		cfg:          ap.cfg,
-		stopper:      ap.stopper,
-		actionCh:     auditionAndPrompterToCollectorCh,
-		actChangeCh:  prompterToAuditionActChangeCh,
-		moodChangeCh: prompterToAuditionMoodChangeCh,
-		termCh:       prompterToSpotlightsTermCh,
-		errCh:        prompterToConductorErrCh,
+		r:       ap,
+		cfg:     ap.cfg,
+		stopper: ap.stopper,
+		collCh:  toCollectorCh,
+		auditCh: toAuditionCh,
+		termCh:  prompterToSpotlightsTermCh,
+		errCh:   prompterToConductorErrCh,
 	}
 
-	spotlightsToAuditionCh := make(chan auditableEvent, len(ap.cfg.actors))
 	spotlightsToConductorErrCh := make(chan error, 1)
 	th.spotErrCh = spotlightsToConductorErrCh
 	th.spm = spotMgr{
@@ -213,13 +210,11 @@ func (ap *app) makeTheater(ctx context.Context) (th theater) {
 		cfg:     ap.cfg,
 		stopper: ap.stopper,
 		logger:  log.NewSecondaryLogger(ctx, nil, "spotlight", true /*enableGc*/, false /*forceSyncWrite*/),
-		auditCh: spotlightsToAuditionCh,
+		auditCh: toAuditionCh,
 		termCh:  prompterToSpotlightsTermCh,
 		errCh:   spotlightsToConductorErrCh,
 	}
 
-	auditionToCollectorObsCh := make(chan observation, len(ap.cfg.actors))
-	auditionToCollectorTermCh := make(chan struct{})
 	auditionToConductorErrCh := make(chan error, 1)
 	th.auErrCh = auditionToConductorErrCh
 	th.au = audition{
@@ -231,27 +226,21 @@ func (ap *app) makeTheater(ctx context.Context) (th theater) {
 		res:    &ap.auRes,
 		st:     makeAuditionState(ap.cfg),
 
-		moodChangeCh: prompterToAuditionMoodChangeCh,
-		actChangeCh:  prompterToAuditionActChangeCh,
-		auditCh:      spotlightsToAuditionCh,
+		eventCh: toAuditionCh,
+		errCh:   auditionToConductorErrCh,
 
-		actionCh: auditionAndPrompterToCollectorCh,
-		obsCh:    auditionToCollectorObsCh,
-		termCh:   auditionToCollectorTermCh,
-		errCh:    auditionToConductorErrCh,
+		collCh: toCollectorCh,
 	}
 
 	collectorToConductorErrCh := make(chan error, 1)
 	th.colErrCh = collectorToConductorErrCh
 	th.col = collector{
-		r:        ap,
-		cfg:      ap.cfg,
-		stopper:  ap.stopper,
-		logger:   log.NewSecondaryLogger(ctx, nil, "collector", true /*enableGc*/, false /*forceSyncWrite*/),
-		actionCh: auditionAndPrompterToCollectorCh,
-		obsCh:    auditionToCollectorObsCh,
-		termCh:   auditionToCollectorTermCh,
-		errCh:    collectorToConductorErrCh,
+		r:       ap,
+		cfg:     ap.cfg,
+		stopper: ap.stopper,
+		logger:  log.NewSecondaryLogger(ctx, nil, "collector", true /*enableGc*/, false /*forceSyncWrite*/),
+		eventCh: toCollectorCh,
+		errCh:   collectorToConductorErrCh,
 	}
 
 	return th
@@ -286,8 +275,6 @@ func (au *audition) startAudition(ctx context.Context, wg *sync.WaitGroup) (canc
 	wg.Add(1)
 	runWorker(auCtx, au.stopper, func(ctx context.Context) {
 		defer func() {
-			// Inform the collector to terminate.
-			close(au.termCh)
 			// Indicate to the conductor that we are terminating.
 			wg.Done()
 			// Also indicate to the conductor there will be no further error
@@ -426,3 +413,5 @@ func collectErrors(
 
 	return errors.WithContextTags(errors.Wrap(finalErr, prefix), ctx)
 }
+
+type terminate struct{}

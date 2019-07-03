@@ -28,32 +28,14 @@ type audition struct {
 	// Working area where to maintain the state of the audition.
 	st auditionState
 
-	// Where to receive mood changes from.
-	// The prompter populates this.
-	moodChangeCh <-chan moodChange
+	// Where to receive mood and act changes, and signal
+	// data from.
+	eventCh <-chan auditableEvent
 
-	// Where to receive act changes from.
-	// The prompter populate this.
-	actChangeCh <-chan actChange
-
-	// Where to receive signal data from.
-	// The spotlights populate this.
-	// This is also closed after all the spotlights are turned off, to
-	// indicate the audition should stop gracefully.
-	auditCh <-chan auditableEvent
-
-	// Where to send audit results.
-	// The collector uses this.
-	actionCh chan<- actionReport
-
-	// Where to send observations to.
-	// The collector uses this.
-	obsCh chan<- observation
-
-	// The audition closes this when
-	// the end of the audition is reached.
-	// This informs the collector to terminate.
-	termCh chan<- struct{}
+	// Where to send observations and audit results.
+	// The audition sends terminate to this when the
+	// audition stops.
+	collCh chan<- collectorEvent
 
 	// Where the audition should return errors.
 	// It also closes this when it terminates.
@@ -88,7 +70,7 @@ type auditionResults struct {
 	moodPeriods []moodPeriod
 	// actChanges describes the start times of each act. This is
 	// used during plotting.
-	actChanges []actChange
+	actChanges []*actChange
 }
 
 // auditViolation describes one audit failure.
@@ -104,12 +86,25 @@ type auditViolation struct {
 	failureState string
 }
 
+type auditableEvent interface {
+	auditableEvent()
+}
+
+var _ auditableEvent = terminate{}
+var _ auditableEvent = (*moodChange)(nil)
+var _ auditableEvent = (*actChange)(nil)
+var _ auditableEvent = (*sigEvent)(nil)
+
+func (terminate) auditableEvent() {}
+
 // moodChange describes a mood transition. Produced by the prompter
 // and processed in the audit loop.
 type moodChange struct {
 	ts      float64
 	newMood string
 }
+
+func (*moodChange) auditableEvent() {}
 
 // actChange describes an act transition. Produced by the prompter and
 // processed in the audit loop.
@@ -119,16 +114,20 @@ type actChange struct {
 	actNum int
 }
 
-// auditableEvent is produced by the spotlight upon detecting signals
+func (*actChange) auditableEvent() {}
+
+// sigEvent is produced by the spotlight upon detecting signals
 // by an actor. These events are processed in the audit loop.
 // If multiple signals are detected simultaneously, they
 // are reported together.
 // An empty `values` signal the end of the spotlights (produced
 // when the channel from spotlights to auditors is closed).
-type auditableEvent struct {
+type sigEvent struct {
 	ts     float64
 	values []auditableValue
 }
+
+func (*sigEvent) auditableEvent() {}
 
 type auditableValue struct {
 	typ     sigType
@@ -195,6 +194,8 @@ func (au *audition) audit(ctx context.Context) (err error) {
 		if finalErr := au.checkFinal(ctx); finalErr != nil {
 			err = combineErrors(err, finalErr)
 		}
+
+		err = combineErrors(au.signalCollectorTermination(ctx), err)
 	}()
 
 	for {
@@ -207,29 +208,42 @@ func (au *audition) audit(ctx context.Context) (err error) {
 			log.Info(ctx, "interrupted")
 			return wrapCtxErr(ctx)
 
-		case ev := <-au.actChangeCh:
-			if err = au.collectAndAuditActChange(ctx, ev); err != nil {
-				return err
-			}
-
-		case ev := <-au.moodChangeCh:
-			if err = au.collectAndAuditMood(ctx, ev.ts, ev.newMood); err != nil {
-				return err
-			}
-
-		case ev := <-au.auditCh:
-			if len(ev.values) == 0 {
+		case aev := <-au.eventCh:
+			switch ev := aev.(type) {
+			case terminate:
 				// The spotlights have terminated, and are signalling us the
 				// end of the audition.
 				log.Info(ctx, "terminated by prompter, spotlights shut off")
 				return nil
-			}
-			if err = au.checkEvent(ctx, false /*final*/, ev); err != nil {
-				return err
+
+			case *actChange:
+				if err = au.collectAndAuditActChange(ctx, ev); err != nil {
+					return err
+				}
+			case *moodChange:
+				if err = au.collectAndAuditMood(ctx, ev.ts, ev.newMood); err != nil {
+					return err
+				}
+			case *sigEvent:
+				if err = au.checkEvent(ctx, false /*final*/, *ev); err != nil {
+					return err
+				}
 			}
 		}
 	}
 	// unreachable
+}
+
+func (au *audition) signalCollectorTermination(ctx context.Context) error {
+	select {
+	case <-ctx.Done():
+		return wrapCtxErr(ctx)
+	case <-au.stopper.ShouldQuiesce():
+		return nil
+	case au.collCh <- terminate{}:
+		// ok
+		return nil
+	}
 }
 
 // checkFinal is called at the end of the audition, and performs the
@@ -249,7 +263,7 @@ func (au *audition) checkFinal(ctx context.Context) error {
 	return au.processMoodChange(ctx, atBegin, true /*atEnd*/, elapsed, "clear")
 }
 
-func (au *audition) collectAndAuditActChange(ctx context.Context, ev actChange) error {
+func (au *audition) collectAndAuditActChange(ctx context.Context, ev *actChange) error {
 	au.res.actChanges = append(au.res.actChanges, ev)
 	return nil
 }
@@ -277,7 +291,7 @@ func (au *audition) processMoodChange(
 		au.logger.Logf(ctx, "the mood %q is ending", au.st.curMood)
 		// Process the end of the current mood.
 		if err := au.checkEvent(ctx, atEnd, /*final*/
-			auditableEvent{ts: ts, values: nil}); err != nil {
+			sigEvent{ts: ts, values: nil}); err != nil {
 			return err
 		}
 	}
@@ -289,10 +303,10 @@ func (au *audition) processMoodChange(
 	au.logger.Logf(ctx, "the mood %q is starting", newMood)
 	// Process the end of the current mood.
 	return au.checkEvent(ctx, false, /*final*/
-		auditableEvent{ts: ts, values: nil})
+		sigEvent{ts: ts, values: nil})
 }
 
-func (au *audition) checkEvent(ctx context.Context, final bool, ev auditableEvent) error {
+func (au *audition) checkEvent(ctx context.Context, final bool, ev sigEvent) error {
 	// Mark all auditors as "dormant".
 	au.resetAuditors()
 	// Mark all signal (non-computed) variables as not activated.
@@ -359,7 +373,7 @@ func (au *audition) collectEvent(
 		vS = fmt.Sprintf("%v", val)
 	}
 
-	obs := observation{
+	obs := &observation{
 		typ:     typ,
 		ts:      ts,
 		varName: v,
@@ -373,14 +387,14 @@ func (au *audition) collectEvent(
 	case <-au.stopper.ShouldQuiesce():
 		log.Info(ctx, "terminated")
 		return context.Canceled
-	case au.obsCh <- obs:
+	case au.collCh <- obs:
 		// ok
 	}
 	return nil
 }
 
 func (au *audition) checkEventForAuditor(
-	ctx context.Context, as *auditorState, am *audienceMember, final bool, ev auditableEvent,
+	ctx context.Context, as *auditorState, am *audienceMember, final bool, ev sigEvent,
 ) error {
 	activateCtx := logtags.AddTag(ctx, "activate", nil)
 
@@ -509,7 +523,7 @@ func (au *audition) checkActivationPeriodEnd(
 		return nil
 	}
 
-	ev := actionReport{
+	ev := &actionReport{
 		typ:       reportAuditViolation,
 		startTime: ts,
 		actor:     auditorName,
@@ -534,7 +548,7 @@ func (au *audition) checkExpect(
 		return nil
 	}
 
-	ev := actionReport{
+	ev := &actionReport{
 		typ:       reportAuditViolation,
 		startTime: ts,
 		actor:     auditorName,
@@ -557,7 +571,7 @@ func (au *audition) checkExpect(
 }
 
 func (au *audition) processFsmStateChange(
-	ctx context.Context, auditorName string, as *auditorState, ev actionReport, label string,
+	ctx context.Context, auditorName string, as *auditorState, ev *actionReport, label string,
 ) error {
 	// Advance the fsm.
 	prevState := as.eval.state()
@@ -601,7 +615,7 @@ func (au *audition) processFsmStateChange(
 	return au.sendActionReport(ctx, ev)
 }
 
-func (au *audition) sendActionReport(ctx context.Context, ev actionReport) error {
+func (au *audition) sendActionReport(ctx context.Context, ev *actionReport) error {
 	select {
 	case <-ctx.Done():
 		log.Info(ctx, "interrupted")
@@ -609,7 +623,7 @@ func (au *audition) sendActionReport(ctx context.Context, ev actionReport) error
 	case <-au.stopper.ShouldQuiesce():
 		log.Info(ctx, "terminated")
 		return context.Canceled
-	case au.actionCh <- ev:
+	case au.collCh <- ev:
 		// ok
 	}
 	return nil

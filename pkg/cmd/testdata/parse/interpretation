@@ -1,0 +1,56 @@
+parse
+audience
+  bob expects always: t > 10
+end
+----
+# no roles defined
+# no cast defined
+script
+  tempo 1s
+  # no storyline defined, play will terminate immediately
+end
+audience
+  # bob sensitive to t
+  bob audits throughout
+  bob expects always: t > 10
+end
+interpretation
+  foul upon bob disappointment
+  ignore bob satisfaction
+end
+
+parse
+audience
+  bob expects always: t > 10
+end
+interpretation
+  require bob disappointment
+end
+----
+# no roles defined
+# no cast defined
+script
+  tempo 1s
+  # no storyline defined, play will terminate immediately
+end
+audience
+  # bob sensitive to t
+  bob audits throughout
+  bob expects always: t > 10
+end
+interpretation
+  require bob disappointment
+  ignore bob satisfaction
+end
+
+# parse error "audience not defined"
+parse
+interpretation
+  require bob disappointment
+end
+----
+parse error: <testdata>:2: audience member "bob" not defined
+--
+while parsing:
+<testdata>:1     interpretation
+<testdata>:2   >   require bob disappointment

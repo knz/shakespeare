@@ -61,7 +61,7 @@ func (ap *app) conduct(ctx context.Context) (err error) {
 			// context cancellation as a process failure).
 			// In that case, we still want to verify whether there
 			// are failures remaining.
-			err = combineErrors(err, th.col.checkAuditViolations())
+			err = combineErrors(err, th.col.checkAuditViolations(ctx))
 		}
 	}()
 
@@ -237,6 +237,7 @@ func (ap *app) makeTheater(ctx context.Context) (th theater) {
 		r:       ap,
 		cfg:     ap.cfg,
 		stopper: ap.stopper,
+		st:      makeCollectorState(ap.cfg),
 		logger:  log.NewSecondaryLogger(ctx, nil, "collector", true /*enableGc*/, false /*forceSyncWrite*/),
 		eventCh: prompterAndAuditiontoCollectorCh,
 		errCh:   collectorToConductorErrCh,

@@ -31,6 +31,10 @@ type collector struct {
 	// It also closes this when it terminates.
 	errCh chan<- error
 
+	// Where to accumulate audit success/fail counts
+	// so as to compute an audit fail error.
+	st collectorState
+
 	// auditViolations retains audit violation events during the audition;
 	// this is used to compute final error returns.
 	auditViolations []auditViolation
@@ -39,6 +43,25 @@ type collector struct {
 	// through the reporter at least once. This is to avoid duplicate
 	// outputs.
 	auditReported bool
+}
+
+type collectorState struct {
+	errors     []auditError
+	badCounts  map[string]int
+	goodCounts map[string]int
+}
+
+type auditError struct {
+	ts      float64
+	auditor string
+	error   string
+}
+
+func makeCollectorState(cfg *config) collectorState {
+	return collectorState{
+		badCounts:  make(map[string]int, len(cfg.audience)),
+		goodCounts: make(map[string]int, len(cfg.audience)),
+	}
 }
 
 type collectorEvent interface {
@@ -119,7 +142,7 @@ func csvFileName(observerName, actorName, sigName string) string {
 
 func (col *collector) collect(ctx context.Context) (err error) {
 	defer func() {
-		auditErr := col.checkAuditViolations()
+		auditErr := col.checkAuditViolations(ctx)
 		// The order of the two arguments here matter: the error
 		// collection returns the last error as its cause. We
 		// want to keep the original error object as cause.
@@ -181,6 +204,83 @@ func (col *collector) collect(ctx context.Context) (err error) {
 	// unreachable
 }
 
+var errAuditViolation = errors.New("audit violation")
+
+func (col *collector) checkAuditViolations(ctx context.Context) (err error) {
+	for _, auditErr := range col.st.errors {
+		err = combineErrors(err, errors.Newf("at ~%.2fs, %s's audit failed: %s", auditErr.ts, auditErr.auditor, auditErr.error))
+	}
+	var satisfactionFouls []string
+	var disappointmentFouls []string
+	var lackOfSatisfactionFouls []string
+	var lackOfDisappointmentFouls []string
+	for _, auditorName := range col.cfg.audienceNames {
+		am := col.cfg.audience[auditorName]
+		if !am.auditor.hasData {
+			continue
+		}
+		if fouled, actively := col.isPlayFouledByDisappointment(ctx, &am.auditor, true /*atEnd*/); fouled {
+			if actively {
+				disappointmentFouls = append(disappointmentFouls, am.name)
+			} else {
+				lackOfDisappointmentFouls = append(lackOfDisappointmentFouls, am.name)
+			}
+		}
+		if fouled, actively := col.isPlayFouledBySatisfaction(ctx, &am.auditor, true /*atEnd*/); fouled {
+			if actively {
+				satisfactionFouls = append(satisfactionFouls, am.name)
+			} else {
+				lackOfSatisfactionFouls = append(lackOfSatisfactionFouls, am.name)
+			}
+		}
+	}
+	if len(satisfactionFouls) > 0 {
+		v := conjugateBe(len(satisfactionFouls))
+		err = combineErrors(err, errors.Newf("%s %s satisfied, fouling the play", joinAnd(satisfactionFouls), v))
+	}
+	if len(disappointmentFouls) > 0 {
+		v := conjugateBe(len(disappointmentFouls))
+		err = combineErrors(err, errors.Newf("%s %s disappointed, fouling the play", joinAnd(disappointmentFouls), v))
+	}
+	if len(lackOfSatisfactionFouls) > 0 {
+		v := conjugateBe(len(lackOfSatisfactionFouls))
+		err = combineErrors(err, errors.Newf("%s %s never satisfied, fouling the play", joinAnd(lackOfSatisfactionFouls), v))
+	}
+	if len(lackOfDisappointmentFouls) > 0 {
+		v := conjugateBe(len(lackOfDisappointmentFouls))
+		err = combineErrors(err, errors.Newf("%s %s never disappointed, fouling the play", joinAnd(lackOfDisappointmentFouls), v))
+	}
+
+	return errors.Mark(err, errAuditViolation)
+	/*
+
+		if !col.auditReported {
+			// Avoid printing out the audit errors twice.
+			col.auditReported = true
+			col.r.narrate(E, "😞", "%d audit violations:", len(col.auditViolations))
+			for _, v := range col.auditViolations {
+				var buf bytes.Buffer
+				fmt.Fprintf(&buf, "%s (at ~%.2fs", v.auditorName, v.ts)
+				if v.failureState != "" {
+					fmt.Fprintf(&buf, ", %s", v.failureState)
+				}
+				buf.WriteByte(')')
+				col.r.narrate(E, "😿", "%s", buf.String())
+			}
+		}
+
+		err = errors.Newf("%d audit violations", len(col.auditViolations))
+		return errors.Mark(err, errAuditViolation)
+	*/
+}
+
+func conjugateBe(n int) string {
+	if n == 1 {
+		return "was"
+	}
+	return "were"
+}
+
 func (col *collector) collectObservation(
 	ctx context.Context, of *outputFiles, ev *observation,
 ) error {
@@ -236,7 +336,6 @@ func (col *collector) collectAuditionReport(
 		return true, errors.Newf("event received for non-existent audience %q: %+v", ev.auditor, ev)
 	}
 	ac.observer.hasData = true
-
 	ac.auditor.hasData = true
 
 	status := int(ev.result)
@@ -255,21 +354,63 @@ func (col *collector) collectAuditionReport(
 		fmt.Fprintf(w, "%.4f %d\n", ev.ts, status)
 	}
 
-	if ev.result == resErr || ev.result == resFailure {
-		col.auditViolations = append(col.auditViolations,
-			auditViolation{
-				ts:           ev.ts,
-				result:       ev.result,
-				auditorName:  ev.auditor,
-				failureState: ev.output,
-			})
+	return col.processAuditResult(ctx, ev)
+}
+
+func (col *collector) processAuditResult(
+	ctx context.Context, ev *auditionReport,
+) (earlyExit bool, err error) {
+	switch ev.result {
+	case resInfo:
+		// nothing to do.
+		return false, nil
+	case resErr:
+		col.st.errors = append(col.st.errors,
+			auditError{ts: ev.ts, auditor: ev.auditor, error: ev.output})
 		if col.cfg.earlyExit {
-			// the defer above will catch the violation.
-			return true, nil
+			return true, nil // collect() will construct the error.
+		}
+	case resOk:
+		col.st.goodCounts[ev.auditor]++
+	case resFailure:
+		col.st.badCounts[ev.auditor]++
+	}
+	if col.cfg.earlyExit {
+		am := &col.cfg.audience[ev.auditor].auditor
+		if fouled, _ := col.isPlayFouledByDisappointment(ctx, am, false /*atEnd*/); fouled {
+			return true, nil // collect() will construct the error.
+		}
+		if fouled, _ := col.isPlayFouledBySatisfaction(ctx, am, false /*atEnd*/); fouled {
+			return true, nil // collect() will construct the error.
 		}
 	}
-
 	return false, nil
+}
+
+func (col *collector) isPlayFouledByDisappointment(
+	ctx context.Context, am *auditor, atEnd bool,
+) (fouled bool, activelyFouled bool) {
+	badCnt := col.st.badCounts[am.name]
+	switch {
+	case am.foulOnBad == foulUponNonZero && badCnt > 0:
+		return true, true
+	case am.foulOnBad == foulUponZero && badCnt == 0 && atEnd:
+		return true, false
+	}
+	return false, false
+}
+
+func (col *collector) isPlayFouledBySatisfaction(
+	ctx context.Context, am *auditor, atEnd bool,
+) (fouled bool, activelyFouled bool) {
+	goodCnt := col.st.goodCounts[am.name]
+	switch {
+	case am.foulOnGood == foulUponNonZero && goodCnt > 0:
+		return true, true
+	case am.foulOnGood == foulUponZero && goodCnt == 0 && atEnd:
+		return true, false
+	}
+	return false, false
 }
 
 func (col *collector) collectActionReport(

@@ -85,7 +85,9 @@ func TestRun(t *testing.T) {
 
 			if len(d.CmdArgs) > 0 && d.CmdArgs[0].Key == "error" {
 				if err == nil {
-					t.Error("expected error, got success")
+					t.Errorf("test:\n  %s\nexpected error, got success",
+						strings.ReplaceAll(d.Input, "\n", "\n  "),
+					)
 				} else {
 					fmt.Fprintf(&out, "run error: %s\n", renderError(err))
 				}

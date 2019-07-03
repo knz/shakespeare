@@ -1,13 +1,18 @@
 # Shakespeare reference manual
 
+- [Command line usage](#Usage)
+  - [Command line parameters](#Command-line-parameters)
+  - [Environment variables](#Environment-variables)
+  - [Exit status](#Exit-status)
 - Configuration:
-  - [Usage](#Usage)
   - [Common syntax elements](#Common-syntax-elements)
   - [Overall structure of a configuration](#Overall-structure-of-a-configuration)
   - [Roles](#Roles-configuration)
   - [Cast](#Cast-configuration)
   - [Script](#Script-configuration)
   - [Audience](#Audience-configuration)
+- [Predicate, ascalar and array expressions](#Expressions) during auditions
+- [Interpretation of results](#Interpretation-of-results)
 
 ## Usage
 
@@ -27,20 +32,21 @@ as if they appeared in a `script` section.
 
 ### Command line parameters
 
-| Parameter                         | Default              | Description                                                                                         |
-|-----------------------------------|----------------------|-----------------------------------------------------------------------------------------------------|
-| `-o`, `--output-dir`              | `.`                  | Directory where to generate artifacts, output data files and the plot script.                       |
-| `-S`, `--stop-at-first-violation` | false                | Stop the play as soon as an auditor detects a violation.                                            |
-| `-D`, `--define`                  | (none)               | Preprocessing variable definitions.                                                                 |
-| `-s`, `--extra-script`            | (none)               | Additional lines of `script` configuration.                                                         |
-| `-p`, `--print-cfg`               | false                | Print configuration after parsing and compilation.                                                  |
-| `-n`, `--dry-run`                 | false                | Stop after parsing the configuration and compiling the steps (do not actually execute the script).  |
-| `-q`, `--quiet`                   | false                | Run quietly.                                                                                        |
-| `-I`, `--search-dir`              | .                    | Directory to search for included configurations.                                                    |
-| `--ascii-only`                    | false                | Avoid printing out special unicode characters.                                                      |
-| `--version`                       | false                | Show version number and exit.                                                                       |
-| `--log-dir`                       | `logs` in output dir | If non-empty, copy the logs to that directory.                                                      |
-| `--logtostderr`                   | NONE                 | Copy every log message at or above this threshold to stderr (choices: INFO, WARNING, ERROR, FATAL). |
+| Parameter                      | Default              | Description                                                                                         |
+|--------------------------------|----------------------|-----------------------------------------------------------------------------------------------------|
+| `-D`, `--define`               | (none)               | [Preprocessing](#Configuration-preprocessing) variable definitions.                                 |
+| `-I`, `--search-dir`           | .                    | Directory to search for included configurations.                                                    |
+| `-n`, `--dry-run`              | false                | Stop after parsing the configuration and compiling the steps (do not actually execute the script).  |
+| `-o`, `--output-dir`           | `.`                  | Directory where to generate artifacts, output data files and the plot script.                       |
+| `-p`, `--print-cfg`            | false                | Print configuration after parsing and compilation.                                                  |
+| `-q`, `--quiet`                | false                | Run quietly.                                                                                        |
+| `-r`, `--extra-interpretation` | (none)               | Additional lines of [`interpretation` configuration](#Interpreation).                               |
+| `-s`, `--extra-script`         | (none)               | Additional lines of [`script` configuration](#Script-configuration).                                |
+| `-S`, `--stop-at-first-foul`   | false                | Stop the play as soon as [a foul was detected](#Interpretation-of-results).                         |
+| `--ascii-only`                 | false                | Avoid printing out special unicode characters.                                                      |
+| `--version`                    | false                | Show version number and exit.                                                                       |
+| `--log-dir`                    | `logs` in output dir | If non-empty, copy the logs to that directory.                                                      |
+| `--logtostderr`                | NONE                 | Copy every log message at or above this threshold to stderr (choices: INFO, WARNING, ERROR, FATAL). |
 
 ### Environment variables
 
@@ -49,6 +55,21 @@ as if they appeared in a `script` section.
 | `SHELL`   | `/bin/bash` | Shell to use to execute commands. A bourne-compatible shell is recommended. |
 | `GNUPLOT` | `gnuplot`   | [Gnuplot](http://gnuplot.info) command to use to generate plots.            |
 
+### Exit status
+
+`shakespeare` returns a non-zero
+exit status is returned in the following circumstances:
+
+- a cleanup command failed to execute, or terminated with non-zero status.
+- a spotlight command failed to execute, or terminated with a non-zero status.
+- an action command failed to execute,
+- an action command executed but terminated with a non-zero status,
+  and action failure was not tolerated (using the `?` syntax in the
+  [script configuration](#Script-configuration)),
+- an auditor [expression](#Expression) failed to evaluate with an error.
+- [a foul was detected](#Interpretation-of-results) during or at the end of the play.
+
+Otherwise, status 0 is returned.
 
 ## Common syntax elements
 
@@ -676,3 +697,61 @@ evaluations) on every mood change and signal received.
 - `med(ar)`: median of values in array, nil if empty
 
 - `min(ar)`, `max(ar)`: minimum and maximum values in array, nil if empty.
+
+## Interpretation
+
+The *interpretation* of a play indicates how to translate auditor
+expectations into a *foul*, which causes a non-zero [exit
+status](#Exit-status).
+
+By default, `shakespeare` reports a foul if any auditor found itself
+disappointed, as per its [`expect` clause](#Audience-configuration).
+
+This corresponds to the common case where the play specification
+describes expected "good" behavior, the system is expected to behave
+well to start with, and `shakespeare` is used to verify that the
+system does, actually, performs well.
+
+It is possible to change this to indicate “expected failures,” without
+having to change the audience definition. This makes it possible
+to share a constant/shared play configuration for the purpose of
+investigating a foul.
+
+To achieve this, an optional `interpretation` section can be included,
+either in the input configuration files or [via `-r`](#Command-line-parameters).
+
+### Syntax
+
+The interpretation is defined as follows:
+
+```
+interpretation
+   [ ignore <name> {disappointment | satisfaction} ] ...
+
+   [ require <name> {disappointment | satisfaction} ] ...
+
+   [ foul upon <name> {disappointment | satisfaction} ] ...
+end
+```
+
+### Semantics
+
+- The `ignore` clause indicates that the corresponding `expect` result
+  does not have any influence on whether the play is considered to be
+  fouled or not.
+
+- The `require` clause indicates that the play is considered to be fouled
+  if the corresponding result was never encountered.
+
+- The `foul upon` clause indicates that the play is considered to be
+  fouled if the corresponding result was ever encountered.
+
+- Later clauses override the configuration of earlier clauses for a given
+  (auditor, result) pair.
+
+- For each auditor, the initial configuration is as follows:
+
+  ```
+  foul upon ... disappointment
+  ignore ... satisfaction
+  ```

@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"math"
@@ -650,31 +649,4 @@ func (au *audition) setAndActivateVar(
 		}
 	}
 	return nil
-}
-
-var errAuditViolation = errors.New("audit violation")
-
-func (col *collector) checkAuditViolations() error {
-	if len(col.auditViolations) == 0 {
-		// No violation, nothing to do.
-		return nil
-	}
-
-	if !col.auditReported {
-		// Avoid printing out the audit errors twice.
-		col.auditReported = true
-		col.r.narrate(E, "😞", "%d audit violations:", len(col.auditViolations))
-		for _, v := range col.auditViolations {
-			var buf bytes.Buffer
-			fmt.Fprintf(&buf, "%s (at ~%.2fs", v.auditorName, v.ts)
-			if v.failureState != "" {
-				fmt.Fprintf(&buf, ", %s", v.failureState)
-			}
-			buf.WriteByte(')')
-			col.r.narrate(E, "😿", "%s", buf.String())
-		}
-	}
-
-	err := errors.Newf("%d audit violations", len(col.auditViolations))
-	return errors.Mark(err, errAuditViolation)
 }

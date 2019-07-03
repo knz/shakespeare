@@ -53,6 +53,8 @@ type config struct {
 	asciiOnly bool
 	// Additional lines of script config.
 	extraScript []string
+	// Additional lines of interpretation config.
+	extraInterpretation []string
 	// Preprocessing parameter definitions.
 	defines []string
 	// Preprocessing variables.
@@ -112,13 +114,14 @@ func (cfg *config) initArgs(ctx context.Context) error {
 	pflag.BoolVarP(&cfg.doPrint, "print-cfg", "p", false, "print out the parsed configuration")
 	pflag.BoolVarP(&cfg.parseOnly, "dry-run", "n", false, "do not execute anything, just check the configuration")
 	pflag.BoolVarP(&cfg.quiet, "quiet", "q", false, "do not emit progress messages")
-	pflag.BoolVarP(&cfg.earlyExit, "stop-at-first-violation", "S", false, "terminate the play as soon as an auditor is dissatisfied")
+	pflag.BoolVarP(&cfg.earlyExit, "stop-at-first-foul", "S", false, "terminate the play immediately when fouled")
 	pflag.StringSliceVarP(&cfg.includePath, "search-dir", "I", []string{}, "add this directory to the search path for include directives")
 	pflag.BoolVar(&cfg.asciiOnly, "ascii-only", false, "do not display unicode emojis")
 	pflag.BoolVar(&cfg.skipPlot, "disable-plots", false, "do not generate plot scripts at the end")
 	var showVersion bool
 	pflag.BoolVar(&showVersion, "version", false, "show version information and exit")
 	pflag.StringSliceVarP(&cfg.extraScript, "extra-script", "s", []string{}, "additional lines of script configuration, processed at end")
+	pflag.StringSliceVarP(&cfg.extraInterpretation, "extra-interpretation", "r", []string{}, "additional lines of interpretation configuration, processed at end")
 	pflag.StringSliceVarP(&cfg.defines, "define", "D", []string{}, "preprocessing variable definition (eg -Dfoo=bar)")
 
 	// Load the go flag settings from the log package into pflag.
@@ -693,10 +696,6 @@ type auditorState struct {
 	// eval is the check FSM. Initialized every time auditing goes
 	// from false to true.
 	eval fsmEval
-
-	// badCnt, goodCnd are the bad/good event counts throughout the
-	// audition. This is used to compute the exit code.
-	badCnt, goodCnt int
 }
 
 type auditorEvent struct {

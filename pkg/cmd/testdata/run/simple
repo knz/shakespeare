@@ -8,13 +8,14 @@ cast
   test plays test
 end
 script
+  tempo .1s
   scene a entails for test: a
   storyline a
 end
 ----
 👏 please welcome a cast of 1 actors, playing 1 roles
 🎭 dramatis personæ: test
-🎶 the play is starting; expected duration: 1s
+🎶 the play is starting; expected duration: 100ms
 🎬 act 1 starts
 📢 act 1, scene 1:
 🥁     test: a!
@@ -43,11 +44,12 @@ end
 # there are actions but no actors.
 run
 script
+  tempo .1s
   scene a mood starts red
   storyline a
 end
 ----
-🎶 the play is starting; expected duration: 1s
+🎶 the play is starting; expected duration: 100ms
 🎬 act 1 starts
 📢 act 1, scene 1:
 🎊     (mood red)

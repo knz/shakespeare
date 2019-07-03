@@ -86,6 +86,21 @@ func Run() (err error) {
 		}
 	}
 
+	// Process additional configuration passed via -r.
+	if len(cfg.extraInterpretation) > 0 {
+		var extraInterpretation bytes.Buffer
+		fmt.Fprintln(&extraInterpretation, "interpretation")
+		for _, s := range cfg.extraInterpretation {
+			fmt.Fprintln(&extraInterpretation, s)
+		}
+		fmt.Fprintln(&extraInterpretation, "end")
+		rd, _ := newReaderFromString("<command line>", extraInterpretation.String())
+		if err = cfg.parseCfg(ctx, rd); err != nil {
+			log.Errorf(ctx, "parse error: %+v", err)
+			return err
+		}
+	}
+
 	if cfg.doPrint {
 		cfg.printCfg(os.Stdout, false /*skipComs*/, false /*skipVer*/, false /*annot*/)
 		fmt.Println()

@@ -1,0 +1,164 @@
+# ensure no error is reported if all auditors have not found errors
+run
+audience
+ bob expects always: mood == 'clear'
+ alice expects always: mood == 'clear'
+end
+----
+🎶 the play is starting; expected duration: 0s
+bob starts auditing
+alice starts auditing
+😺bob (end: checking -> good)
+🙈bob stops auditing
+😺alice (end: checking -> good)
+🙈alice stops auditing
+👏 the play is terminating
+🧹 the stage has been cleared
+😘 good day! come again soon.
+
+# ensure an error is reported if either fails
+run error
+audience
+ bob expects always: mood == 'clear'
+ alice expects always: t < 0
+end
+----
+🎶 the play is starting; expected duration: 0s
+bob starts auditing
+alice starts auditing
+😿alice (f: checking -> bad)
+😺bob (end: checking -> good)
+🙈bob stops auditing
+😿alice (f: checking -> bad)
+😺alice (end: checking -> good)
+🙈alice stops auditing
+👏 the play is terminating
+🧹 the stage has been cleared
+😱 an error has occurred!
+run error: alice was disappointed, fouling the play
+--
+(context of error: play,collector)
+
+
+# ensure both failures are reported if they occur
+run error
+audience
+ bob expects always: t < 0
+ alice expects always: t < 0
+end
+----
+🎶 the play is starting; expected duration: 0s
+bob starts auditing
+😿bob (f: checking -> bad)
+alice starts auditing
+😿alice (f: checking -> bad)
+😿bob (f: checking -> bad)
+😺bob (end: checking -> good)
+🙈bob stops auditing
+😿alice (f: checking -> bad)
+😺alice (end: checking -> good)
+🙈alice stops auditing
+👏 the play is terminating
+🧹 the stage has been cleared
+😱 an error has occurred!
+run error: bob and alice were disappointed, fouling the play
+--
+(context of error: play,collector)
+
+# ensure an auditor being ignored does not cause an error
+run
+audience
+ bob expects always: t < 0
+ alice expects always: mood == 'clear'
+end
+interpretation
+ ignore bob disappointment
+end
+----
+🎶 the play is starting; expected duration: 0s
+bob starts auditing
+😿bob (f: checking -> bad)
+alice starts auditing
+😿bob (f: checking -> bad)
+😺bob (end: checking -> good)
+🙈bob stops auditing
+😺alice (end: checking -> good)
+🙈alice stops auditing
+👏 the play is terminating
+🧹 the stage has been cleared
+😘 good day! come again soon.
+
+# ensure that an auditor being ignored still leaves another auditor to cause an error
+run error
+audience
+ bob expects always: t < 0
+ alice expects always: t < 0
+end
+interpretation
+ ignore bob disappointment
+end
+----
+🎶 the play is starting; expected duration: 0s
+bob starts auditing
+😿bob (f: checking -> bad)
+alice starts auditing
+😿alice (f: checking -> bad)
+😿bob (f: checking -> bad)
+😺bob (end: checking -> good)
+🙈bob stops auditing
+😿alice (f: checking -> bad)
+😺alice (end: checking -> good)
+🙈alice stops auditing
+👏 the play is terminating
+🧹 the stage has been cleared
+😱 an error has occurred!
+run error: alice was disappointed, fouling the play
+--
+(context of error: play,collector)
+
+# check for disappointment
+run
+audience
+ bob expects always: t < 0
+ alice expects always: mood == 'clear'
+end
+interpretation
+ require bob disappointment
+end
+----
+🎶 the play is starting; expected duration: 0s
+bob starts auditing
+😿bob (f: checking -> bad)
+alice starts auditing
+😿bob (f: checking -> bad)
+😺bob (end: checking -> good)
+🙈bob stops auditing
+😺alice (end: checking -> good)
+🙈alice stops auditing
+👏 the play is terminating
+🧹 the stage has been cleared
+😘 good day! come again soon.
+
+# it's an error if disappointment was required but was not found
+run error
+audience
+ bob expects always: mood == 'clear'
+ alice expects always: mood == 'clear'
+end
+interpretation
+ require bob disappointment
+end
+----
+🎶 the play is starting; expected duration: 0s
+bob starts auditing
+alice starts auditing
+😺bob (end: checking -> good)
+🙈bob stops auditing
+😺alice (end: checking -> good)
+🙈alice stops auditing
+👏 the play is terminating
+🧹 the stage has been cleared
+😱 an error has occurred!
+run error: bob was never disappointed, fouling the play
+--
+(context of error: play,collector)

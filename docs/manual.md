@@ -38,6 +38,7 @@ as if they appeared in a `script` section.
 | `-I`, `--search-dir`           | .                    | Directory to search for included configurations.                                                    |
 | `-n`, `--dry-run`              | false                | Stop after parsing the configuration and compiling the steps (do not actually execute the script).  |
 | `-o`, `--output-dir`           | `.`                  | Directory where to generate artifacts, output data files and the plot script.                       |
+| `-f`, `--force-overwrite`      | false                | If set, overwrite the per-actor working directory if it exists already.                             |
 | `-p`, `--print-cfg`            | false                | Print configuration after parsing and compilation.                                                  |
 | `-q`, `--quiet`                | false                | Run quietly.                                                                                        |
 | `-r`, `--extra-interpretation` | (none)               | Additional lines of [`interpretation` configuration](#Interpreation).                               |

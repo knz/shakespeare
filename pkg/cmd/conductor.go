@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"context"
-	"os"
 	"sync"
 	"time"
 
@@ -13,13 +12,6 @@ import (
 
 // conduct runs the play.
 func (ap *app) conduct(ctx context.Context) (err error) {
-	// Prepare all the working directories.
-	for _, a := range ap.cfg.actors {
-		if err := os.MkdirAll(a.workDir, os.ModePerm); err != nil {
-			return errors.Wrapf(err, "mkdir %s", a.workDir)
-		}
-	}
-
 	// Start the audition. This initializes the epoch, and thus needs to
 	// happen before the collector and the auditors start.
 	ap.openDoors(ctx)

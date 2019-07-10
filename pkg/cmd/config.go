@@ -44,6 +44,8 @@ type config struct {
 	textPlotHeight, textPlotWidth int
 	// Terminal escape code mode to use (used in tests).
 	textPlotTerm string
+	// Force overwrite artifacts sub-dirs.
+	forceOverwrite bool
 
 	// The list of directory to search for includes.
 	includePath []string
@@ -111,6 +113,7 @@ type config struct {
 
 func (cfg *config) initArgs(ctx context.Context) error {
 	pflag.StringVarP(&cfg.dataDir, "output-dir", "o", ".", "output data directory")
+	pflag.BoolVarP(&cfg.forceOverwrite, "force-overwrite", "f", false, "force delete artifacts sub-directories at start of play")
 	pflag.BoolVarP(&cfg.doPrint, "print-cfg", "p", false, "print out the parsed configuration")
 	pflag.BoolVarP(&cfg.parseOnly, "dry-run", "n", false, "do not execute anything, just check the configuration")
 	pflag.BoolVarP(&cfg.quiet, "quiet", "q", false, "do not emit progress messages")

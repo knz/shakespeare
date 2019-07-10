@@ -19,7 +19,7 @@ role test
 end
 cast
   test plays test
-  # test plays from working directory test
+  # test plays from working directory artifacts/test
 end
 script
   tempo 1s
@@ -32,4 +32,3 @@ end
 #  1:  test: a?
 #  2:  (wait until 1s)
 # end
-

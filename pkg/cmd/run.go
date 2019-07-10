@@ -125,11 +125,8 @@ func Run() (err error) {
 }
 
 func (cfg *config) run(ctx context.Context) (err error) {
-	// Derive the artifacts directory.
-	cfg.artifactsDir = filepath.Join(cfg.dataDir, "artifacts")
-
-	// Ensure the output directory and artifacts dir exist.
-	if err := os.MkdirAll(cfg.artifactsDir, 0755); err != nil {
+	// Ensure the output directory exists.
+	if err := os.MkdirAll(cfg.dataDir, 0755); err != nil {
 		return err
 	}
 

@@ -88,7 +88,7 @@ role foo
 end
 cast
   n plays foo
-  # n plays from working directory n
+  # n plays from working directory artifacts/n
 end
 script
   tempo 1s
@@ -108,11 +108,11 @@ role foo
 end
 cast
   n1 plays foo with i=1
-  # n1 plays from working directory n1
+  # n1 plays from working directory artifacts/n1
   n2 plays foo with i=2
-  # n2 plays from working directory n2
+  # n2 plays from working directory artifacts/n2
   n3 plays foo with i=3
-  # n3 plays from working directory n3
+  # n3 plays from working directory artifacts/n3
 end
 script
   tempo 1s
@@ -168,7 +168,7 @@ role bar
 end
 cast
   alice plays bar with foo=123
-  # alice plays from working directory alice
+  # alice plays from working directory artifacts/alice
 end
 script
   tempo 1s

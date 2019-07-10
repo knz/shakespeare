@@ -606,7 +606,7 @@ func (cfg *config) parseActors(line string) error {
 				name:      actorName,
 				role:      r,
 				extraEnv:  extraEnv,
-				workDir:   filepath.Join(cfg.artifactsDir, actorName),
+				workDir:   filepath.Join(cfg.dataDir, "artifacts", actorName),
 				sinks:     make(map[string]*sink),
 			}
 			cfg.actors[actorName] = &act

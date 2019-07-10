@@ -29,8 +29,6 @@ type config struct {
 	earlyExit bool
 	// Whether to silence logging.
 	quiet bool
-	// The artifacts sub-directory (always "artifacts" relative to datadir).
-	artifactsDir string
 	// The path to the unix shell used to execute script commands.
 	shellPath string
 	// The path to the gnuplot command to generate plots.

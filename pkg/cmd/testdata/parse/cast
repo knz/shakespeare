@@ -25,9 +25,9 @@ role doctor
 end
 cast
   alice plays doctor
-  # alice plays from working directory alice
+  # alice plays from working directory artifacts/alice
   bob plays doctor with a_hat
-  # bob plays from working directory bob
+  # bob plays from working directory artifacts/bob
 end
 script
   tempo 1s
@@ -49,13 +49,13 @@ role doctor
 end
 cast
   a1 plays doctor with i=1
-  # a1 plays from working directory a1
+  # a1 plays from working directory artifacts/a1
   a2 plays doctor with i=2
-  # a2 plays from working directory a2
+  # a2 plays from working directory artifacts/a2
   a3 plays doctor with i=3
-  # a3 plays from working directory a3
+  # a3 plays from working directory artifacts/a3
   b1 plays doctor with i=1; x=123
-  # b1 plays from working directory b1
+  # b1 plays from working directory artifacts/b1
 end
 script
   tempo 1s

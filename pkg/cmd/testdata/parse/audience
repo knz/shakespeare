@@ -12,10 +12,10 @@ role doctor
 end
 cast
   alice plays doctor
-  # alice plays from working directory alice
+  # alice plays from working directory artifacts/alice
   # alice cures are watched by audience condice
   bob plays doctor with a_hat
-  # bob plays from working directory bob
+  # bob plays from working directory artifacts/bob
 end
 script
   tempo 1s
@@ -41,10 +41,10 @@ role doctor
 end
 cast
   alice plays doctor
-  # alice plays from working directory alice
+  # alice plays from working directory artifacts/alice
   # alice cures are watched by audience condice
   bob plays doctor with a_hat
-  # bob plays from working directory bob
+  # bob plays from working directory artifacts/bob
   # bob cures are watched by audience condice
 end
 script
@@ -74,10 +74,10 @@ role doctor
 end
 cast
   alice plays doctor
-  # alice plays from working directory alice
+  # alice plays from working directory artifacts/alice
   # alice cures are watched by audience condice
   bob plays doctor with a_hat
-  # bob plays from working directory bob
+  # bob plays from working directory artifacts/bob
   # bob cures are watched by audience condice
 end
 script
@@ -106,10 +106,10 @@ role doctor
 end
 cast
   alice plays doctor
-  # alice plays from working directory alice
+  # alice plays from working directory artifacts/alice
   # alice cures are watched by audience condice
   bob plays doctor with a_hat
-  # bob plays from working directory bob
+  # bob plays from working directory artifacts/bob
 end
 script
   tempo 1s
@@ -136,9 +136,9 @@ role doctor
 end
 cast
   alice plays doctor
-  # alice plays from working directory alice
+  # alice plays from working directory artifacts/alice
   bob plays doctor with a_hat
-  # bob plays from working directory bob
+  # bob plays from working directory artifacts/bob
 end
 script
   tempo 1s

@@ -21,9 +21,9 @@ role empty
 end
 cast
   bob plays doctor
-  # bob plays from working directory bob
+  # bob plays from working directory artifacts/bob
   alice plays empty
-  # alice plays from working directory alice
+  # alice plays from working directory artifacts/alice
 end
 script
   tempo 2m3s

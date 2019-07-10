@@ -5,9 +5,9 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/errors/errbase"
 	"github.com/cockroachdb/logtags"
 )
 
@@ -43,38 +43,37 @@ func combineErrors(err1, err2 error) error {
 	return &errorCollection{errs: []error{err1, err2}}
 }
 
-func (e *errorCollection) Error() string {
-	var buf bytes.Buffer
-	comma := ""
-	for i, err := range e.errs {
-		buf.WriteString(comma)
-		comma = "\n\nand also, another error: "
-		if i == len(e.errs)-1 {
-			// The last error will be detailed by the surrounding function.
-			buf.WriteString(err.Error())
-		} else {
-			RenderError(&buf, err)
-		}
-	}
-	return buf.String()
-}
+func (e *errorCollection) Error() string { return fmt.Sprintf("%v", e) }
 
 func (e *errorCollection) Cause() error  { return e.errs[len(e.errs)-1] }
 func (e *errorCollection) Unwrap() error { return e.errs[len(e.errs)-1] }
 
-func (e *errorCollection) Format(s fmt.State, verb rune) {
-	comma := ""
-	for _, err := range e.errs {
-		fmt.Fprint(s, comma)
-		comma = "\n\nand also, another error: "
-		switch {
-		case verb == 'v' && s.Flag('+'):
-			errbase.FormatError(s, verb, err)
-		default:
-			RenderError(s, err)
+func (e *errorCollection) Format(s fmt.State, verb rune) { errors.FormatError(e, s, verb) }
+
+func (e *errorCollection) FormatError(p errors.Printer) error {
+	p.Printf("%d errors:", len(e.errs))
+	var buf bytes.Buffer
+	for i, err := range e.errs {
+		p.Printf("\n(%d) ", i+1)
+		buf.Reset()
+		RenderError(&buf, err)
+		p.Print(strings.ReplaceAll(buf.String(), "\n", "\n    "))
+	}
+
+	if p.Detail() {
+		p.Print("\n-- details follow")
+		for i, err := range e.errs {
+			p.Printf("\n(%d) %+v", i+1, err)
 		}
 	}
+	return nil
 }
+
+type delayedS struct {
+	fn func() string
+}
+
+func (d delayedS) String() string { return d.fn() }
 
 func wrapCtxErr(ctx context.Context) error {
 	return errors.WithContextTags(errors.WithStackDepth(ctx.Err(), 1), ctx)

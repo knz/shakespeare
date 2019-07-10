@@ -6,7 +6,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/cockroachdb/errors"
@@ -134,14 +133,18 @@ func (spm *spotMgr) spotlight(ctx context.Context, a *actor) error {
 		return nil
 	})
 	log.Infof(ctx, "spotlight terminated (%+v)", err)
-	if ps != nil && !ps.Success() {
-		st := ps.Sys().(syscall.WaitStatus)
-		if st.Signaled() && st.Signal() == syscall.SIGHUP {
-			// It's expected that the spotlight gets a hangup at the end of execution. It's not worth reporting.
-		} else {
-			spm.r.narrate(E, "😞", "%s's spotlight failed: %s (see log for details)", a.name, exitErr)
-			err = combineErrors(err, errors.WithContextTags(errors.Wrap(exitErr, "spotlight terminated abnormally"), ctx))
-		}
+
+	// If we are terminating, we're going to ignore the termination status below.
+	terminating := false
+	select {
+	case <-spm.termCh:
+		terminating = true
+	default:
+	}
+
+	if !terminating && ps != nil && !ps.Success() {
+		spm.r.narrate(E, "😞", "%s's spotlight failed: %s (see log for details)", a.name, exitErr)
+		err = combineErrors(err, errors.WithContextTags(errors.Wrap(exitErr, "spotlight terminated abnormally"), ctx))
 	}
 
 	return err

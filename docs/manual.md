@@ -504,6 +504,9 @@ audience
    # optional audit predicate
    [ <name> expects <modality>: <expr> ]
 
+   # expect the same as another auditor
+   [ <name> expects like <name> ]
+
    # zero or more watch specifications
    [ <name> watches {<var> | <selector> <name>} ] ...
 

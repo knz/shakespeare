@@ -86,6 +86,110 @@ interpretation
   ignore condice satisfaction
 end
 
+###
+# "like"
+##
+
+parse
+audience
+  albert audits only when t > 3
+  albert expects always: true
+  bob expects like albert
+end
+----
+# no roles defined
+# no cast defined
+script
+  tempo 1s
+  # no storyline defined, play will terminate immediately
+end
+audience
+  # albert sensitive to t
+  # bob sensitive to t
+  albert audits only while t > 3
+  albert expects always: true
+  bob audits only while t > 3
+  bob expects always: true
+end
+interpretation
+  foul upon albert disappointment
+  ignore albert satisfaction
+  foul upon bob disappointment
+  ignore bob satisfaction
+end
+
+parse
+audience
+  albert expects always: true
+  bob audits only when t > 3
+  bob expects like albert
+end
+----
+# no roles defined
+# no cast defined
+script
+  tempo 1s
+  # no storyline defined, play will terminate immediately
+end
+audience
+  # bob sensitive to t
+  albert audits throughout
+  albert expects always: true
+  bob audits only while t > 3
+  bob expects always: true
+end
+interpretation
+  foul upon albert disappointment
+  ignore albert satisfaction
+  foul upon bob disappointment
+  ignore bob satisfaction
+end
+
+
+##
+# errors
+##
+
+parse
+audience
+  albert expects like bob
+end
+----
+parse error: <testdata>:2: auditor "bob" not defined
+--
+while parsing:
+<testdata>:1     audience
+<testdata>:2   >   albert expects like bob
+
+
+parse
+audience
+  bob expects always: t > 0
+  albert expects always: t > 3
+  albert expects like bob
+end
+----
+parse error: <testdata>:4: only one 'expects' verb is supported at this point
+--
+while parsing:
+<testdata>:2       bob expects always: t > 0
+<testdata>:3       albert expects always: t > 3
+<testdata>:4   >   albert expects like bob
+
+
+parse
+audience
+  bob only helps
+  albert expects like bob
+end
+----
+parse error: <testdata>:3: audience member "bob" does not expect anything
+--
+while parsing:
+<testdata>:1     audience
+<testdata>:2       bob only helps
+<testdata>:3   >   albert expects like bob
+
 parse
 include doctor.cfg
 include medical_cast.cfg

@@ -189,6 +189,7 @@ var activeRe = compileRe(`^(?P<name>\S+)\s+audits\s+(?P<expr>only\s+(?:while|whe
 var collectsRe = compileRe(`^(?P<name>\S+)\s+collects\s+(?P<var>\S+)\s+as\s+(?P<mode>\S+)\s+(?P<N>\d+)\s+(?P<expr>.*)$`)
 var computesRe = compileRe(`^(?P<name>\S+)\s+computes\s+(?P<var>\S+)\s+as\s+(?P<expr>.*)$`)
 var expectsRe = compileRe(`^(?P<name>\S+)\s+expects\s+(?P<when>[a-z]+[a-z ]*[a-z])\s*:\s*(?P<expr>.*)$`)
+var expectsSameRe = compileRe(`^(?P<name>\S+)\s+expects\s+like\s+(?P<target>.*)$`)
 var noPlotRe = compileRe(`^(?P<name>\S+)\s+only\s+helps\s*$`)
 
 func (cfg *config) parseAudience(line string) error {
@@ -291,6 +292,38 @@ func (cfg *config) parseAudience(line string) error {
 			return err
 		}
 		a.auditor.expectExpr = exp
+	} else if p := pw(expectsSameRe); p.m(line) {
+		aName, err := p.id("name")
+		if err != nil {
+			return err
+		}
+		aTarget, err := p.id("target")
+		if err != nil {
+			return err
+		}
+
+		tg, ok := cfg.audience[aTarget]
+		if !ok {
+			return errors.Newf("auditor %q not defined", aTarget)
+		}
+		if tg.auditor.expectFsm == nil {
+			return errors.Newf("audience member %q does not expect anything", aTarget)
+		}
+
+		a := cfg.addOrGetAudienceMember(aName)
+
+		if a.auditor.expectFsm != nil {
+			return errors.New("only one 'expects' verb is supported at this point")
+		}
+		if a.auditor.activeCond.src == "" {
+			exp, err := a.checkExpr(cfg, tg.auditor.activeCond.src)
+			if err != nil {
+				return err
+			}
+			a.auditor.activeCond = exp
+		}
+		a.auditor.expectExpr = tg.auditor.expectExpr
+		a.auditor.expectFsm = tg.auditor.expectFsm
 	} else if p := pw(activeRe); p.m(line) {
 		aWhen := p.get("expr")
 		aName, err := p.id("name")

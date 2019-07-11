@@ -56,16 +56,18 @@ type app struct {
 	isTerminal    bool
 	terminalWidth int32
 	endCh         chan struct{}
+	log           *log.SecondaryLogger
 }
 
 var _ reporter = (*app)(nil)
 
-func newApp(cfg *config) *app {
+func newApp(ctx context.Context, cfg *config) *app {
 	r := &app{
 		cfg:     cfg,
 		minTime: math.Inf(1),
 		maxTime: math.Inf(-1),
 		endCh:   make(chan struct{}),
+		log:     log.NewSecondaryLogger(ctx, nil, "narrator", true /*enableGc*/, false /*forceSyncWrite*/),
 	}
 	r.prepareTerm()
 	return r
@@ -141,7 +143,7 @@ const (
 var narratorCtx = logtags.AddTag(context.Background(), "narrator", nil)
 
 func (ap *app) narrate(urgency urgency, symbol string, format string, args ...interface{}) {
-	log.Infof(narratorCtx, format, args...)
+	ap.log.Logf(narratorCtx, format, args...)
 	if ap.cfg.quiet {
 		return
 	}
@@ -160,7 +162,7 @@ func (ap *app) narrate(urgency urgency, symbol string, format string, args ...in
 }
 
 func (ap *app) witness(ctx context.Context, format string, args ...interface{}) {
-	log.Infof(ctx, format, args...)
+	ap.log.Logf(ctx, format, args...)
 	if ap.cfg.quiet {
 		return
 	}
@@ -180,7 +182,7 @@ func (ap *app) witness(ctx context.Context, format string, args ...interface{}) 
 }
 
 func (ap *app) judge(ctx context.Context, u urgency, sym, format string, args ...interface{}) {
-	log.Infof(ctx, format, args...)
+	ap.log.Logf(ctx, format, args...)
 	if ap.cfg.quiet {
 		return
 	}

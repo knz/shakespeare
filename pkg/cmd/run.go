@@ -159,7 +159,7 @@ func (cfg *config) run(ctx context.Context) (err error) {
 	}()
 
 	// Create the app.
-	ap := newApp(cfg)
+	ap := newApp(ctx, cfg)
 	defer ap.close()
 	ap.intro()
 

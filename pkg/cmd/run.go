@@ -177,9 +177,24 @@ func (cfg *config) run(ctx context.Context) (err error) {
 		// We'll exit with the error later below.
 	}
 
+	result := ap.assemble(ctx, err)
+
+	defer func() {
+		ap.collectArtifacts(result)
+
+		if errR := ap.writeResult(ctx, result); errR != nil {
+			log.Errorf(ctx, "error writing result file: %+v", errR)
+			err = combineErrors(err, errR)
+		}
+		if errH := ap.writeHtml(ctx); errH != nil {
+			log.Errorf(ctx, "error writing index file: %+v", errH)
+			err = combineErrors(err, errH)
+		}
+	}()
+
 	if !cfg.skipPlot {
 		// Generate the plots.
-		plotErr := ap.plot(ctx, err)
+		plotErr := ap.plot(ctx, result)
 		if plotErr != nil {
 			log.Errorf(ctx, "plot error: %+v", plotErr)
 		}

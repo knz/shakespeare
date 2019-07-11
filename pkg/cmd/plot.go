@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"html"
 	"math"
 	"os"
 	"os/exec"
@@ -16,64 +15,17 @@ import (
 	"github.com/knz/shakespeare/pkg/crdb/log"
 )
 
-func (ap *app) plot(ctx context.Context, foundErr error) error {
+func (ap *app) plot(ctx context.Context, result *Result) error {
 	ctx = logtags.AddTag(ctx, "plotter", nil)
 	log.Info(ctx, "generating scripts")
 
-	// Sanity checking.
-	if math.IsInf(ap.maxTime, 0) || math.IsInf(ap.minTime, 0) {
-		ap.expandTimeRange(0)
-	}
-
-	if ap.maxTime < ap.minTime {
-		ap.minTime, ap.maxTime = ap.maxTime, ap.minTime
-	}
-
-	playDuration := time.Duration(float64(time.Second) * (ap.maxTime - ap.minTime))
-	// Round to the lower second hundredth.
-	playDuration = (playDuration / (time.Second / 100)) * (time.Second / 100)
-
-	// Ensure the x axis always start at zero, even if no
-	// event was received until later on the time line.
-	if ap.minTime > 0 {
-		ap.minTime = 0
-	}
-	// Sanity check.
-	if ap.maxTime < 0 {
-		ap.maxTime = 1
-	}
-	// More sanity check.
-	if ap.maxTime < ap.minTime+1 {
-		ap.maxTime = ap.minTime + 1
-	}
-
-	ap.narrate(I, "ℹ️ ", "the timeline extends from %.2fs to %.2fs, relative to %s",
-		ap.minTime, ap.maxTime, ap.epoch())
-
-	numPlots, err := ap.subPlots(ctx, "plot.gp", ap.minTime, ap.maxTime)
+	numPlots, err := ap.subPlots(ctx, "plot.gp", result.MinTime, result.MaxTime)
 	if err != nil {
 		return err
 	}
 
-	repeatTs := math.Inf(-1)
-	beforeLastTs := repeatTs
-	if ap.cfg.repeatActNum > 0 {
-		// Find the timestamp where the last repetition started.
-		for _, acn := range ap.auRes.actChanges {
-			if acn.actNum == ap.cfg.repeatActNum {
-				beforeLastTs = repeatTs
-				repeatTs = acn.ts
-				// No break here: we want to get the ts for the last occurrence.
-			}
-		}
-	}
-	if !math.IsInf(beforeLastTs, 0) {
-		// Use the next-to-last iteration if available.
-		repeatTs = beforeLastTs
-	}
-	hasRepeat := !math.IsInf(repeatTs, 0)
-	if hasRepeat {
-		if _, err := ap.subPlots(ctx, "lastplot.gp", repeatTs, ap.maxTime); err != nil {
+	if result.Repeat != nil {
+		if _, err := ap.subPlots(ctx, "lastplot.gp", result.Repeat.StartTime, result.MaxTime); err != nil {
 			return err
 		}
 	}
@@ -92,14 +44,14 @@ func (ap *app) plot(ctx context.Context, foundErr error) error {
 		fmt.Fprintf(f, "set term pdf color size 7,%d font \",6\"\n", 2*numPlots)
 		fmt.Fprintf(f, "set output 'plot.pdf'\n")
 		fmt.Fprintf(f, "load 'plot.gp'\n")
-		if hasRepeat {
+		if r := result.Repeat; r != nil {
 			fmt.Fprintf(f, "set output 'lastplot.pdf'\n")
 			fmt.Fprintf(f, "load 'lastplot.gp'\n")
 		}
 		fmt.Fprintf(f, "set term svg mouse standalone size 600,%d dynamic font \",6\"\n", 200*numPlots)
 		fmt.Fprintf(f, "set output 'plot.svg'\n")
 		fmt.Fprintf(f, "load 'plot.gp'\n")
-		if hasRepeat {
+		if r := result.Repeat; r != nil {
 			fmt.Fprintf(f, "set output 'lastplot.svg'\n")
 			fmt.Fprintf(f, "load 'lastplot.gp'\n")
 		}
@@ -108,7 +60,7 @@ func (ap *app) plot(ctx context.Context, foundErr error) error {
 		fmt.Fprintf(f, "set output 'plot.txt'\n")
 		fmt.Fprintf(f, "set xtics nomirror\n")
 		fmt.Fprintf(f, "load 'plot.gp'\n")
-		if hasRepeat {
+		if r := result.Repeat; r != nil {
 			fmt.Fprintf(f, "set output 'lastplot.txt'\n")
 			fmt.Fprintf(f, "load 'lastplot.gp'\n")
 		}
@@ -118,103 +70,7 @@ func (ap *app) plot(ctx context.Context, foundErr error) error {
 		return err
 	}
 
-	if err := func() error {
-		fName := filepath.Join(ap.cfg.dataDir, "plot.html")
-		f, err := os.Create(fName)
-		if err != nil {
-			return err
-		}
-		defer f.Close()
-		ap.narrate(I, "📄", "HTML include for SVG plots: %s", fName)
-		fmt.Fprintln(f, `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/>`)
-		fmt.Fprint(f, "<title>shakespeare report")
-		if len(ap.cfg.titleStrings) > 0 {
-			fmt.Fprintf(f, ": a tale of %s", html.EscapeString(joinAnd(ap.cfg.titleStrings)))
-		}
-		fmt.Fprintln(f, `</title>`)
-		if len(ap.cfg.authors) > 0 {
-			fmt.Fprintf(f, "<meta name='author' content='%s' />\n", html.EscapeString(joinAnd(ap.cfg.authors)))
-		}
-		fmt.Fprintln(f, `<link href="https://fonts.googleapis.com/css?family=Nova+Mono&display=swap" rel="stylesheet">`)
-		fmt.Fprintln(f, `<link href="https://fonts.googleapis.com/css?family=Pinyon+Script&display=swap" rel="stylesheet">`)
-		fmt.Fprintln(f, `<style type='text/css'>
-h1,h3,p,ul{text-align: center;}
-p,li{font-family:'Pinyon Script',cursive;font-size: large;}
-pre,code{font-family: 'Nova Mono', monospace;font-size: small;}
-.result{font-weight:bold;}
-.good{color:green;}
-.bad{color:blue;}
-.kw{font-weight:bold;}
-.rn{color:blue;font-style:italic;}
-.acn{color:blue;font-style:italic;font-weight:bold;}
-.sn{color:darkgreen;font-style:italic;}
-.an{color:purple;font-style:italic;}
-.ann{color:orange;font-style:italic;}
-.sh{color:#444;}
-.re{color:green;}
-.mod{font-style:italic;}
-</style></head><body>`)
-		if len(ap.cfg.titleStrings) > 0 {
-			fmt.Fprintf(f, "<h1>A tale of %s</h1>\n", html.EscapeString(joinAnd(ap.cfg.titleStrings)))
-		}
-		if len(ap.cfg.authors) > 0 {
-			fmt.Fprintf(f, "<h3>Written by %s</h3>\n", html.EscapeString(joinAnd(ap.cfg.authors)))
-		}
-		fmt.Fprintf(f, "<p>%s<p>\n", formatDatePretty(ap.epoch()))
-		if foundErr != nil {
-			fmt.Fprintln(f, "<p class='result bad'>😭 Avert your eyes! For this tale, alas, does not end well.<p>")
-		} else {
-			fmt.Fprintln(f, "<p class='result good'>🎉 Rejoice! This tale ends well.<p>")
-		}
-		const divider = `<p style="font-family:serif; margin-top:3em; margin-bottom:3em;">⊱ ────────────────── {.⋅ ♫ ⋅.} ───────────────── ⊰</p>`
-		fmt.Fprintln(f, divider)
-		extraDur := ""
-		if ap.auRes.numRepeats > 0 {
-			extraDur = fmt.Sprintf(", including %d iterations of acts %d-%d",
-				ap.auRes.numRepeats, ap.cfg.repeatActNum, len(ap.cfg.play))
-		}
-		fmt.Fprintf(f, "<p>This performance lasted %s%s.</p>", playDuration, extraDur)
-		fmt.Fprintln(f, `<div style="margin-left: auto; margin-right: auto; max-width: 1024px"><embed id="E" src="plot.svg"/></div>`)
-		if hasRepeat {
-			fmt.Fprintln(f, divider)
-			fmt.Fprintf(f, "<p>For your delicate eyes, the last %.1f seconds of the play:</p>\n", ap.maxTime-repeatTs)
-			fmt.Fprintln(f, `<div style="margin-left: auto; margin-right: auto; max-width: 1024px"><embed id="E" src="lastplot.svg"/></div>`)
-		}
-		if foundErr != nil {
-			fmt.Fprintln(f, divider)
-			fmt.Fprintln(f, "<p>A tragic ending!</p>")
-			fmt.Fprintln(f, "<div style='margin-left: auto; margin-right: auto; max-width: 800px'><pre>")
-			errS := renderError(foundErr)
-			fmt.Fprintln(f, html.EscapeString(errS))
-			fmt.Fprintln(f, "</pre></div>")
-		}
-		if len(ap.cfg.seeAlso) > 0 {
-			fmt.Fprintln(f, divider)
-			fmt.Fprintln(f, "<p>Attention! You may want to know:</p><ul>")
-			for _, seeAlso := range ap.cfg.seeAlso {
-				h := html.EscapeString(seeAlso)
-				if strings.Contains(seeAlso, "://") {
-					fmt.Fprintf(f, `<li><a href='%s'><small><code>%s</code></small></a></li>`, h, h)
-				} else {
-					fmt.Fprintf(f, `<li>%s</li>`, h)
-				}
-			}
-			fmt.Fprintln(f, "</ul>")
-		}
-		fmt.Fprintln(f, divider)
-		fmt.Fprintln(f, "<p>For your curious eyes, the full book for this play:</p>")
-		fmt.Fprintln(f, "<div style='margin-left: auto; margin-right: auto; max-width: 800px'><pre>")
-		ap.cfg.printCfg(f, true /*skipComs*/, true /*skipVer*/, true /*annot*/)
-		ap.cfg.printSteps(f, true /*annot*/)
-		fmt.Fprintln(f, "</pre></div>")
-		fmt.Fprintf(f, "<p><em><small>a report produced by <a href='https://github.com/knz/shakespeare'>Shakespeare</a>, %s</small></em></p>\n", versionName)
-		fmt.Fprintln(f, `</body></html>`)
-		return nil
-	}(); err != nil {
-		return err
-	}
-
-	ap.maybeRunGnuplot(ctx, hasRepeat)
+	ap.maybeRunGnuplot(ctx, result.Repeat != nil)
 	log.Info(ctx, "done")
 	return nil
 }
@@ -285,7 +141,7 @@ func (ap *app) subPlots(
 				continue
 			}
 			actName := varName.actorName
-			fName := csvFileName(a.name, actName, varName.sigName)
+			fName := "csv/" + csvFileName(a.name, actName, varName.sigName)
 			pl := plot{
 				fName: fName,
 				title: fmt.Sprintf("%s %s", actName, varName.sigName),
@@ -310,7 +166,7 @@ func (ap *app) subPlots(
 
 		// Find the timeserie(s) to plot for the auditor.
 		if am, ok := ap.cfg.audience[a.name]; ok && am.auditor.hasData {
-			fName := fmt.Sprintf("audit-%s.csv", a.name)
+			fName := fmt.Sprintf("csv/audit-%s.csv", a.name)
 
 			ap.narrate(I, "📈", "observer %s found audit data: %s",
 				a.name, filepath.Join(ap.cfg.dataDir, fName))
@@ -375,6 +231,9 @@ faces[4] = ""
 		// Generate the act boundaries.
 		for i := 1; i < len(ap.auRes.actChanges); i++ {
 			ts := ap.auRes.actChanges[i].ts
+			if ts < minTime {
+				continue
+			}
 			fmt.Fprintf(f, "set arrow from %f, graph 0 to %f, graph 1 back nohead lc 'blue'\n", ts, ts)
 		}
 
@@ -403,12 +262,12 @@ faces[4] = ""
 				if !a.hasData {
 					continue
 				}
-				fmt.Fprintf(f, "  '%s.csv' using 1:(%d):1:($1+$2):(%d-0.25):(%d+0.25):(65536*($4 > 0 ? 255 : 0)+256*($4 > 0 ? 0 : 255)) "+
+				fmt.Fprintf(f, "  'csv/%s.csv' using 1:(%d):1:($1+$2):(%d-0.25):(%d+0.25):(65536*($4 > 0 ? 255 : 0)+256*($4 > 0 ? 0 : 255)) "+
 					"with boxxyerror notitle fs solid 1.0 fc rgbcolor variable, \\\n",
 					actorName, plotNum, plotNum, plotNum)
-				fmt.Fprintf(f, "  '%s.csv' using 1:(%d+0.25):3 with labels t '%s events (at y=%d)', \\\n",
+				fmt.Fprintf(f, "  'csv/%s.csv' using 1:(%d+0.25):3 with labels t '%s events (at y=%d)', \\\n",
 					actorName, plotNum, actorName, plotNum)
-				fmt.Fprintf(f, "  '%s.csv' using ($1+$2):(%d-0.25):5 with labels hypertext point pt 6 ps .5 notitle",
+				fmt.Fprintf(f, "  'csv/%s.csv' using ($1+$2):(%d-0.25):5 with labels hypertext point pt 6 ps .5 notitle",
 					actorName, plotNum)
 				if plotNum < numActiveActors {
 					fmt.Fprintf(f, ", \\")
@@ -426,16 +285,21 @@ faces[4] = ""
 		// fmt.Fprintln(f, "set jitter overlap 1 spread .25 vertical")
 
 		// Generate the mood overlays.
-		for i, amb := range ap.auRes.moodPeriods {
+		numObj := 0
+		for _, amb := range ap.auRes.moodPeriods {
+			if amb.startTime >= maxTime || amb.endTime <= minTime {
+				continue
+			}
 			xstart := "graph 0"
-			if !math.IsInf(amb.startTime, 0) {
+			if !math.IsInf(amb.startTime, 0) && amb.startTime >= minTime {
 				xstart = fmt.Sprintf("first %f", amb.startTime)
 			}
 			xend := "graph 1"
-			if !math.IsInf(amb.endTime, 0) {
+			if !math.IsInf(amb.endTime, 0) && amb.endTime <= maxTime {
 				xend = fmt.Sprintf("first %f", amb.endTime)
 			}
-			fmt.Fprintf(f, "set object %d rectangle from %s, graph 0 to %s, graph 1 behind fs solid 0.3 fc \"%s\"\n", i+1, xstart, xend, amb.mood)
+			fmt.Fprintf(f, "set object %d rectangle from %s, graph 0 to %s, graph 1 behind fs solid 0.3 fc \"%s\"\n", numObj+1, xstart, xend, amb.mood)
+			numObj++
 		}
 
 		// Plot the curves.
@@ -462,7 +326,7 @@ faces[4] = ""
 		}
 
 		// End the plot set.
-		for i := range ap.auRes.moodPeriods {
+		for i := 1; i < numObj; i++ {
 			fmt.Fprintf(f, "unset object %d\n", i+1)
 		}
 		fmt.Fprintln(f, "unset arrow")
@@ -509,7 +373,7 @@ func formatDatePretty(t time.Time) string {
 
 	hour := t.Format("<a title='UTC'>15:06</a>")
 
-	return fmt.Sprintf("The day was a %s, %s the %s in the glorious year of %s; at %s on that fateful day, the story began...",
+	return fmt.Sprintf("%s, %s the %s in the glorious year of %s; at %s",
 		t.Format("Monday"),
 		t.Format("January"),
 		day,

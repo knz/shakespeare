@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"html"
 	"math/rand"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -148,6 +149,10 @@ func (col *collector) collect(ctx context.Context) (err error) {
 		// want to keep the original error object as cause.
 		err = combineErrors(auditErr, err)
 	}()
+
+	if err := os.MkdirAll(filepath.Join(col.cfg.dataDir, "csv"), 0755); err != nil {
+		return err
+	}
 
 	of := newOutputFiles()
 	defer func() {
@@ -300,7 +305,7 @@ func (col *collector) collectObservation(
 			ov.hasData = true
 		}
 
-		fName := filepath.Join(col.cfg.dataDir,
+		fName := filepath.Join(col.cfg.dataDir, "csv",
 			csvFileName(obsName, ev.varName.actorName, ev.varName.sigName))
 
 		w, err := of.getWriter(fName)
@@ -341,7 +346,7 @@ func (col *collector) collectAuditionReport(
 	status := int(ev.result)
 
 	col.logger.Logf(ctx, "%.2f audit check by %s: %v (%q)", ev.ts, ev.auditor, ev.result, ev.output)
-	fName := filepath.Join(col.cfg.dataDir, fmt.Sprintf("audit-%s.csv", ev.auditor))
+	fName := filepath.Join(col.cfg.dataDir, "csv", fmt.Sprintf("audit-%s.csv", ev.auditor))
 	w, err := of.getWriter(fName)
 	if err != nil {
 		return true, errors.Wrapf(err, "opening %q", fName)
@@ -429,7 +434,7 @@ func (col *collector) collectActionReport(
 
 	col.logger.Logf(ctx, "%.2f action %s:%s (%.4fs)", sinceBeginning, ev.actor, ev.action, ev.duration)
 
-	fName := filepath.Join(col.cfg.dataDir, fmt.Sprintf("%s.csv", ev.actor))
+	fName := filepath.Join(col.cfg.dataDir, "csv", fmt.Sprintf("%s.csv", ev.actor))
 	w, err := of.getWriter(fName)
 	if err != nil {
 		return errors.Wrapf(err, "opening %q", fName)

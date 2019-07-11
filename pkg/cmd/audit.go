@@ -70,6 +70,9 @@ type auditionResults struct {
 	// actChanges describes the start times of each act. This is
 	// used during plotting.
 	actChanges []*actChange
+	// numRepeats is the number of repetitions
+	// of the repeatable acts by the prompter.
+	numRepeats int
 }
 
 // auditViolation describes one audit failure.

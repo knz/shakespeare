@@ -21,6 +21,9 @@ type prompter struct {
 	cfg     *config
 	stopper *stop.Stopper
 
+	// Where to report the number of repetitions
+	numRepeats *int
+
 	// Where the prompter should report performed actions.
 	collCh chan<- collectorEvent
 
@@ -43,7 +46,7 @@ func (pr *prompter) prompt(ctx context.Context) error {
 	surpriseDur := 2 * pr.cfg.tempo.Seconds()
 
 	var repeatStart time.Time
-	numRepeats := 0
+	*pr.numRepeats = 0
 
 	// Play.
 	for j := 0; j < len(pr.cfg.play); j++ {
@@ -129,11 +132,11 @@ func (pr *prompter) prompt(ctx context.Context) error {
 
 		// End of act. Are we looping?
 		if pr.cfg.repeatActNum > 0 && j == len(pr.cfg.play)-1 {
-			if numRepeats == 0 {
+			if *pr.numRepeats == 0 {
 				repeatStart = timeutil.Now()
 			}
 			doRepeat := true
-			if pr.cfg.repeatCount > 0 && numRepeats+1 >= pr.cfg.repeatCount {
+			if pr.cfg.repeatCount > 0 && *pr.numRepeats+1 >= pr.cfg.repeatCount {
 				pr.r.narrate(I, "🔁", "reached %d repeats", pr.cfg.repeatCount)
 				doRepeat = false
 			}
@@ -149,7 +152,7 @@ func (pr *prompter) prompt(ctx context.Context) error {
 				// the loop iteration will increment j before
 				// the next iteration, so start one lower.
 				j = repeatIdx - 1
-				numRepeats++
+				*pr.numRepeats++
 			}
 		}
 	}

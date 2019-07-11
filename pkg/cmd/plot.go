@@ -28,6 +28,11 @@ func (ap *app) plot(ctx context.Context, foundErr error) error {
 	if ap.maxTime < ap.minTime {
 		ap.minTime, ap.maxTime = ap.maxTime, ap.minTime
 	}
+
+	playDuration := time.Duration(float64(time.Second) * (ap.maxTime - ap.minTime))
+	// Round to the lower second hundredth.
+	playDuration = (playDuration / (time.Second / 100)) * (time.Second / 100)
+
 	// Ensure the x axis always start at zero, even if no
 	// event was received until later on the time line.
 	if ap.minTime > 0 {
@@ -136,6 +141,9 @@ func (ap *app) plot(ctx context.Context, foundErr error) error {
 h1,h3,p,ul{text-align: center;}
 p,li{font-family:'Pinyon Script',cursive;font-size: large;}
 pre,code{font-family: 'Nova Mono', monospace;font-size: small;}
+.result{font-weight:bold;}
+.good{color:green;}
+.bad{color:blue;}
 .kw{font-weight:bold;}
 .rn{color:blue;font-style:italic;}
 .acn{color:blue;font-style:italic;font-weight:bold;}
@@ -154,12 +162,18 @@ pre,code{font-family: 'Nova Mono', monospace;font-size: small;}
 		}
 		fmt.Fprintf(f, "<p>%s<p>\n", formatDatePretty(ap.epoch()))
 		if foundErr != nil {
-			fmt.Fprintln(f, "<p>Avert your eyes! For this tale, alas, does not end well.<p>")
+			fmt.Fprintln(f, "<p class='result bad'>😞 Avert your eyes! For this tale, alas, does not end well.<p>")
 		} else {
-			fmt.Fprintln(f, "<p>Rejoice! This tale ends well.<p>")
+			fmt.Fprintln(f, "<p class='result good'>😎 Rejoice! This tale ends well.<p>")
 		}
 		const divider = `<p style="font-family:serif; margin-top:3em; margin-bottom:3em;">⊱ ────────────────── {.⋅ ♫ ⋅.} ───────────────── ⊰</p>`
 		fmt.Fprintln(f, divider)
+		extraDur := ""
+		if ap.auRes.numRepeats > 0 {
+			extraDur = fmt.Sprintf(", including %d iterations of acts %d-%d",
+				ap.auRes.numRepeats, ap.cfg.repeatActNum, len(ap.cfg.play))
+		}
+		fmt.Fprintf(f, "<p>This performance lasted %s%s.</p>", playDuration, extraDur)
 		fmt.Fprintln(f, `<div style="margin-left: auto; margin-right: auto; max-width: 1024px"><embed id="E" src="plot.svg"/></div>`)
 		if hasRepeat {
 			fmt.Fprintln(f, divider)

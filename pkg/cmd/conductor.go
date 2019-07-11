@@ -187,13 +187,14 @@ func (ap *app) makeTheater(ctx context.Context) (th theater) {
 	prompterToSpotlightsTermCh := make(chan struct{})
 	th.prErrCh = prompterToConductorErrCh
 	th.pr = prompter{
-		r:       ap,
-		cfg:     ap.cfg,
-		stopper: ap.stopper,
-		collCh:  prompterAndAuditiontoCollectorCh,
-		auditCh: prompterAndSpotlightsToAuditionCh,
-		termCh:  prompterToSpotlightsTermCh,
-		errCh:   prompterToConductorErrCh,
+		r:          ap,
+		cfg:        ap.cfg,
+		stopper:    ap.stopper,
+		numRepeats: &ap.auRes.numRepeats,
+		collCh:     prompterAndAuditiontoCollectorCh,
+		auditCh:    prompterAndSpotlightsToAuditionCh,
+		termCh:     prompterToSpotlightsTermCh,
+		errCh:      prompterToConductorErrCh,
 	}
 
 	spotlightsToConductorErrCh := make(chan error, 1)

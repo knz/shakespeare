@@ -162,9 +162,9 @@ pre,code{font-family: 'Nova Mono', monospace;font-size: small;}
 		}
 		fmt.Fprintf(f, "<p>%s<p>\n", formatDatePretty(ap.epoch()))
 		if foundErr != nil {
-			fmt.Fprintln(f, "<p class='result bad'>😞 Avert your eyes! For this tale, alas, does not end well.<p>")
+			fmt.Fprintln(f, "<p class='result bad'>😭 Avert your eyes! For this tale, alas, does not end well.<p>")
 		} else {
-			fmt.Fprintln(f, "<p class='result good'>😎 Rejoice! This tale ends well.<p>")
+			fmt.Fprintln(f, "<p class='result good'>🎉 Rejoice! This tale ends well.<p>")
 		}
 		const divider = `<p style="font-family:serif; margin-top:3em; margin-bottom:3em;">⊱ ────────────────── {.⋅ ♫ ⋅.} ───────────────── ⊰</p>`
 		fmt.Fprintln(f, divider)

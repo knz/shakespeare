@@ -83,6 +83,8 @@ the manual:
   expression](https://en.wikipedia.org/wiki/Regular_expression) using
   [Google's re2 syntax](https://github.com/google/re2/wiki/Syntax).
 
+  For an intro-level guide see this: https://www.regular-expressions.info/
+
 - `<cmd>` denotes a unix shell command. This will be passed to `$SHELL
   -c` and thus can contain multiple statements, parameter expansions,
   redirections, etc.

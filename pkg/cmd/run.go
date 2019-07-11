@@ -337,6 +337,11 @@ func (ap *app) runConduct(bctx context.Context) error {
 	return combineErrors(returnErr, <-errChan)
 }
 
+func (cfg *config) getLogDir() string {
+	dirFlag := pflag.Lookup(logflags.LogDirName)
+	return dirFlag.Value.String()
+}
+
 func (cfg *config) setupLogging(ctx context.Context) error {
 	dirFlag := pflag.Lookup(logflags.LogDirName)
 	if !log.DirSet() && !dirFlag.Changed {
@@ -349,16 +354,17 @@ func (cfg *config) setupLogging(ctx context.Context) error {
 
 	ls := pflag.Lookup(logflags.LogToStderrName)
 	if logDir := dirFlag.Value.String(); logDir != "" {
+		// Make sure the path exists.
+		if err := os.MkdirAll(logDir, 0755); err != nil {
+			return errors.Wrap(err, "unable to create log directory")
+		}
+
 		if !ls.Changed {
 			// Unless the settings were overridden by the user, silence
 			// logging to stderr because the messages will go to a log file.
 			if err := ls.Value.Set(log.Severity_NONE.String()); err != nil {
 				return err
 			}
-		}
-		// Make sure the path exists.
-		if err := os.MkdirAll(logDir, 0755); err != nil {
-			return errors.Wrap(err, "unable to create log directory")
 		}
 		log.Infof(ctx, "logging to directory %s", logDir)
 		log.StartGCDaemon(ctx)

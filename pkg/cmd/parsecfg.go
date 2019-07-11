@@ -131,10 +131,22 @@ func (cfg *config) parseSection(
 }
 
 var interpretationRe = compileRe(`^interpretation$`)
+var ignoreRe = compileRe(`^ignore\s+(?P<result>disappointment|satisfaction)$`)
 var foulRe = compileRe(`^(?P<mode>ignore|foul\s+upon|require)\s+(?P<target>\S+)\s+(?P<result>disappointment|satisfaction)$`)
 
 func (cfg *config) parseInterpretation(line string) error {
-	if p := pw(foulRe); p.m(line) {
+	if p := pw(ignoreRe); p.m(line) {
+		aResult := p.get("result")
+
+		for _, a := range cfg.audience {
+			switch aResult {
+			case "disappointment":
+				a.auditor.foulOnBad = foulIgnore
+			case "satisfaction":
+				a.auditor.foulOnGood = foulIgnore
+			}
+		}
+	} else if p := pw(foulRe); p.m(line) {
 		aMode := p.get("mode")
 		aTarget, err := p.id("target")
 		if err != nil {

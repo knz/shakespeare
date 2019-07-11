@@ -743,6 +743,8 @@ The interpretation is defined as follows:
 interpretation
    [ ignore <name> {disappointment | satisfaction} ] ...
 
+   [ ignore {disappointment | satisfaction} ] ...
+
    [ require <name> {disappointment | satisfaction} ] ...
 
    [ foul upon <name> {disappointment | satisfaction} ] ...
@@ -770,3 +772,6 @@ end
   foul upon ... disappointment
   ignore ... satisfaction
   ```
+
+- The shorthand `ignore disappointment/satisfaction` without an auditor
+  name configures all the auditors at once.

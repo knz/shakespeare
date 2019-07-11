@@ -34,7 +34,6 @@ func Run() (err error) {
 
 	// Initialize the logging sub-system.
 	if err = cfg.setupLogging(ctx); err != nil {
-		log.Errorf(ctx, "init error: %+v", err)
 		return errors.WithDetail(err, "(while initializing the logging subsystem)")
 	}
 

@@ -1,0 +1,20 @@
+run error
+role test
+  cleanup exit 123
+end
+cast
+  test plays test
+end
+script
+  storyline ..
+end
+----
+👏 please welcome a cast of 1 actors, playing 1 roles
+🎭 dramatis personæ: test
+🎶 the play is starting; expected duration: 1s
+👏 the play is terminating
+🧹 the stage has been cleared
+😱 an error has occurred!
+run error: cleanup: command failed: exit status 123
+--
+(context: play,cleanup,actor=test,role=test)

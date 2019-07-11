@@ -1,0 +1,23 @@
+run error
+role test
+  spotlight exit 123
+end
+cast
+  test plays test
+end
+script
+  tempo .1s
+  storyline ..
+end
+----
+👏 please welcome a cast of 1 actors, playing 1 roles
+🎭 dramatis personæ: test
+🎶 the play is starting; expected duration: 100ms
+🎬 act 1 starts
+😞 test's spotlight failed: exit status 123 (see log for details)
+👏 the play is terminating
+🧹 the stage has been cleared
+😱 an error has occurred!
+run error: spotlight-supervisor: spotlight terminated abnormally: exit status 123
+--
+(context: play,spotlight-supervisor,spotlight,actor=test,role=test)

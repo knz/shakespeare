@@ -126,9 +126,9 @@ are uploaded to the provided URL.
 
 The following URL schemes are supported:
 
-- `scp://`: passed to `scp -r <workdir>`
-- `gs://`: passed to `gsutil -m cp -r <workdir>`
-- `s3://`: passed to `aws s3 cp --recursive <workdir>`
+- `scp://` (secure copy over SSH): passed to `scp -r <workdir>`
+- `gs://` (Google Cloud Storage): passed to `gsutil -m cp -r <workdir>`
+- `s3://` (Amazon S3): passed to `aws s3 cp --recursive <workdir>`
 
 ## Common syntax elements
 

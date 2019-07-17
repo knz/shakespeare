@@ -34,6 +34,7 @@ end
 parse
 include synerr.cfg
 ----
+----
 parse error: testdata/include/synerr2.cfg:1: unknown syntax
 --
 while parsing:
@@ -42,7 +43,42 @@ testdata/include/synerr2.cfg:1   > notvalid
 in file included from:
 testdata/include/synerr.cfg:2 <- here
 <testdata>:2 <- here
+HINT: supported syntax:
+  # add a title string
+  title a midsummer's dream
 
+  # add an author
+  author shakespeare
+
+  # add an informative reference
+  attention this is fiction
+
+  # include other file
+  include filename.cfg
+
+  # define preprocessing variable "season" and default its value to "summer"
+  parameter season defaults to summer
+
+  # role definition
+  role doctor ... end
+
+  # role surgeon can do all that doctor does and more
+  role surgeon extends doctor ... end
+
+  # cast definition(s)
+  cast ... end
+
+  # script definition(s)
+  script ... end
+
+  # audience definition(s)
+  audience ... end
+
+  # interpretation(s)
+  interpretation ... end
+
+----
+----
 parse
 include otherinc.cfg
 ----

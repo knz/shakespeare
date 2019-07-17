@@ -96,7 +96,42 @@ func (cfg *config) parseCfg(ctx context.Context, rd *reader) error {
 				}
 			}
 			if !foundParser {
-				return pos.wrapErr(errors.Newf("unknown syntax"))
+				return pos.wrapErr(
+					errors.WithHint(errors.Newf("unknown syntax"),
+						`supported syntax:
+  # add a title string
+  title a midsummer's dream
+
+  # add an author
+  author shakespeare
+
+  # add an informative reference
+  attention this is fiction
+
+  # include other file
+  include filename.cfg
+
+  # define preprocessing variable "season" and default its value to "summer"
+  parameter season defaults to summer
+
+  # role definition
+  role doctor ... end
+
+  # role surgeon can do all that doctor does and more
+  role surgeon extends doctor ... end
+
+  # cast definition(s)
+  cast ... end
+
+  # script definition(s)
+  script ... end
+
+  # audience definition(s)
+  audience ... end
+
+  # interpretation(s)
+  interpretation ... end
+`))
 			}
 		}
 	}
@@ -175,7 +210,21 @@ func (cfg *config) parseInterpretation(line string) error {
 			a.auditor.foulOnGood = f
 		}
 	} else {
-		return errors.New("unknown syntax")
+		return errors.WithHint(errors.New("unknown syntax"),
+			`supported syntax:
+  # ignore all disappointments from candice
+  ignore candice disappointment
+
+  # ignore any disappointment whatsoever
+  ignore disappointment
+
+  # require candice to be disappointed; the play is fouled if candice
+  # does not get disappointed.
+  require candice disappointment
+
+  # foul the play if david becomes satisfied.
+  foul upon david satisfaction
+`)
 	}
 	return nil
 }
@@ -447,7 +496,36 @@ func (cfg *config) parseAudience(line string) error {
 			assignMode: assignSingle,
 		})
 	} else {
-		return errors.New("unknown syntax")
+		return errors.WithHint(errors.New("unknown syntax"),
+			`supported syntax:
+  # observer david observes feelgood events from doctors
+  # (and produces a plot of the observations at the end)
+  david watches every doctor feelgood
+
+  # auditor "candice" only pays attention when the mood is blue
+  candice audits only while mood == 'blue'
+
+  # auditor "candice" becomes disappointed if forced to pay attention for more than 5 seconds
+  candice expects always: t < 5
+
+  # auditor "candice" collects the last 5 feelgood events from "bob" into "bin"
+  candice collects bin as last 5 [bob feelgood]
+
+  # auditor "candice" remembers the last time measurement as "last_t"
+  candice computes last_t as t
+
+  # auditor "candice" does not produce a final plot
+  candice only helps
+
+  # observer "beth" watches computed variable last_t
+  beth watches last_t
+
+  # the plot y-label for observer "beth" is "time"
+  beth measures time
+
+  # auditor "martin" expects the same as "candice"
+  martin expects like candice
+`)
 	}
 
 	return nil
@@ -580,7 +658,22 @@ func (cfg *config) parseRole(
 			thisRole.sigParsers = append(thisRole.sigParsers, &rp)
 			thisRole.sigNames = append(thisRole.sigNames, rp.name)
 		} else {
-			return errors.New("unknown syntax")
+			return errors.WithHint(errors.New("unknown syntax"),
+				`supported syntax:
+  # action "cure" is performed by running the command "echo medecine >actions.log"
+  :cure echo medecine >>actions.log
+
+  # command "echo sterilize >>actions.log" is ran once at the beginning,
+  # and also once at the end.
+  cleanup echo sterilize >>actions.log
+
+  # command "tail -F actions.log" is ran in the background to collect data points
+  spotlight tail -F actions.log
+
+  # occurrences of "medecine" in the spotlight data are
+  # translated to "feelbetter" signals. (uses regular expressions)
+  signal feelbetter event at (?P<ts_now>)(?P<event>medecine)
+`)
 		}
 		return nil
 	})
@@ -689,7 +782,17 @@ func (cfg *config) parseActors(line string) error {
 			}
 		}
 	} else {
-		return errors.New("unknown syntax")
+		return errors.WithHint(errors.New("unknown syntax"),
+			`supported syntax:
+  # actor "bob" plays role "doctor"
+  bob plays doctor
+
+  # actor "bob" plays "doctor" and provides shell environment "patient=alice" to commands
+  bob plays doctor with patient=alice
+
+  # actors "bob1" and "bob2" play "doctor"
+  bob* play 2 doctors
+`)
 	}
 	return nil
 }
@@ -834,7 +937,49 @@ func (cfg *config) parseScript(line string) error {
 			})
 		}
 	} else {
-		return errors.New("unknown syntax")
+		return errors.WithHint(errors.New("unknown syntax"),
+			`supported syntax:
+  # set the tempo to 300 milliseconds
+  tempo 300ms
+
+  # scene character "a" causes actor "bob" to perform action "cure"
+  scene a entails for bob: cure
+
+  # scene character "a" entails "bob" to perform "cure", a failure is tolerated
+  scene a entails for bob: cure?
+
+  # scene "b" entails "bob" to perform "cure" and "sleep"
+  scene b entails for bob: cure; sleep
+
+  # scene "c" entails for every actor playing "doctor" to perform "cure"
+  scene c entails for every doctor: cure
+
+  # scene "d" finishes on a red mood, "e" starts on a blue mood
+  scene d mood ends red
+  scene e mood starts blue
+
+  # script defines one act with three scenes "a", "b", "c"
+  storyline abc
+
+  # script defines two acts, second act waits two seconds before scene "d"
+  storyline abc ..d
+
+  # in act two, scenes "b" and "c" run concurrently
+  storyline . b
+  storyline . c
+
+  # ensure every scene "a" is followed by "b" (uses regular expressions)
+  edit s/a/ab/
+
+  # repeat the act containing scene "a" and every act after (uses regular expressions)
+  repeat from a
+
+  # repeat at most 5 times
+  repeat 5 times
+
+  # repeat for at most 5 minutes
+  repeat time 5m
+`)
 	}
 	return nil
 }

@@ -210,12 +210,43 @@ audience
   condice audits unknown
 end
 ----
+----
 parse error: <testdata>:2: unknown syntax
 --
 while parsing:
 <testdata>:1     audience
 <testdata>:2   >   condice audits unknown
+HINT: supported syntax:
+  # observer david observes feelgood events from doctors
+  # (and produces a plot of the observations at the end)
+  david watches every doctor feelgood
 
+  # auditor "candice" only pays attention when the mood is blue
+  candice audits only while mood == 'blue'
+
+  # auditor "candice" becomes disappointed if forced to pay attention for more than 5 seconds
+  candice expects always: t < 5
+
+  # auditor "candice" collects the last 5 feelgood events from "bob" into "bin"
+  candice collects bin as last 5 [bob feelgood]
+
+  # auditor "candice" remembers the last time measurement as "last_t"
+  candice computes last_t as t
+
+  # auditor "candice" does not produce a final plot
+  candice only helps
+
+  # observer "beth" watches computed variable last_t
+  beth watches last_t
+
+  # the plot y-label for observer "beth" is "time"
+  beth measures time
+
+  # auditor "martin" expects the same as "candice"
+  martin expects like candice
+
+----
+----
 parse
 audience
   condice audits only while [a.b]

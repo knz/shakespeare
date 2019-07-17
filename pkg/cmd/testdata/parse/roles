@@ -57,12 +57,29 @@ role unknowndir
   woot
 end
 ----
+----
 parse error: <testdata>:2: unknown syntax
 --
 while parsing:
 <testdata>:1     role unknowndir
 <testdata>:2   >   woot
+HINT: supported syntax:
+  # action "cure" is performed by running the command "echo medecine >actions.log"
+  :cure echo medecine >>actions.log
 
+  # command "echo sterilize >>actions.log" is ran once at the beginning,
+  # and also once at the end.
+  cleanup echo sterilize >>actions.log
+
+  # command "tail -F actions.log" is ran in the background to collect data points
+  spotlight tail -F actions.log
+
+  # occurrences of "medecine" in the spotlight data are
+  # translated to "feelbetter" signals. (uses regular expressions)
+  signal feelbetter event at (?P<ts_now>)(?P<event>medecine)
+
+----
+----
 
 
 parse

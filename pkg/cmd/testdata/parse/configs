@@ -52,7 +52,44 @@ end
 parse
 woot
 ----
+----
 parse error: <testdata>:1: unknown syntax
 --
 while parsing:
 <testdata>:1   > woot
+HINT: supported syntax:
+  # add a title string
+  title a midsummer's dream
+
+  # add an author
+  author shakespeare
+
+  # add an informative reference
+  attention this is fiction
+
+  # include other file
+  include filename.cfg
+
+  # define preprocessing variable "season" and default its value to "summer"
+  parameter season defaults to summer
+
+  # role definition
+  role doctor ... end
+
+  # role surgeon can do all that doctor does and more
+  role surgeon extends doctor ... end
+
+  # cast definition(s)
+  cast ... end
+
+  # script definition(s)
+  script ... end
+
+  # audience definition(s)
+  audience ... end
+
+  # interpretation(s)
+  interpretation ... end
+
+----
+----

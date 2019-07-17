@@ -4,6 +4,7 @@
   - [Command line parameters](#Command-line-parameters)
   - [Environment variables](#Environment-variables)
   - [Exit status](#Exit-status)
+  - [Remaining results](#Remaining-results)
 - Configuration:
   - [Common syntax elements](#Common-syntax-elements)
   - [Overall structure of a configuration](#Overall-structure-of-a-configuration)
@@ -44,6 +45,7 @@ as if they appeared in a `script` section.
 | `-r`, `--extra-interpretation` | (none)               | Additional lines of [`interpretation` configuration](#Interpreation).                                                                              |
 | `-s`, `--extra-script`         | (none)               | Additional lines of [`script` configuration](#Script-configuration).                                                                               |
 | `-S`, `--stop-at-first-foul`   | false                | Stop the play as soon as [a foul was detected](#Interpretation-of-results).                                                                        |
+| `--upload-url`                 | (none)               | Upload the [remaining results](#Remaining-results) to the provided URL.                                                                            |
 | `--ascii-only`                 | false                | Avoid printing out special unicode characters.                                                                                                     |
 | `--version`                    | false                | Show version number and exit.                                                                                                                      |
 | `--log-dir`                    | `logs` in output dir | If non-empty, copy the logs to that directory.                                                                                                     |
@@ -71,6 +73,62 @@ exit status is returned in the following circumstances:
 - [a foul was detected](#Interpretation-of-results) during or at the end of the play.
 
 Otherwise, status 0 is returned.
+
+### Remaining results
+
+Upon starting the play, `shakespeare` creates a working directory named
+after the current date and time, and updates the symlink `latest` to
+point to it (both are placed inside the target directory specified via
+`-o`).
+
+During the play, the actor artifacts are stored in an `artifacts`
+sub-directory. Data points are stored in a `csv` sub-directory. If
+`--log-dir` was not specified, the log files are stored in a `logs`
+sub-directory.
+
+At the end of the play:
+
+1. plots are produced from the CSV files.
+2. a summary of results is produced in `results.js`.
+3. the report template page is written to `index.html`.
+4. unless a foul was detected or `-k` is specified, `artifacts` is erased.
+5. if `--upload-url` was specified, the contents of the working
+   directory (including the results from steps 1-4 above) are uploaded
+   to the specified URL. [See below for details](#Uploading-results).
+
+Example result tree after a test completion:
+
+```
+├── artifacts
+│   ├── elmstreet
+│   │   └── traffic.log
+│   └── theporch
+├── csv
+│   ├── audit-bob.csv
+│   ├── bob..mood.csv
+│   ├── bob..moodt.csv
+│   ├── bob.elmstreet.traffic.csv
+│   ├── elmstreet.csv
+│   └── theporch.csv
+├── index.html
+├── plot.gp
+├── plot.pdf
+├── plot.svg
+├── plot.txt
+├── result.js
+└── runme.gp
+```
+
+### Uploading results
+
+If `--upload-url` is specified, the contents of the working directory
+are uploaded to the provided URL.
+
+The following URL schemes are supported:
+
+- `scp://`: passed to `scp -r <workdir>`
+- `gs://`: passed to `gsutil -m cp -r <workdir>`
+- `s3://`: passed to `aws s3 cp --recursive <workdir>`
 
 ## Common syntax elements
 

@@ -32,6 +32,12 @@ func Run() (err error) {
 		return errors.WithDetail(err, "(while parsing the command line)")
 	}
 
+	// Initialize the target directories. This is needed before logging
+	// starts.
+	if err := cfg.prepareDirs(ctx); err != nil {
+		return err
+	}
+
 	// Initialize the logging sub-system.
 	if err = cfg.setupLogging(ctx); err != nil {
 		return errors.WithDetail(err, "(while initializing the logging subsystem)")
@@ -124,16 +130,6 @@ func Run() (err error) {
 }
 
 func (cfg *config) run(ctx context.Context) (err error) {
-	if err := cfg.prepareDirs(ctx); err != nil {
-		return err
-	}
-	defer func() {
-		// No error - remove artifacts unless -k was specified.
-		if err == nil && !cfg.keepArtifacts {
-			err = os.RemoveAll(cfg.artifactsDir())
-		}
-	}()
-
 	// After this point, if a panic occurs on the main thread it will be hidden
 	// when logging to file is enabled and no log messages are configured
 	// to appear on stderr.
@@ -156,6 +152,19 @@ func (cfg *config) run(ctx context.Context) (err error) {
 			ap.narrate(E, "😱", "an error has occurred!")
 		} else {
 			ap.narrate(I, "😘", "good day! come again soon.")
+		}
+	}()
+
+	defer func() {
+		// No error - remove artifacts unless -k was specified.
+		if err == nil && !cfg.keepArtifacts {
+			err = os.RemoveAll(cfg.artifactsDir())
+		}
+
+		// Upload produced files if completing without being interrupted
+		// by a signal (e.g. Ctrl+C).
+		if err == nil || !isError(err, errInterrupted) {
+			err = combineErrors(err, ap.tryUpload(ctx))
 		}
 	}()
 
@@ -267,7 +276,7 @@ func (ap *app) runConduct(bctx context.Context) error {
 				// to terminate with a non-zero exit code; however SIGTERM is
 				// "legitimate" and should be acknowledged with a success exit
 				// code. So we keep the error state here for later.
-				returnErr = combineErrors(returnErr, errors.New("interrupted"))
+				returnErr = combineErrors(returnErr, errInterrupted)
 				msgDouble := "Note: a second interrupt will skip graceful shutdown and terminate forcefully"
 				ap.narrate(I, "🛑", msgDouble)
 			}
@@ -340,6 +349,8 @@ func (ap *app) runConduct(bctx context.Context) error {
 
 	return combineErrors(returnErr, <-errChan)
 }
+
+var errInterrupted = errors.New("interrupted")
 
 func (cfg *config) getLogDir() string {
 	dirFlag := pflag.Lookup(logflags.LogDirName)

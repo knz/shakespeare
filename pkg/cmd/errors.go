@@ -18,6 +18,23 @@ type errorCollection struct {
 var _ error = (*errorCollection)(nil)
 var _ fmt.Formatter = (*errorCollection)(nil)
 
+func isError(err error, refError error) bool {
+	if errors.Is(err, refError) {
+		return true
+	}
+	if err == nil {
+		return false
+	}
+	if c, ok := err.(*errorCollection); ok {
+		for _, err := range c.errs {
+			if errors.Is(err, refError) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func combineErrors(err1, err2 error) error {
 	if err1 == nil {
 		return err2

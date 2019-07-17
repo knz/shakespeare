@@ -799,7 +799,7 @@ func (cfg *config) parseActors(line string) error {
 
 var scriptRe = compileRe(`^script$`)
 var tempoRe = compileRe(`^tempo\s+(?P<dur>.*)$`)
-var repeatCountRe = compileRe(`^repeat\s+(?P<count>\d+)\s+times$`)
+var repeatCountRe = compileRe(`^repeat\s+(?P<count>\S+)\s+times$`)
 var repeatAlwaysRe = compileRe(`^repeat\s+always$`)
 var repeatTimeoutRe = compileRe(`^repeat\s+time\s+(?P<dur>.*)$`)
 
@@ -811,6 +811,7 @@ var editRe = compileRe(`^edit\s+(?P<editcmd>.*)$`)
 var repeatRe = compileRe(`^repeat\s+from\s+(?P<repeat>.*)$`)
 
 func (cfg *config) parseScript(line string) error {
+	var err error
 	if p := pw(tempoRe); p.m(line) {
 		durS := p.get("dur")
 		dur, err := time.ParseDuration(durS)
@@ -822,6 +823,12 @@ func (cfg *config) parseScript(line string) error {
 		cfg.repeatCount = -1
 	} else if p := pw(repeatCountRe); p.m(line) {
 		count := p.get("count")
+
+		count, err = cfg.preprocReplace(count)
+		if err != nil {
+			return err
+		}
+
 		n, err := strconv.Atoi(count)
 		if err != nil {
 			return err
@@ -829,6 +836,11 @@ func (cfg *config) parseScript(line string) error {
 		cfg.repeatCount = n
 	} else if p := pw(repeatTimeoutRe); p.m(line) {
 		dur := p.get("dur")
+		dur, err := cfg.preprocReplace(dur)
+		if err != nil {
+			return err
+		}
+
 		if dur == "unconstrained" {
 			cfg.repeatTimeout = -1
 		} else {

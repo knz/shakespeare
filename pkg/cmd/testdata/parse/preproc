@@ -197,3 +197,54 @@ interpretation
   foul upon alice disappointment
   ignore alice satisfaction
 end
+
+
+parse
+parameter d defaults to 123
+script
+  storyline .
+  repeat from .
+  repeat ~d~ times
+end
+----
+# no roles defined
+# no cast defined
+script
+  tempo 1s
+  storyline .
+  repeat from .
+  # (repeating act 1 and following)
+  repeat time unconstrained
+  repeat 123 times
+end
+# no audience defined
+# play
+# -- ACT 1: . --
+#  1:  (wait until 1s)
+# -- REPEATING FROM ACT 1 --
+# end
+
+parse
+parameter dur defaults to 123s
+script
+  storyline .
+  repeat from .
+  repeat time ~dur~
+end
+----
+# no roles defined
+# no cast defined
+script
+  tempo 1s
+  storyline .
+  repeat from .
+  # (repeating act 1 and following)
+  repeat time 2m3s
+  repeat always
+end
+# no audience defined
+# play
+# -- ACT 1: . --
+#  1:  (wait until 1s)
+# -- REPEATING FROM ACT 1 --
+# end

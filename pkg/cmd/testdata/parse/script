@@ -612,53 +612,8 @@ script
   repeat xx times
 end
 ----
-----
-parse error: <testdata>:2: unknown syntax
+parse error: <testdata>:2: strconv.Atoi: parsing "xx": invalid syntax
 --
 while parsing:
 <testdata>:1     script
 <testdata>:2   >   repeat xx times
-HINT: supported syntax:
-  # set the tempo to 300 milliseconds
-  tempo 300ms
-
-  # scene character "a" causes actor "bob" to perform action "cure"
-  scene a entails for bob: cure
-
-  # scene character "a" entails "bob" to perform "cure", a failure is tolerated
-  scene a entails for bob: cure?
-
-  # scene "b" entails "bob" to perform "cure" and "sleep"
-  scene b entails for bob: cure; sleep
-
-  # scene "c" entails for every actor playing "doctor" to perform "cure"
-  scene c entails for every doctor: cure
-
-  # scene "d" finishes on a red mood, "e" starts on a blue mood
-  scene d mood ends red
-  scene e mood starts blue
-
-  # script defines one act with three scenes "a", "b", "c"
-  storyline abc
-
-  # script defines two acts, second act waits two seconds before scene "d"
-  storyline abc ..d
-
-  # in act two, scenes "b" and "c" run concurrently
-  storyline . b
-  storyline . c
-
-  # ensure every scene "a" is followed by "b" (uses regular expressions)
-  edit s/a/ab/
-
-  # repeat the act containing scene "a" and every act after (uses regular expressions)
-  repeat from a
-
-  # repeat at most 5 times
-  repeat 5 times
-
-  # repeat for at most 5 minutes
-  repeat time 5m
-
-----
-----

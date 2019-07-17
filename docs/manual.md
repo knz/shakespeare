@@ -249,6 +249,8 @@ after all directives have been processed.
   - the extra shell environment provided to an actor, e.g. `alice plays doctor with ~stuff~`.
   - evaluable expressions, e.g. `alice expects always: v < ~N~`.
   - include directives, e.g. `include ~filename~.cfg`.
+  - the repeat count or duration in scripts e.g. `repeat ~n~ times` or `repeat time ~timeout~`.
+
 
 ## Roles configuration
 

@@ -9,6 +9,7 @@
 - Configuration:
   - [Common syntax elements](#Common-syntax-elements)
   - [Overall structure of a configuration](#Overall-structure-of-a-configuration)
+  - [Configuration preprocessing](#Configuration-preprocessing)
   - [Roles](#Roles-configuration)
   - [Cast](#Cast-configuration)
   - [Script](#Script-configuration)

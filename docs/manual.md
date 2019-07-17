@@ -4,7 +4,8 @@
   - [Command line parameters](#Command-line-parameters)
   - [Environment variables](#Environment-variables)
   - [Exit status](#Exit-status)
-  - [Remaining results](#Remaining-results)
+  - [Result files](#Result-files)
+  - [Uploading results](#Uploading-results)
 - Configuration:
   - [Common syntax elements](#Common-syntax-elements)
   - [Overall structure of a configuration](#Overall-structure-of-a-configuration)
@@ -45,7 +46,7 @@ as if they appeared in a `script` section.
 | `-r`, `--extra-interpretation` | (none)               | Additional lines of [`interpretation` configuration](#Interpreation).                                                                              |
 | `-s`, `--extra-script`         | (none)               | Additional lines of [`script` configuration](#Script-configuration).                                                                               |
 | `-S`, `--stop-at-first-foul`   | false                | Stop the play as soon as [a foul was detected](#Interpretation-of-results).                                                                        |
-| `--upload-url`                 | (none)               | Upload the [remaining results](#Remaining-results) to the provided URL.                                                                            |
+| `--upload-url`                 | (none)               | [Upload](#Uploading-results) the [result files](#Result-files) to the provided URL.                                                                            |
 | `--ascii-only`                 | false                | Avoid printing out special unicode characters.                                                                                                     |
 | `--version`                    | false                | Show version number and exit.                                                                                                                      |
 | `--log-dir`                    | `logs` in output dir | If non-empty, copy the logs to that directory.                                                                                                     |
@@ -74,7 +75,7 @@ exit status is returned in the following circumstances:
 
 Otherwise, status 0 is returned.
 
-### Remaining results
+### Result files
 
 Upon starting the play, `shakespeare` creates a working directory named
 after the current date and time, and updates the symlink `latest` to
@@ -89,7 +90,7 @@ sub-directory.
 At the end of the play:
 
 1. plots are produced from the CSV files.
-2. a summary of results is produced in `results.js`.
+2. a summary of results is produced in `result.js`.
 3. the report template page is written to `index.html`.
 4. unless a foul was detected or `-k` is specified, `artifacts` is erased.
 5. if `--upload-url` was specified, the contents of the working
@@ -121,7 +122,7 @@ Example result tree after a test completion:
 
 ### Uploading results
 
-If `--upload-url` is specified, the contents of the working directory
+If `--upload-url` is specified, the contents of the [working directory](#Result-files)
 are uploaded to the provided URL.
 
 The following URL schemes are supported:

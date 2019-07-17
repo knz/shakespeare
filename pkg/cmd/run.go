@@ -124,26 +124,15 @@ func Run() (err error) {
 }
 
 func (cfg *config) run(ctx context.Context) (err error) {
-	// Ensure the output directory exists.
-	if err := os.MkdirAll(cfg.dataDir, 0755); err != nil {
+	if err := cfg.prepareDirs(ctx); err != nil {
 		return err
 	}
-
-	// Prepare all the actor working directories.
-	for _, aName := range cfg.actorNames {
-		a := cfg.actors[aName]
-		if _, err := os.Stat(a.workDir); err == nil {
-			if !cfg.forceOverwrite {
-				return errors.Newf("output directory already exists and -f not specified: %s", a.workDir)
-			}
-			if err := os.RemoveAll(a.workDir); err != nil {
-				return errors.Wrapf(err, "rm -rf %s", a.workDir)
-			}
+	defer func() {
+		// No error - remove artifacts unless -k was specified.
+		if err == nil && !cfg.keepArtifacts {
+			err = os.RemoveAll(cfg.artifactsDir())
 		}
-		if err := os.MkdirAll(a.workDir, os.ModePerm); err != nil {
-			return errors.Wrapf(err, "mkdir %s", a.workDir)
-		}
-	}
+	}()
 
 	// After this point, if a panic occurs on the main thread it will be hidden
 	// when logging to file is enabled and no log messages are configured

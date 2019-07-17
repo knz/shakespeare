@@ -32,22 +32,22 @@ as if they appeared in a `script` section.
 
 ### Command line parameters
 
-| Parameter                      | Default              | Description                                                                                         |
-|--------------------------------|----------------------|-----------------------------------------------------------------------------------------------------|
-| `-D`, `--define`               | (none)               | [Preprocessing](#Configuration-preprocessing) variable definitions.                                 |
-| `-I`, `--search-dir`           | .                    | Directory to search for included configurations.                                                    |
-| `-n`, `--dry-run`              | false                | Stop after parsing the configuration and compiling the steps (do not actually execute the script).  |
-| `-o`, `--output-dir`           | `.`                  | Directory where to generate artifacts, output data files and the plot script.                       |
-| `-f`, `--force-overwrite`      | false                | If set, overwrite the per-actor working directory if it exists already.                             |
-| `-p`, `--print-cfg`            | false                | Print configuration after parsing and compilation.                                                  |
-| `-q`, `--quiet`                | false                | Run quietly.                                                                                        |
-| `-r`, `--extra-interpretation` | (none)               | Additional lines of [`interpretation` configuration](#Interpreation).                               |
-| `-s`, `--extra-script`         | (none)               | Additional lines of [`script` configuration](#Script-configuration).                                |
-| `-S`, `--stop-at-first-foul`   | false                | Stop the play as soon as [a foul was detected](#Interpretation-of-results).                         |
-| `--ascii-only`                 | false                | Avoid printing out special unicode characters.                                                      |
-| `--version`                    | false                | Show version number and exit.                                                                       |
-| `--log-dir`                    | `logs` in output dir | If non-empty, copy the logs to that directory.                                                      |
-| `--logtostderr`                | NONE                 | Copy every log message at or above this threshold to stderr (choices: INFO, WARNING, ERROR, FATAL). |
+| Parameter                      | Default              | Description                                                                                                                                        |
+|--------------------------------|----------------------|----------------------------------------------------------------------------------------------------------------------------------------------------|
+| `-D`, `--define`               | (none)               | [Preprocessing](#Configuration-preprocessing) variable definitions.                                                                                |
+| `-I`, `--search-dir`           | .                    | Directory to search for included configurations.                                                                                                   |
+| `-n`, `--dry-run`              | false                | Stop after parsing the configuration and compiling the steps (do not actually execute the script).                                                 |
+| `-o`, `--output-dir`           | `.`                  | Directory where to generate artifacts, output data files and the plot script.                                                                      |
+| `-k`, `--keep-artifats`        | false                | If set, keep the `artifacts` sub-directory at the end of the play if there was no foul (the artifacts are kept in any case if a foul is detected). |
+| `-p`, `--print-cfg`            | false                | Print configuration after parsing and compilation.                                                                                                 |
+| `-q`, `--quiet`                | false                | Run quietly.                                                                                                                                       |
+| `-r`, `--extra-interpretation` | (none)               | Additional lines of [`interpretation` configuration](#Interpreation).                                                                              |
+| `-s`, `--extra-script`         | (none)               | Additional lines of [`script` configuration](#Script-configuration).                                                                               |
+| `-S`, `--stop-at-first-foul`   | false                | Stop the play as soon as [a foul was detected](#Interpretation-of-results).                                                                        |
+| `--ascii-only`                 | false                | Avoid printing out special unicode characters.                                                                                                     |
+| `--version`                    | false                | Show version number and exit.                                                                                                                      |
+| `--log-dir`                    | `logs` in output dir | If non-empty, copy the logs to that directory.                                                                                                     |
+| `--logtostderr`                | NONE                 | Copy every log message at or above this threshold to stderr (choices: INFO, WARNING, ERROR, FATAL).                                                |
 
 ### Environment variables
 

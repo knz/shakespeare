@@ -8,6 +8,7 @@ import (
 	"html"
 	"io"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -15,12 +16,17 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/knz/shakespeare/pkg/crdb/log"
 	"github.com/knz/shakespeare/pkg/crdb/log/logflags"
+	"github.com/knz/shakespeare/pkg/crdb/timeutil"
 	"github.com/spf13/pflag"
 )
 
 type config struct {
 	// The output directory for data files, artifacts and plot scripts.
 	dataDir string
+	// The output sub-directory named after the current date.
+	// This is used to rewrite dataDir at the start of the play and
+	// is not used afterwards.
+	subDir string
 	// Whether to print out the parsed configuration upon init.
 	doPrint bool
 	// Whether to stop after parsing and compiling the configuration.
@@ -44,8 +50,8 @@ type config struct {
 	textPlotHeight, textPlotWidth int
 	// Terminal escape code mode to use (used in tests).
 	textPlotTerm string
-	// Force overwrite artifacts sub-dirs.
-	forceOverwrite bool
+	// Skip removing artifacts sub-dirs upon terminating with no error.
+	keepArtifacts bool
 
 	// The list of directory to search for includes.
 	includePath []string
@@ -113,7 +119,7 @@ type config struct {
 
 func (cfg *config) initArgs(ctx context.Context) error {
 	pflag.StringVarP(&cfg.dataDir, "output-dir", "o", ".", "output data directory")
-	pflag.BoolVarP(&cfg.forceOverwrite, "force-overwrite", "f", false, "force delete artifacts sub-directories at start of play")
+	pflag.BoolVarP(&cfg.keepArtifacts, "keep-artifacts", "k", false, "keep artifacts sub-directories at end of play upon no foul")
 	pflag.BoolVarP(&cfg.doPrint, "print-cfg", "p", false, "print out the parsed configuration")
 	pflag.BoolVarP(&cfg.parseOnly, "dry-run", "n", false, "do not execute anything, just check the configuration")
 	pflag.BoolVarP(&cfg.quiet, "quiet", "q", false, "do not emit progress messages")
@@ -152,7 +158,58 @@ func (cfg *config) initArgs(ctx context.Context) error {
 		cfg.includePath = append(cfg.includePath, ".")
 	}
 
+	// Create a sub-directory name. The directory itself is created
+	// later in prepareDirs().
+	cfg.subDir = timeutil.Now().Format("20060102150405999")
+
 	return nil
+}
+
+func (cfg *config) prepareDirs(ctx context.Context) error {
+	// Create the top-level data directory.
+	if err := os.MkdirAll(cfg.dataDir, 0755); err != nil {
+		return errors.Wrapf(err, "mkdir")
+	}
+
+	// Create the directory for this run.
+	thisDataDir := cfg.dataDir
+	if cfg.subDir != "" && cfg.subDir != "." {
+		thisDataDir = filepath.Join(cfg.dataDir, cfg.subDir)
+		if err := os.Mkdir(thisDataDir, 0755); err != nil {
+			return errors.Wrapf(err, "mkdir")
+		}
+	}
+
+	// Rewrite the configuration.
+	alias := filepath.Join(cfg.dataDir, "latest")
+	cfg.dataDir = thisDataDir
+	for _, a := range cfg.actors {
+		a.workDir = cfg.actorArtifactDirName(a.name)
+		if err := os.MkdirAll(a.workDir, 0755); err != nil {
+			return errors.Wrapf(err, "mkdir")
+		}
+	}
+	cfg.subDir = "."
+
+	// Try to create a helper symlink that always points to the
+	// latest generated directory. An error is acceptable when
+	// creating the symlink, but not removing the current one.
+	if err := os.Remove(alias); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	if err := os.Symlink(thisDataDir, alias); err != nil {
+		log.Warningf(ctx, "unable to create 'latest' symlink: %v", err)
+	}
+
+	return nil
+}
+
+func (cfg *config) artifactsDir() string {
+	return filepath.Join(cfg.dataDir, "artifacts")
+}
+
+func (cfg *config) actorArtifactDirName(actorName string) string {
+	return filepath.Join(cfg.artifactsDir(), actorName)
 }
 
 func (cfg *config) parseDefines() error {
@@ -275,7 +332,7 @@ func (cfg *config) printCfg(w io.Writer, skipComments, skipVer, annot bool) {
 			}
 			fmt.Fprintln(w)
 			if !skipComments {
-				fmt.Fprintf(w, "  # %s plays from working directory %s\n", fan(a.name), a.workDir)
+				fmt.Fprintf(w, "  # %s plays from working directory %s\n", fan(a.name), filepath.Join(cfg.dataDir, cfg.subDir, a.workDir))
 			}
 			for _, sig := range a.sinkNames {
 				sink := a.sinks[sig]

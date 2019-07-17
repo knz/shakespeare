@@ -57,6 +57,7 @@ func TestRun(t *testing.T) {
 				}
 			}()
 			cfg.dataDir = workDir
+			cfg.subDir = "."
 
 			// Override the shell, to make error messages deterministic.
 			cfg.shellPath = "bash"

@@ -3,7 +3,6 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 	"reflect"
 	"regexp"
 	"sort"
@@ -651,7 +650,7 @@ func (cfg *config) parseActors(line string) error {
 				name:      actorName,
 				role:      r,
 				extraEnv:  extraEnv,
-				workDir:   filepath.Join(cfg.dataDir, "artifacts", actorName),
+				workDir:   cfg.actorArtifactDirName(actorName),
 				sinks:     make(map[string]*sink),
 			}
 			cfg.actors[actorName] = &act

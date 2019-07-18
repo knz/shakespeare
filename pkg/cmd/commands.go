@@ -64,7 +64,7 @@ func (a *actor) runActorCommandWithConsumer(
 	defer killCmd()
 	cmd := a.makeShCmd(execCtx, true /*bindCtx*/, pCmd)
 
-	log.Infof(ctx, "running: %s", strings.Join(cmd.Args, " "))
+	log.Infof(ctx, "running: %s (workdir %s)", strings.Join(cmd.Args, " "), cmd.Dir)
 
 	outstream, err := cmd.StderrPipe()
 	if err != nil {

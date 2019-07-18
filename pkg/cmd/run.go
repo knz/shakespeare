@@ -32,17 +32,6 @@ func Run() (err error) {
 		return errors.WithDetail(err, "(while parsing the command line)")
 	}
 
-	// Initialize the target directories. This is needed before logging
-	// starts.
-	if err := cfg.prepareDirs(ctx); err != nil {
-		return err
-	}
-
-	// Initialize the logging sub-system.
-	if err = cfg.setupLogging(ctx); err != nil {
-		return errors.WithDetail(err, "(while initializing the logging subsystem)")
-	}
-
 	// Read the configuration(s).
 	files := []string{"-"}
 	if pflag.NArg() < 1 {
@@ -130,6 +119,16 @@ func Run() (err error) {
 }
 
 func (cfg *config) run(ctx context.Context) (err error) {
+	// Prepare the directories. This is needed before logging starts.
+	if err := cfg.prepareDirs(ctx); err != nil {
+		return errors.WithDetail(err, "(while setting up directories)")
+	}
+
+	// Initialize the logging sub-system.
+	if err = cfg.setupLogging(ctx); err != nil {
+		return errors.WithDetail(err, "(while initializing the logging subsystem)")
+	}
+
 	// After this point, if a panic occurs on the main thread it will be hidden
 	// when logging to file is enabled and no log messages are configured
 	// to appear on stderr.
@@ -358,6 +357,11 @@ func (cfg *config) getLogDir() string {
 }
 
 func (cfg *config) setupLogging(ctx context.Context) error {
+	if cfg.skipLoggingInit {
+		// Skip log init in tests.
+		return nil
+	}
+
 	dirFlag := pflag.Lookup(logflags.LogDirName)
 	if !log.DirSet() && !dirFlag.Changed {
 		// If the log directory was not specified with -log-dir, override it.

@@ -54,6 +54,8 @@ type config struct {
 	keepArtifacts bool
 	// Upload to this URL (gs, s3 etc) upon completion, if defined.
 	uploadURL string
+	// Skip initializing the logging subsystem. Used in tests.
+	skipLoggingInit bool
 
 	// The list of directory to search for includes.
 	includePath []string
@@ -188,6 +190,7 @@ func (cfg *config) prepareDirs(ctx context.Context) error {
 	cfg.dataDir = thisDataDir
 	for _, a := range cfg.actors {
 		a.workDir = cfg.actorArtifactDirName(a.name)
+		fmt.Fprintf(os.Stderr, "WOO %s", a.workDir)
 		if err := os.MkdirAll(a.workDir, 0755); err != nil {
 			return errors.Wrapf(err, "mkdir")
 		}
@@ -335,7 +338,7 @@ func (cfg *config) printCfg(w io.Writer, skipComments, skipVer, annot bool) {
 			}
 			fmt.Fprintln(w)
 			if !skipComments {
-				fmt.Fprintf(w, "  # %s plays from working directory %s\n", fan(a.name), filepath.Join(cfg.dataDir, cfg.subDir, a.workDir))
+				fmt.Fprintf(w, "  # %s plays from working directory %s\n", fan(a.name), cfg.actorArtifactDirName(a.name))
 			}
 			for _, sig := range a.sinkNames {
 				sink := a.sinks[sig]

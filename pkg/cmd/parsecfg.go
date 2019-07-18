@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"os"
 	"reflect"
 	"regexp"
 	"sort"
@@ -13,7 +14,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/cockroachdb/errors"
-	"github.com/knz/shakespeare/pkg/crdb/log"
 )
 
 // parseCfg parses a configuration from the given buffered input.
@@ -257,7 +257,7 @@ func (cfg *config) parseAudience(line string) error {
 			return err
 		}
 		if len(foundActors) == 0 {
-			log.Warningf(context.TODO(), "there is no actor playing role %q for audience %q to watch", r.name, aName)
+			fmt.Fprintf(os.Stderr, "warning: there is no actor playing role %q for audience %q to watch", r.name, aName)
 			return nil
 		}
 		a := cfg.addOrGetAudienceMember(aName)
@@ -866,7 +866,7 @@ func (cfg *config) parseScript(line string) error {
 		}
 		cfg.storyLine = combineStoryLines(cfg.storyLine, st)
 		cfg.updateRepeat()
-		log.Infof(context.Background(), "combined storylines: %s", strings.Join(cfg.storyLine, " "))
+		// log.Infof(context.Background(), "combined storylines: %s", strings.Join(cfg.storyLine, " "))
 	} else if p := pw(editRe); p.m(line) {
 		editcmd := p.get("editcmd")
 		if len(editcmd) < 4 || editcmd[0] != 's' {
@@ -919,7 +919,7 @@ func (cfg *config) parseScript(line string) error {
 			return err
 		}
 		if len(foundActors) == 0 {
-			log.Warningf(context.TODO(), "there is no actor playing role %q to play this script: %s", r.name, line)
+			fmt.Fprintf(os.Stderr, "warning: there is no actor playing role %q to play this script: %s", r.name, line)
 			return nil
 		}
 

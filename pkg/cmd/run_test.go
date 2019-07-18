@@ -69,11 +69,8 @@ func TestRun(t *testing.T) {
 				t.Fatalf("compile error: %s\n", renderError(err))
 			}
 
-			// Prepare the output dirs.
-			if err := cfg.prepareDirs(context.TODO()); err != nil {
-				t.Fatal(err)
-			}
-
+			// Disable logging.
+			cfg.skipLoggingInit = true
 			// Disable plotting.
 			cfg.skipPlot = true
 			// Disable non-determistic narration output.

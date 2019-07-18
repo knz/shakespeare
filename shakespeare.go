@@ -9,6 +9,7 @@ import (
 )
 
 //go:generate sh vergen.sh
+//go:generate sh mkreport.sh
 
 func main() {
 	if err := cmd.Run(); err != nil {

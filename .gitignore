@@ -12,6 +12,7 @@
 *.out
 
 pkg/cmd/version.go
+pkg/cmd/report_html.go
 
 *.csv
 *.pdf

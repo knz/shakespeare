@@ -52,9 +52,12 @@ pre{overflow:auto;}
 .re{color:green;}
 .mod{font-style:italic;}
 .centersvg{margin-left: auto; margin-right: auto; max-width: 800px;}
+#intro{position: absolute;top: 50%;left: 50%;margin-right: -50%;transform: translate(-50%, -50%);}
   </style>
 </head>
 <body>
+<div id=intro><h1>Please wait...</p></div>
+<div id=main style="display:none">
  <h1 id=ttitle>A tale of <span id=title>surprise</span></h1>
  <h3 id=tauthors>Written by <span id=authors>the collective</span></h3>
 
@@ -97,6 +100,7 @@ pre{overflow:auto;}
  <p class=divider></p>
  <p><em><small>A report produced by <a href='https://github.com/knz/shakespeare'>Shakespeare</a>,
  <span id=version>unknown version</span></small></em></p>
+</div>
 
 <script type="text/javascript">
 $(function() {
@@ -188,7 +192,8 @@ $(function() {
        window.open(data.node.a_attr.href, "_new");
      }
   });
-
+  $("#intro").hide(100);
+  $("#main").show();
  });
 </script>
 </body>

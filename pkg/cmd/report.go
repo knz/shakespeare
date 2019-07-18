@@ -55,7 +55,7 @@ pre{overflow:auto;}
  <link rel="stylesheet" href="https://shakespeare.thaumogen.net/report.css" />
 </head>
 <body>
-<div class=center id=intro><h1>Please wait...</p></div>
+<div class=center id=intro><h1 class=cursive>Please wait...</h1></div>
 <div id=main style="display:none">
  <h1 id=ttitle>A tale of <span id=title>surprise</span></h1>
  <h3 id=tauthors>Written by <span id=authors>the collective</span></h3>

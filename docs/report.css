@@ -1,7 +1,7 @@
-@import url('https://fonts.googleapis.com/css?family=Satisfy&display=swap');
+@import url('https://fonts.googleapis.com/css?family=Great+Vibes&display=swap');
 @import url('https://fonts.googleapis.com/css?family=Nova+Mona&display=swap');
 h1,h3,p,ul#refs{text-align: center;}
-p,ul#refs,.cursive{font-family:'Satisfy',cursive;font-size: large;}
+p,ul#refs,.cursive{font-family:'Great Vibes',cursive;font-size: large;}
 #artifacts,pre,code{font-family: 'Nova Mono',monospace;font-size:small;}
 pre{overflow:auto;}
 .divider{font-family:serif; margin-top:3em; margin-bottom:3em;}

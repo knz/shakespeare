@@ -19,19 +19,23 @@ func (ap *app) plot(ctx context.Context, result *Result) error {
 	ctx = logtags.AddTag(ctx, "plotter", nil)
 	log.Info(ctx, "generating scripts")
 
-	numPlots, err := ap.subPlots(ctx, "plot.gp", result.MinTime, result.MaxTime)
+	if err := os.MkdirAll(filepath.Join(ap.cfg.dataDir, "plots"), 0755); err != nil {
+		return err
+	}
+
+	numPlots, err := ap.subPlots(ctx, "plots/plot.gp", result.MinTime, result.MaxTime)
 	if err != nil {
 		return err
 	}
 
 	if result.Repeat != nil {
-		if _, err := ap.subPlots(ctx, "lastplot.gp", result.Repeat.StartTime, result.MaxTime); err != nil {
+		if _, err := ap.subPlots(ctx, "plots/lastplot.gp", result.Repeat.StartTime, result.MaxTime); err != nil {
 			return err
 		}
 	}
 
 	if err := func() error {
-		fName := filepath.Join(ap.cfg.dataDir, "runme.gp")
+		fName := filepath.Join(ap.cfg.dataDir, "plots/runme.gp")
 		f, err := os.Create(fName)
 		if err != nil {
 			return err
@@ -141,7 +145,7 @@ func (ap *app) subPlots(
 				continue
 			}
 			actName := varName.actorName
-			fName := "csv/" + csvFileName(a.name, actName, varName.sigName)
+			fName := "../csv/" + csvFileName(a.name, actName, varName.sigName)
 			pl := plot{
 				fName: fName,
 				title: fmt.Sprintf("%s %s", actName, varName.sigName),
@@ -166,7 +170,7 @@ func (ap *app) subPlots(
 
 		// Find the timeserie(s) to plot for the auditor.
 		if am, ok := ap.cfg.audience[a.name]; ok && am.auditor.hasData {
-			fName := fmt.Sprintf("csv/audit-%s.csv", a.name)
+			fName := fmt.Sprintf("../csv/audit-%s.csv", a.name)
 
 			ap.narrate(I, "📈", "observer %s found audit data: %s",
 				a.name, filepath.Join(ap.cfg.dataDir, fName))
@@ -262,12 +266,12 @@ faces[4] = ""
 				if !a.hasData {
 					continue
 				}
-				fmt.Fprintf(f, "  'csv/%s.csv' using 1:(%d):1:($1+$2):(%d-0.25):(%d+0.25):(65536*($4 > 0 ? 255 : 0)+256*($4 > 0 ? 0 : 255)) "+
+				fmt.Fprintf(f, "  '../csv/%s.csv' using 1:(%d):1:($1+$2):(%d-0.25):(%d+0.25):(65536*($4 > 0 ? 255 : 0)+256*($4 > 0 ? 0 : 255)) "+
 					"with boxxyerror notitle fs solid 1.0 fc rgbcolor variable, \\\n",
 					actorName, plotNum, plotNum, plotNum)
-				fmt.Fprintf(f, "  'csv/%s.csv' using 1:(%d+0.25):3 with labels t '%s events (at y=%d)', \\\n",
+				fmt.Fprintf(f, "  '../csv/%s.csv' using 1:(%d+0.25):3 with labels t '%s events (at y=%d)', \\\n",
 					actorName, plotNum, actorName, plotNum)
-				fmt.Fprintf(f, "  'csv/%s.csv' using ($1+$2):(%d-0.25):5 with labels hypertext point pt 6 ps .5 notitle",
+				fmt.Fprintf(f, "  '../csv/%s.csv' using ($1+$2):(%d-0.25):5 with labels hypertext point pt 6 ps .5 notitle",
 					actorName, plotNum)
 				if plotNum < numActiveActors {
 					fmt.Fprintf(f, ", \\")
@@ -341,19 +345,19 @@ faces[4] = ""
 
 func (ap *app) maybeRunGnuplot(ctx context.Context, hasRepeat bool) {
 	cmd := exec.CommandContext(ctx, ap.cfg.gnuplotPath, "runme.gp")
-	cmd.Dir = ap.cfg.dataDir
+	cmd.Dir = filepath.Join(ap.cfg.dataDir, "plots")
 	res, err := cmd.CombinedOutput()
 	log.Infof(ctx, "gnuplot:\n%s\n-- %v / %s", string(res), err, cmd.ProcessState)
 	if err != nil {
-		ap.narrate(W, "⚠️", "you will need to run gnuplot manually: cd %s; %s runme.gp", ap.cfg.dataDir, ap.cfg.gnuplotPath)
+		ap.narrate(W, "⚠️", "you will need to run gnuplot manually: cd %s/plots; %s runme.gp", ap.cfg.dataDir, ap.cfg.gnuplotPath)
 	} else {
-		ap.narrate(I, "📄", "SVG plot: %s", filepath.Join(ap.cfg.dataDir, "plot.svg"))
-		ap.narrate(I, "📄", "PDF plot: %s", filepath.Join(ap.cfg.dataDir, "plot.pdf"))
-		ap.narrate(I, "📄", "ANSI plot: %s", filepath.Join(ap.cfg.dataDir, "plot.txt"))
+		ap.narrate(I, "📄", "SVG plot: %s", filepath.Join(ap.cfg.dataDir, "plots", "plot.svg"))
+		ap.narrate(I, "📄", "PDF plot: %s", filepath.Join(ap.cfg.dataDir, "plots", "plot.pdf"))
+		ap.narrate(I, "📄", "ANSI plot: %s", filepath.Join(ap.cfg.dataDir, "plots", "plot.txt"))
 		if hasRepeat {
-			ap.narrate(I, "📄", "SVG plot: %s", filepath.Join(ap.cfg.dataDir, "lastplot.svg"))
-			ap.narrate(I, "📄", "PDF plot: %s", filepath.Join(ap.cfg.dataDir, "lastplot.pdf"))
-			ap.narrate(I, "📄", "ANSI plot: %s", filepath.Join(ap.cfg.dataDir, "lastplot.txt"))
+			ap.narrate(I, "📄", "SVG plot: %s", filepath.Join(ap.cfg.dataDir, "plots", "lastplot.svg"))
+			ap.narrate(I, "📄", "PDF plot: %s", filepath.Join(ap.cfg.dataDir, "plots", "lastplot.pdf"))
+			ap.narrate(I, "📄", "ANSI plot: %s", filepath.Join(ap.cfg.dataDir, "plots", "lastplot.txt"))
 		}
 	}
 }

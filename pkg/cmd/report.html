@@ -112,21 +112,11 @@
 			  extraDur += " iterations of acts " + r.FirstRepeatedAct;
 			  extraDur += "-" + r.LastRepeatedAct;
 		  }
-		  for (var i in result.Artifacts) {
-			  var artifact = result.Artifacts[i];
-			  if (artifact.text == "plot.svg") {
-				  $("<embed/>", { src: artifact.text }).appendTo("#mainsvg");
-			  }
-		  }
+		  $("<embed/>", { src: "plots/plot.svg" }).appendTo("#mainsvg");
 		  if (result.Repeat != null) {
 			  var r = result.Repeat;
 			  $("#rduration").text(r.Duration.toFixed(2) + "s");
-  			  for (var i in r.Artifacts) {
-	  			  var artifact = r.Artifacts[i];
-				  if (artifact.text == "lastplot.svg") {
-					  $("<embed/>", { src: artifact.text }).appendTo("#repeatsvg");
-				  }
-			  }
+			  $("<embed/>", { src: "plots/lastplot.svg" }).appendTo("#repeatsvg");
 		  } else {
 			  $("#mayberepeat").hide();
 		  }

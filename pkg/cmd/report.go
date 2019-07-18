@@ -32,8 +32,8 @@ const reportHTML = `<!DOCTYPE html>
  <script src="result.js" type="text/javascript"></script>
  <style type='text/css'>
 h1,h3,p,ul#refs{text-align: center;}
-p,ul#refs{font-family:'Pinyon Script',cursive;font-size: large;}
-#artifacts,pre,code{font-family: 'Nova Mono',monospace;font-size:small;}
+p,ul#refs{font-family:cursive;font-size: large;}
+#artifacts,pre,code{font-family:monospace;font-size:small;}
 pre{overflow:auto;}
 .divider{font-family:serif; margin-top:3em; margin-bottom:3em;}
 .divider:before{content:"⊱ ────────────────── {.⋅ ♫ ⋅.} ───────────────── ⊰";}

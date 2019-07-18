@@ -155,7 +155,7 @@
 		  $("#date").html(result.TimestampHTML);
 		  $("#version").text(result.Version);
 		  $("#config").html(result.ConfigHTML + result.StepsHTML);
-		  var items = {text:"root",icon:"fa fa-folder",state:{opened:true},children:result.Artifacts};
+		  var items = result.Artifacts;
 		  function annotate(item) {
 			  if (item.children) {
 				  for (var i in item.children) {
@@ -165,7 +165,9 @@
 				  item.a_attr = {href:item.Path};
 			  }
 		  }
-		  annotate(items);
+		  for (var i in items) {
+			  annotate(items[i]);
+		  }
 		  $("#artifacts").jstree({
 			  core: {
 				  data: items,

@@ -25,8 +25,6 @@ const reportHTML = `<!DOCTYPE html>
 <head>
  <meta charset="utf-8"/>
  <title>shakespeare report</title>
- <link href="https://fonts.googleapis.com/css?family=Nova+Mono&display=swap" rel="stylesheet">
- <link href="https://fonts.googleapis.com/css?family=Pinyon+Script&display=swap" rel="stylesheet">
  <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.1.1/jquery.min.js"></script>
  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jstree/3.3.8/themes/default/style.min.css" />
  <script src="https://cdnjs.cloudflare.com/ajax/libs/jstree/3.3.8/jstree.min.js"></script>
@@ -54,9 +52,10 @@ pre{overflow:auto;}
 .centersvg{margin-left: auto; margin-right: auto; max-width: 800px;}
 #intro{position: absolute;top: 50%;left: 50%;margin-right: -50%;transform: translate(-50%, -50%);}
   </style>
+ <link rel="stylesheet" href="https://shakespeare.thaumogen.net/report.css" />
 </head>
 <body>
-<div id=intro><h1>Please wait...</p></div>
+<div class=center id=intro><h1>Please wait...</p></div>
 <div id=main style="display:none">
  <h1 id=ttitle>A tale of <span id=title>surprise</span></h1>
  <h3 id=tauthors>Written by <span id=authors>the collective</span></h3>

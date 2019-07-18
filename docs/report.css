@@ -1,0 +1,22 @@
+@import url('https://fonts.googleapis.com/css?family=Satisfy&display=swap');
+@import url('https://fonts.googleapis.com/css?family=Nova+Mona&display=swap');
+h1,h3,p,ul#refs{text-align: center;}
+p,ul#refs{font-family:'Satisfy',cursive;font-size: large;}
+#artifacts,pre,code{font-family: 'Nova Mono',monospace;font-size:small;}
+pre{overflow:auto;}
+.divider{font-family:serif; margin-top:3em; margin-bottom:3em;}
+.divider:before{content:"⊱ ────────────────── {.⋅ ♫ ⋅.} ───────────────── ⊰";}
+.result{font-weight:bold;}
+.good{color:green;}
+.bad{color:blue;}
+.kw{font-weight:bold;}
+.rn{color:blue;font-style:italic;}
+.acn{color:blue;font-style:italic;font-weight:bold;}
+.sn{color:darkgreen;font-style:italic;}
+.an{color:purple;font-style:italic;}
+.ann{color:orange;font-style:italic;}
+.sh{color:#444;}
+.re{color:green;}
+.mod{font-style:italic;}
+.centersvg{margin-left: auto; margin-right: auto; max-width: 800px;}
+.center{position: absolute;top: 50%;left: 50%;margin-right: -50%;transform: translate(-50%, -50%);}

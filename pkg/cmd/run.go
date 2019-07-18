@@ -163,6 +163,9 @@ func (cfg *config) run(ctx context.Context) (err error) {
 		// Upload produced files if completing without being interrupted
 		// by a signal (e.g. Ctrl+C).
 		if err == nil || !isError(err, errInterrupted) {
+			// Ensure logs are flushed prior to uploading.
+			log.Flush()
+
 			err = combineErrors(err, ap.tryUpload(ctx))
 		}
 	}()

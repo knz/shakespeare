@@ -1,5 +1,5 @@
 @import url('https://fonts.googleapis.com/css?family=Satisfy&display=swap');
-@import url('https://fonts.googleapis.com/css?family=Nova+Mona&display=swap');
+@import url('https://fonts.googleapis.com/css?family=Nova+Mono&display=swap');
 h1,h3,p,ul#refs{text-align: center;}
 p,ul#refs,.cursive{font-family:'Satisfy',cursive;font-size: large;}
 #artifacts,pre,code{font-family: 'Nova Mono',monospace;font-size:small;}

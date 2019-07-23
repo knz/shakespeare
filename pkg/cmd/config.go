@@ -56,6 +56,8 @@ type config struct {
 	uploadURL string
 	// Skip initializing the logging subsystem. Used in tests.
 	skipLoggingInit bool
+	// Remove the results directory upon terminating if with no error.
+	removeAll bool
 
 	// The list of directory to search for includes.
 	includePath []string
@@ -123,8 +125,9 @@ type config struct {
 
 func (cfg *config) initArgs(ctx context.Context) error {
 	pflag.StringVarP(&cfg.dataDir, "output-dir", "o", ".", "output data directory")
-	pflag.StringVar(&cfg.uploadURL, "upload-url", "", "upload results to this URL upon completion of a play (s3://, gs://, scp://)")
-	pflag.BoolVarP(&cfg.keepArtifacts, "keep-artifacts", "k", false, "keep artifacts sub-directories at end of play upon no foul")
+	pflag.StringVar(&cfg.uploadURL, "upload-url", "", "upload results to this URL upon completion of a play (s3://, gs://, scp://) - implies --clear")
+	pflag.BoolVar(&cfg.removeAll, "clear", false, "delete result directory upon no foul (after upload if used with --upload-url)")
+	pflag.BoolVarP(&cfg.keepArtifacts, "keep-artifacts", "k", false, "keep artifacts sub-directories at end of play upon no foul (before upload if used with --upload-url)")
 	pflag.BoolVarP(&cfg.doPrint, "print-cfg", "p", false, "print out the parsed configuration")
 	pflag.BoolVarP(&cfg.parseOnly, "dry-run", "n", false, "do not execute anything, just check the configuration")
 	pflag.BoolVarP(&cfg.quiet, "quiet", "q", false, "do not emit progress messages")
@@ -166,6 +169,11 @@ func (cfg *config) initArgs(ctx context.Context) error {
 	// Create a sub-directory name. The directory itself is created
 	// later in prepareDirs().
 	cfg.subDir = timeutil.Now().Format("20060102150405")
+
+	// If uploading and --clear wasn't set, imply --clear.
+	if pflag.Lookup("upload-url").Changed && !pflag.Lookup("clear").Changed {
+		cfg.removeAll = true
+	}
 
 	return nil
 }

@@ -248,10 +248,19 @@ func (ap *app) showArtifactDirRec(basePrefix string, r []Artifact) {
 		prefix := basePrefix
 		subPrefix := basePrefix
 		if i < len(r)-1 {
-			prefix += "├"
-			subPrefix += "│"
+			if ap.cfg.asciiOnly {
+				prefix += "+"
+				subPrefix += "|"
+			} else {
+				prefix += "├"
+				subPrefix += "│"
+			}
 		} else {
-			prefix += "└"
+			if ap.cfg.asciiOnly {
+				prefix += "`"
+			} else {
+				prefix += "└"
+			}
 			subPrefix += " "
 		}
 		prefix += "─"

@@ -150,13 +150,17 @@ func (cfg *config) run(ctx context.Context) (err error) {
 		if err != nil {
 			ap.narrate(E, "😱", "an error has occurred!")
 		} else {
+			if cfg.removeAll {
+				ap.narrate(I, "🧹", "removing data directory: %s", cfg.dataDir)
+				err = os.RemoveAll(cfg.dataDir)
+			}
 			ap.narrate(I, "😘", "good day! come again soon.")
 		}
 	}()
 
 	defer func() {
 		// No error - remove artifacts unless -k was specified.
-		if err == nil && !cfg.keepArtifacts {
+		if err == nil && !cfg.removeAll && !cfg.keepArtifacts {
 			ap.narrate(I, "🧹", "no foul, removing artifacts: %s", cfg.artifactsDir())
 			err = os.RemoveAll(cfg.artifactsDir())
 		}
@@ -167,7 +171,8 @@ func (cfg *config) run(ctx context.Context) (err error) {
 			// Ensure logs are flushed prior to uploading.
 			log.Flush()
 
-			err = combineErrors(err, ap.tryUpload(ctx))
+			uploadErr := ap.tryUpload(ctx)
+			err = combineErrors(err, uploadErr)
 		}
 	}()
 

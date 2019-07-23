@@ -35,23 +35,24 @@ as if they appeared in a `script` section.
 
 ### Command line parameters
 
-| Parameter                      | Default              | Description                                                                                                                                        |
-|--------------------------------|----------------------|----------------------------------------------------------------------------------------------------------------------------------------------------|
-| `-D`, `--define`               | (none)               | [Preprocessing](#Configuration-preprocessing) variable definitions.                                                                                |
-| `-I`, `--search-dir`           | .                    | Directory to search for included configurations.                                                                                                   |
-| `-n`, `--dry-run`              | false                | Stop after parsing the configuration and compiling the steps (do not actually execute the script).                                                 |
-| `-o`, `--output-dir`           | `.`                  | Directory where to generate artifacts, output data files and the plot script.                                                                      |
-| `-k`, `--keep-artifats`        | false                | If set, keep the `artifacts` sub-directory at the end of the play if there was no foul (the artifacts are kept in any case if a foul is detected). |
-| `-p`, `--print-cfg`            | false                | Print configuration after parsing and compilation.                                                                                                 |
-| `-q`, `--quiet`                | false                | Run quietly.                                                                                                                                       |
-| `-r`, `--extra-interpretation` | (none)               | Additional lines of [`interpretation` configuration](#Interpreation).                                                                              |
-| `-s`, `--extra-script`         | (none)               | Additional lines of [`script` configuration](#Script-configuration).                                                                               |
-| `-S`, `--stop-at-first-foul`   | false                | Stop the play as soon as [a foul was detected](#Interpretation-of-results).                                                                        |
-| `--upload-url`                 | (none)               | [Upload](#Uploading-results) the [result files](#Result-files) to the provided URL.                                                                            |
-| `--ascii-only`                 | false                | Avoid printing out special unicode characters.                                                                                                     |
-| `--version`                    | false                | Show version number and exit.                                                                                                                      |
-| `--log-dir`                    | `logs` in output dir | If non-empty, copy the logs to that directory.                                                                                                     |
-| `--logtostderr`                | NONE                 | Copy every log message at or above this threshold to stderr (choices: INFO, WARNING, ERROR, FATAL).                                                |
+| Parameter                      | Default              | Description                                                                                                                                                       |
+|--------------------------------|----------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `-D`, `--define`               | (none)               | [Preprocessing](#Configuration-preprocessing) variable definitions.                                                                                               |
+| `-I`, `--search-dir`           | .                    | Directory to search for included configurations.                                                                                                                  |
+| `-n`, `--dry-run`              | false                | Stop after parsing the configuration and compiling the steps (do not actually execute the script).                                                                |
+| `-o`, `--output-dir`           | `.`                  | Directory where to generate artifacts, output data files and the plot script.                                                                                     |
+| `-k`, `--keep-artifats`        | false                | If set, keep the `artifacts` sub-directory at the end of the play, before upload, if there was no foul. The artifacts are kept in any case if a foul is detected. |
+| `-p`, `--print-cfg`            | false                | Print configuration after parsing and compilation.                                                                                                                |
+| `-q`, `--quiet`                | false                | Run quietly.                                                                                                                                                      |
+| `-r`, `--extra-interpretation` | (none)               | Additional lines of [`interpretation` configuration](#Interpreation).                                                                                             |
+| `-s`, `--extra-script`         | (none)               | Additional lines of [`script` configuration](#Script-configuration).                                                                                              |
+| `-S`, `--stop-at-first-foul`   | false                | Stop the play as soon as [a foul was detected](#Interpretation-of-results).                                                                                       |
+| `--upload-url`                 | (none)               | [Upload](#Uploading-results) the [result files](#Result-files) to the provided URL. Implies `--clear`.                                                            |
+| `--clear`                      | false                | Remove the [result files](#Result-files) at the end of the play (after upload) if there was no foul.                                                              |
+| `--ascii-only`                 | false                | Avoid printing out special unicode characters.                                                                                                                    |
+| `--version`                    | false                | Show version number and exit.                                                                                                                                     |
+| `--log-dir`                    | `logs` in output dir | If non-empty, copy the logs to that directory.                                                                                                                    |
+| `--logtostderr`                | NONE                 | Copy every log message at or above this threshold to stderr (choices: INFO, WARNING, ERROR, FATAL).                                                               |
 
 ### Environment variables
 
@@ -90,13 +91,15 @@ sub-directory.
 
 At the end of the play:
 
-1. plots are produced from the CSV files.
+1. plots are produced from the CSV files in a `plots` sub-directory.
 2. a summary of results is produced in `result.js`.
 3. the report template page is written to `index.html`.
 4. unless a foul was detected or `-k` is specified, `artifacts` is erased.
 5. if `--upload-url` was specified, the contents of the working
    directory (including the results from steps 1-4 above) are uploaded
    to the specified URL. [See below for details](#Uploading-results).
+6. if `--clear` or `--upload-url` was specified and no foul was
+   detected (and no upload error), the working directory is erased.
 
 Example result tree after a test completion:
 
@@ -112,13 +115,14 @@ Example result tree after a test completion:
 │   ├── bob.elmstreet.traffic.csv
 │   ├── elmstreet.csv
 │   └── theporch.csv
+├── plots
+│   ├─ plot.gp
+│   ├─ plot.pdf
+│   ├─ plot.svg
+│   ├─ plot.txt
+│   └─ runme.gp
 ├── index.html
-├── plot.gp
-├── plot.pdf
-├── plot.svg
-├── plot.txt
-├── result.js
-└── runme.gp
+└── result.js
 ```
 
 ### Uploading results

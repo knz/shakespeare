@@ -57,7 +57,7 @@ func TestRun(t *testing.T) {
 				}
 			}()
 			cfg.dataDir = workDir
-			cfg.subDir = "."
+			cfg.subDir = "results"
 
 			// Override the shell, to make error messages deterministic.
 			cfg.shellPath = "bash"
@@ -100,7 +100,7 @@ func TestRun(t *testing.T) {
 				}
 			}
 
-			return out.String()
+			return strings.ReplaceAll(out.String(), workDir, "...")
 		})
 	})
 }

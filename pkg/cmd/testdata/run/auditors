@@ -14,6 +14,13 @@ alice starts auditing
 🙈alice stops auditing
 👏 the play is terminating
 🧹 the stage has been cleared
+📁 result files in .../results
+  └─ csv
+     ├─ alice..mood.csv
+     ├─ audit-alice.csv
+     ├─ audit-bob.csv
+     └─ bob..mood.csv
+🧹 no foul, removing artifacts: .../results/artifacts
 😘 good day! come again soon.
 
 # ensure an error is reported if either fails
@@ -34,6 +41,12 @@ alice starts auditing
 🙈alice stops auditing
 👏 the play is terminating
 🧹 the stage has been cleared
+📁 result files in .../results
+  └─ csv
+     ├─ alice..t.csv
+     ├─ audit-alice.csv
+     ├─ audit-bob.csv
+     └─ bob..mood.csv
 😱 an error has occurred!
 run error: alice was disappointed, fouling the play
 --
@@ -60,6 +73,12 @@ alice starts auditing
 🙈alice stops auditing
 👏 the play is terminating
 🧹 the stage has been cleared
+📁 result files in .../results
+  └─ csv
+     ├─ alice..t.csv
+     ├─ audit-alice.csv
+     ├─ audit-bob.csv
+     └─ bob..t.csv
 😱 an error has occurred!
 run error: bob and alice were disappointed, fouling the play
 --
@@ -86,6 +105,13 @@ alice starts auditing
 🙈alice stops auditing
 👏 the play is terminating
 🧹 the stage has been cleared
+📁 result files in .../results
+  └─ csv
+     ├─ alice..mood.csv
+     ├─ audit-alice.csv
+     ├─ audit-bob.csv
+     └─ bob..t.csv
+🧹 no foul, removing artifacts: .../results/artifacts
 😘 good day! come again soon.
 
 # ensure that an auditor being ignored still leaves another auditor to cause an error
@@ -111,6 +137,12 @@ alice starts auditing
 🙈alice stops auditing
 👏 the play is terminating
 🧹 the stage has been cleared
+📁 result files in .../results
+  └─ csv
+     ├─ alice..t.csv
+     ├─ audit-alice.csv
+     ├─ audit-bob.csv
+     └─ bob..t.csv
 😱 an error has occurred!
 run error: alice was disappointed, fouling the play
 --
@@ -137,6 +169,13 @@ alice starts auditing
 🙈alice stops auditing
 👏 the play is terminating
 🧹 the stage has been cleared
+📁 result files in .../results
+  └─ csv
+     ├─ alice..mood.csv
+     ├─ audit-alice.csv
+     ├─ audit-bob.csv
+     └─ bob..t.csv
+🧹 no foul, removing artifacts: .../results/artifacts
 😘 good day! come again soon.
 
 # it's an error if disappointment was required but was not found
@@ -158,6 +197,12 @@ alice starts auditing
 🙈alice stops auditing
 👏 the play is terminating
 🧹 the stage has been cleared
+📁 result files in .../results
+  └─ csv
+     ├─ alice..mood.csv
+     ├─ audit-alice.csv
+     ├─ audit-bob.csv
+     └─ bob..mood.csv
 😱 an error has occurred!
 run error: bob was never disappointed, fouling the play
 --

@@ -22,6 +22,10 @@ end
 🥁     test: b!
 👏 the play is terminating
 🧹 the stage has been cleared
+📁 result files in .../results
+  └─ csv
+     └─ test.csv
+🧹 no foul, removing artifacts: .../results/artifacts
 😘 good day! come again soon.
 
 
@@ -48,6 +52,9 @@ end
 😞 action test:a failed (see below for details)
 👏 the play is terminating
 🧹 the stage has been cleared
+📁 result files in .../results
+  └─ csv
+     └─ test.csv
 😱 an error has occurred!
 run error: prompt: action test:a failed: exit status 123
 + exit 123
@@ -78,4 +85,8 @@ end
 🤨 action test:a failed (see log for details)
 👏 the play is terminating
 🧹 the stage has been cleared
+📁 result files in .../results
+  └─ csv
+     └─ test.csv
+🧹 no foul, removing artifacts: .../results/artifacts
 😘 good day! come again soon.

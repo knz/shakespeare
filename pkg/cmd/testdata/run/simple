@@ -21,6 +21,10 @@ end
 🥁     test: a!
 👏 the play is terminating
 🧹 the stage has been cleared
+📁 result files in .../results
+  └─ csv
+     └─ test.csv
+🧹 no foul, removing artifacts: .../results/artifacts
 😘 good day! come again soon.
 
 # this test ensures everything is fine when
@@ -38,6 +42,7 @@ end
 🎶 the play is starting; expected duration: 0s
 👏 the play is terminating
 🧹 the stage has been cleared
+🧹 no foul, removing artifacts: .../results/artifacts
 😘 good day! come again soon.
 
 # this test ensures everything is fine when
@@ -55,4 +60,5 @@ end
 🎊     (mood red)
 👏 the play is terminating
 🧹 the stage has been cleared
+🧹 no foul, removing artifacts: .../results/artifacts
 😘 good day! come again soon.

@@ -34,7 +34,7 @@ func TestFormatError(t *testing.T) {
     -- details follow
     (1) error with user hint: woo
       - error with attached stack trace:
-        github.com/knz/shakespeare/pkg/cmd.TestFormatError
+        <path>
         <tab><path>
         testing.tRunner
         <tab><path>
@@ -42,7 +42,7 @@ func TestFormatError(t *testing.T) {
         <tab><path>
       - waa
     (2) error with attached stack trace:
-        github.com/knz/shakespeare/pkg/cmd.TestFormatError
+        <path>
         <tab><path>
         testing.tRunner
         <tab><path>
@@ -55,4 +55,4 @@ func TestFormatError(t *testing.T) {
 	tt.CheckEqual(spv, refV)
 }
 
-var fileref = regexp.MustCompile(`([a-zA-Z0-9\._/-]*\.(?:go|s):\d+)`)
+var fileref = regexp.MustCompile(`[a-zA-Z0-9\._-]*/[a-zA-Z0-9\._/-]*\.(?:(?:go|s):\d+|[A-Za-z]*)`)

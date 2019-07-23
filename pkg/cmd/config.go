@@ -190,7 +190,6 @@ func (cfg *config) prepareDirs(ctx context.Context) error {
 	cfg.dataDir = thisDataDir
 	for _, a := range cfg.actors {
 		a.workDir = cfg.actorArtifactDirName(a.name)
-		fmt.Fprintf(os.Stderr, "WOO %s", a.workDir)
 		if err := os.MkdirAll(a.workDir, 0755); err != nil {
 			return errors.Wrapf(err, "mkdir")
 		}

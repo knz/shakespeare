@@ -41,7 +41,6 @@ func (ap *app) plot(ctx context.Context, result *Result) error {
 			return err
 		}
 		defer f.Close()
-		ap.narrate(I, "📜", "plot-all script: %s", fName)
 
 		// We'll generate PDF.
 		fmt.Fprintf(f, "# auto-generated file.\n# Run 'gnuplot runme.gp' to actually generate plots.\n")
@@ -150,8 +149,6 @@ func (ap *app) subPlots(
 				fName: fName,
 				title: fmt.Sprintf("%s %s", actName, varName.sigName),
 			}
-			ap.narrate(I, "📈", "observer %s found data for %s's %s: %s",
-				a.name, actName, varName.sigName, filepath.Join(ap.cfg.dataDir, fName))
 
 			if obsVar.drawEvents {
 				// Indicate the value used in the title.
@@ -171,9 +168,6 @@ func (ap *app) subPlots(
 		// Find the timeserie(s) to plot for the auditor.
 		if am, ok := ap.cfg.audience[a.name]; ok && am.auditor.hasData {
 			fName := fmt.Sprintf("../csv/audit-%s.csv", a.name)
-
-			ap.narrate(I, "📈", "observer %s found audit data: %s",
-				a.name, filepath.Join(ap.cfg.dataDir, fName))
 
 			pl := plot{fName: fName}
 
@@ -196,8 +190,6 @@ func (ap *app) subPlots(
 			return err
 		}
 		defer f.Close()
-		ap.narrate(I, "📜", "per-plot script: %s", fName)
-
 		fmt.Fprintf(f, "# auto-generated file.\n# See 'runme.gp' to actually generate plots.\n")
 
 		// Common plot definitions.
@@ -350,15 +342,6 @@ func (ap *app) maybeRunGnuplot(ctx context.Context, hasRepeat bool) {
 	log.Infof(ctx, "gnuplot:\n%s\n-- %v / %s", string(res), err, cmd.ProcessState)
 	if err != nil {
 		ap.narrate(W, "⚠️", "you will need to run gnuplot manually: cd %s/plots; %s runme.gp", ap.cfg.dataDir, ap.cfg.gnuplotPath)
-	} else {
-		ap.narrate(I, "📄", "SVG plot: %s", filepath.Join(ap.cfg.dataDir, "plots", "plot.svg"))
-		ap.narrate(I, "📄", "PDF plot: %s", filepath.Join(ap.cfg.dataDir, "plots", "plot.pdf"))
-		ap.narrate(I, "📄", "ANSI plot: %s", filepath.Join(ap.cfg.dataDir, "plots", "plot.txt"))
-		if hasRepeat {
-			ap.narrate(I, "📄", "SVG plot: %s", filepath.Join(ap.cfg.dataDir, "plots", "lastplot.svg"))
-			ap.narrate(I, "📄", "PDF plot: %s", filepath.Join(ap.cfg.dataDir, "plots", "lastplot.pdf"))
-			ap.narrate(I, "📄", "ANSI plot: %s", filepath.Join(ap.cfg.dataDir, "plots", "lastplot.txt"))
-		}
 	}
 }
 

@@ -187,17 +187,17 @@ func (ap *app) assemble(ctx context.Context, foundErr error) *Result {
 }
 
 func (ap *app) collectArtifacts(r *Result) {
-	a := collectArtifacts(ap.cfg.dataDir, ap.cfg.dataDir)
+	a := ap.collectArtifactsRec(ap.cfg.dataDir)
 	r.Artifacts = append(r.Artifacts, a.Children...)
 }
 
-func collectArtifacts(base, dir string) Artifact {
+func (ap *app) collectArtifactsRec(dir string) Artifact {
 	a := Artifact{
 		FileName: filepath.Base(dir),
 		IsDir:    true,
 		Icon:     "fa fa-folder",
 	}
-	a.Path, _ = filepath.Rel(base, dir)
+	a.Path, _ = filepath.Rel(ap.cfg.dataDir, dir)
 	_ = filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
@@ -212,14 +212,14 @@ func collectArtifacts(base, dir string) Artifact {
 		}
 		var subA Artifact
 		if info.IsDir() {
-			subA = collectArtifacts(base, path)
+			subA = ap.collectArtifactsRec(path)
 			if len(subA.Children) > 0 {
 				a.Children = append(a.Children, subA)
 			}
 			return filepath.SkipDir
 		} else {
 			subA.FileName = name
-			subA.Path, _ = filepath.Rel(base, path)
+			subA.Path, _ = filepath.Rel(ap.cfg.dataDir, path)
 			subA.ContentType, subA.Icon = detectType(path)
 			a.Children = append(a.Children, subA)
 		}

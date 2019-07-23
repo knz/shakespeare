@@ -238,3 +238,30 @@ func joinAnd(s []string) string {
 		return strings.Join(s[:len(s)-1], ", ") + " and " + s[len(s)-1]
 	}
 }
+
+func (ap *app) showArtifacts(r []Artifact) {
+	ap.showArtifactDirRec("", r)
+}
+
+func (ap *app) showArtifactDirRec(basePrefix string, r []Artifact) {
+	for i := range r {
+		prefix := basePrefix
+		subPrefix := basePrefix
+		if i < len(r)-1 {
+			prefix += "├"
+			subPrefix += "│"
+		} else {
+			prefix += "└"
+			subPrefix += " "
+		}
+		prefix += "─"
+		ap.showArtifactRec(prefix, subPrefix, &r[i])
+	}
+}
+
+func (ap *app) showArtifactRec(prefix, subPrefix string, r *Artifact) {
+	ap.narrate(I, " ", "%s %s", prefix, r.FileName)
+	if len(r.Children) > 0 {
+		ap.showArtifactDirRec(subPrefix+"  ", r.Children)
+	}
+}

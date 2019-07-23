@@ -157,7 +157,7 @@ func (cfg *config) run(ctx context.Context) (err error) {
 	defer func() {
 		// No error - remove artifacts unless -k was specified.
 		if err == nil && !cfg.keepArtifacts {
-			ap.narrate(I, "🧹", "cleaning up result directory: %s", cfg.artifactsDir())
+			ap.narrate(I, "🧹", "no foul, removing artifacts: %s", cfg.artifactsDir())
 			err = os.RemoveAll(cfg.artifactsDir())
 		}
 
@@ -182,6 +182,10 @@ func (cfg *config) run(ctx context.Context) (err error) {
 
 	defer func() {
 		ap.collectArtifacts(result)
+		if len(result.Artifacts) > 0 {
+			ap.narrate(I, "📁", "result files in %s", ap.cfg.dataDir)
+			ap.showArtifacts(result.Artifacts)
+		}
 
 		if errR := ap.writeResult(ctx, result); errR != nil {
 			log.Errorf(ctx, "error writing result file: %+v", errR)

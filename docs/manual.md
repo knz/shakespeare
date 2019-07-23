@@ -549,6 +549,11 @@ Semantics:
   repeated part of the play. `repeat time unconstrained` (no maximum
   duration) is the default.
 
+- **Note:** when using `repeat always` or `repeat time unconstrained`,
+  it is strongly recommended to run with [command line
+  parameter](#command-line-parameters) `-S` to ensure that the program
+  stops upon encountering a foul.
+
 ## Audience configuration
 
 The audience defines collection points for signals, and

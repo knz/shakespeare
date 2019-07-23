@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"syscall"
 	"time"
 
@@ -159,17 +160,14 @@ func (cfg *config) run(ctx context.Context) (err error) {
 	}()
 
 	defer func() {
-		// No error - remove artifacts unless -k was specified.
-		if err == nil && !cfg.removeAll && !cfg.keepArtifacts {
-			ap.narrate(I, "🧹", "no foul, removing artifacts: %s", cfg.artifactsDir())
-			err = os.RemoveAll(cfg.artifactsDir())
-		}
-
 		// Upload produced files if completing without being interrupted
-		// by a signal (e.g. Ctrl+C).
+		// by a signal (e.g. Ctrl+C) and there was no panic.
 		if err == nil || !isError(err, errInterrupted) {
 			// Ensure logs are flushed prior to uploading.
 			log.Flush()
+
+			// Remove stray files and non-uploadable files.
+			ap.removeNonUploadableFiles()
 
 			uploadErr := ap.tryUpload(ctx)
 			err = combineErrors(err, uploadErr)
@@ -186,16 +184,26 @@ func (cfg *config) run(ctx context.Context) (err error) {
 	result := ap.assemble(ctx, err)
 
 	defer func() {
+		// No error - remove artifacts unless -k was specified.
+		if err == nil && !cfg.removeAll && !cfg.keepArtifacts {
+			ap.narrate(I, "🧹", "no foul, removing artifacts: %s", cfg.artifactsDir())
+			err = os.RemoveAll(cfg.artifactsDir())
+		}
+
+		// Collect the tree of result files.
 		ap.collectArtifacts(result)
 		if len(result.Artifacts) > 0 {
 			ap.narrate(I, "📁", "result files in %s", ap.cfg.dataDir)
 			ap.showArtifacts(result.Artifacts)
 		}
 
+		// Write result.js.
 		if errR := ap.writeResult(ctx, result); errR != nil {
 			log.Errorf(ctx, "error writing result file: %+v", errR)
 			err = combineErrors(err, errR)
 		}
+
+		// Write index.html.
 		if errH := ap.writeHtml(ctx); errH != nil {
 			log.Errorf(ctx, "error writing index file: %+v", errH)
 			err = combineErrors(err, errH)
@@ -413,4 +421,31 @@ func (cfg *config) setupLogging(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func (ap *app) removeNonUploadableFiles() {
+	_ = filepath.Walk(ap.cfg.dataDir,
+		func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			if info.IsDir() {
+				return nil
+			}
+
+			if !info.Mode().IsRegular() && (info.Mode()&os.ModeType != os.ModeSymlink) {
+				ap.narrate(I, "", "removing non-uploadable file: %s", path)
+				_ = os.Remove(path)
+				return nil
+			}
+
+			name := filepath.Base(path)
+			if (strings.HasPrefix(name, "#") && strings.HasSuffix(name, "#")) || strings.HasSuffix(name, "~") {
+				// Editor temp files. Remove.
+				_ = os.Remove(path)
+				return nil
+			}
+
+			return nil
+		})
 }

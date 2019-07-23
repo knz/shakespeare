@@ -14,13 +14,13 @@ alice starts auditing
 🙈alice stops auditing
 👏 the play is terminating
 🧹 the stage has been cleared
+🧹 no foul, removing artifacts: .../results/artifacts
 📁 result files in .../results
   └─ csv
      ├─ alice..mood.csv
      ├─ audit-alice.csv
      ├─ audit-bob.csv
      └─ bob..mood.csv
-🧹 no foul, removing artifacts: .../results/artifacts
 😘 good day! come again soon.
 
 # ensure an error is reported if either fails
@@ -105,13 +105,13 @@ alice starts auditing
 🙈alice stops auditing
 👏 the play is terminating
 🧹 the stage has been cleared
+🧹 no foul, removing artifacts: .../results/artifacts
 📁 result files in .../results
   └─ csv
      ├─ alice..mood.csv
      ├─ audit-alice.csv
      ├─ audit-bob.csv
      └─ bob..t.csv
-🧹 no foul, removing artifacts: .../results/artifacts
 😘 good day! come again soon.
 
 # ensure that an auditor being ignored still leaves another auditor to cause an error
@@ -169,13 +169,13 @@ alice starts auditing
 🙈alice stops auditing
 👏 the play is terminating
 🧹 the stage has been cleared
+🧹 no foul, removing artifacts: .../results/artifacts
 📁 result files in .../results
   └─ csv
      ├─ alice..mood.csv
      ├─ audit-alice.csv
      ├─ audit-bob.csv
      └─ bob..t.csv
-🧹 no foul, removing artifacts: .../results/artifacts
 😘 good day! come again soon.
 
 # it's an error if disappointment was required but was not found

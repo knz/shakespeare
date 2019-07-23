@@ -48,13 +48,13 @@ role doctor
   :cure echo cured
 end
 cast
-  a1 plays doctor with i=1
+  a1 plays doctor with i=0
   # a1 plays from working directory artifacts/a1
-  a2 plays doctor with i=2
+  a2 plays doctor with i=1
   # a2 plays from working directory artifacts/a2
-  a3 plays doctor with i=3
+  a3 plays doctor with i=2
   # a3 plays from working directory artifacts/a3
-  b1 plays doctor with i=1; x=123
+  b1 plays doctor with i=0; x=123
   # b1 plays from working directory artifacts/b1
 end
 script

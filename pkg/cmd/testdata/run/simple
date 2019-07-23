@@ -21,10 +21,10 @@ end
 🥁     test: a!
 👏 the play is terminating
 🧹 the stage has been cleared
+🧹 no foul, removing artifacts: .../results/artifacts
 📁 result files in .../results
   └─ csv
      └─ test.csv
-🧹 no foul, removing artifacts: .../results/artifacts
 😘 good day! come again soon.
 
 # this test ensures everything is fine when

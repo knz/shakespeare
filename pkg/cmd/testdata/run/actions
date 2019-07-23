@@ -22,10 +22,10 @@ end
 🥁     test: b!
 👏 the play is terminating
 🧹 the stage has been cleared
+🧹 no foul, removing artifacts: .../results/artifacts
 📁 result files in .../results
   └─ csv
      └─ test.csv
-🧹 no foul, removing artifacts: .../results/artifacts
 😘 good day! come again soon.
 
 
@@ -85,8 +85,8 @@ end
 🤨 action test:a failed (see log for details)
 👏 the play is terminating
 🧹 the stage has been cleared
+🧹 no foul, removing artifacts: .../results/artifacts
 📁 result files in .../results
   └─ csv
      └─ test.csv
-🧹 no foul, removing artifacts: .../results/artifacts
 😘 good day! come again soon.

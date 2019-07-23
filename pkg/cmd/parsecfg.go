@@ -765,8 +765,7 @@ func (cfg *config) parseActors(line string) error {
 			return err
 		}
 		for i := 0; i < int(n); i++ {
-			ns := strconv.Itoa(i + 1)
-			thisActorName := actorName + ns
+			thisActorName := actorName + strconv.Itoa(i+1)
 			if err != nil {
 				return err
 			}
@@ -774,7 +773,7 @@ func (cfg *config) parseActors(line string) error {
 				return err
 			}
 			a := cfg.actors[thisActorName]
-			extraVar := "i=" + ns
+			extraVar := fmt.Sprintf("i=%d", i)
 			if a.extraEnv != "" {
 				a.extraEnv = extraVar + "; " + a.extraEnv
 			} else {

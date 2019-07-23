@@ -107,11 +107,11 @@ end
 role foo
 end
 cast
-  n1 plays foo with i=1
+  n1 plays foo with i=0
   # n1 plays from working directory artifacts/n1
-  n2 plays foo with i=2
+  n2 plays foo with i=1
   # n2 plays from working directory artifacts/n2
-  n3 plays foo with i=3
+  n3 plays foo with i=2
   # n3 plays from working directory artifacts/n3
 end
 script

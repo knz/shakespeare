@@ -41,7 +41,7 @@ as if they appeared in a `script` section.
 | `-I`, `--search-dir`           | .                    | Directory to search for included configurations.                                                                                                                  |
 | `-n`, `--dry-run`              | false                | Stop after parsing the configuration and compiling the steps (do not actually execute the script).                                                                |
 | `-o`, `--output-dir`           | `.`                  | Directory where to generate artifacts, output data files and the plot script.                                                                                     |
-| `-k`, `--keep-artifats`        | false                | If set, keep the `artifacts` sub-directory at the end of the play, before upload, if there was no foul. The artifacts are kept in any case if a foul is detected. |
+| `-k`, `--keep-artifacts`       | false                | If set, keep the `artifacts` sub-directory at the end of the play, before upload, if there was no foul. The artifacts are kept in any case if a foul is detected. |
 | `-p`, `--print-cfg`            | false                | Print configuration after parsing and compilation.                                                                                                                |
 | `-q`, `--quiet`                | false                | Run quietly.                                                                                                                                                      |
 | `-r`, `--extra-interpretation` | (none)               | Additional lines of [`interpretation` configuration](#Interpreation).                                                                                             |
@@ -64,7 +64,7 @@ as if they appeared in a `script` section.
 ### Exit status
 
 `shakespeare` returns a non-zero
-exit status is returned in the following circumstances:
+exit status in the following circumstances:
 
 - a cleanup command failed to execute, or terminated with non-zero status.
 - a spotlight command failed to execute, or terminated with a non-zero status.
@@ -74,6 +74,7 @@ exit status is returned in the following circumstances:
   [script configuration](#Script-configuration)),
 - an auditor [expression](#Expression) failed to evaluate with an error.
 - [a foul was detected](#Interpretation-of-results) during or at the end of the play.
+- a directory or upload operation failed.
 
 Otherwise, status 0 is returned.
 

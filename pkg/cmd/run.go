@@ -157,6 +157,7 @@ func (cfg *config) run(ctx context.Context) (err error) {
 	defer func() {
 		// No error - remove artifacts unless -k was specified.
 		if err == nil && !cfg.keepArtifacts {
+			ap.narrate(I, "🧹", "cleaning up result directory: %s", cfg.artifactsDir())
 			err = os.RemoveAll(cfg.artifactsDir())
 		}
 

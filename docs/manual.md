@@ -1,21 +1,21 @@
 # Shakespeare reference manual
 
-- [Command line usage](#Usage)
-  - [Command line parameters](#Command-line-parameters)
-  - [Environment variables](#Environment-variables)
-  - [Exit status](#Exit-status)
-  - [Result files](#Result-files)
-  - [Uploading results](#Uploading-results)
+- [Command line usage](#usage)
+  - [Command line parameters](#command-line-parameters)
+  - [Environment variables](#environment-variables)
+  - [Exit status](#exit-status)
+  - [Result files](#result-files)
+  - [Uploading results](#uploading-results)
 - Configuration:
-  - [Common syntax elements](#Common-syntax-elements)
-  - [Overall structure of a configuration](#Overall-structure-of-a-configuration)
-  - [Configuration preprocessing](#Configuration-preprocessing)
-  - [Roles](#Roles-configuration)
-  - [Cast](#Cast-configuration)
-  - [Script](#Script-configuration)
-  - [Audience](#Audience-configuration)
-- [Predicate, ascalar and array expressions](#Expressions) during auditions
-- [Interpretation of results](#Interpretation-of-results)
+  - [Common syntax elements](#common-syntax-elements)
+  - [Overall structure of a configuration](#overall-structure-of-a-configuration)
+  - [Configuration preprocessing](#configuration-preprocessing)
+  - [Roles](#roles-configuration)
+  - [Cast](#cast-configuration)
+  - [Script](#script-configuration)
+  - [Audience](#audience-configuration)
+- [Predicate, ascalar and array expressions](#expressions) during auditions
+- [Interpretation of results](#interpretation-of-results)
 
 ## Usage
 
@@ -37,18 +37,18 @@ as if they appeared in a `script` section.
 
 | Parameter                      | Default              | Description                                                                                                                                                       |
 |--------------------------------|----------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `-D`, `--define`               | (none)               | [Preprocessing](#Configuration-preprocessing) variable definitions.                                                                                               |
+| `-D`, `--define`               | (none)               | [Preprocessing](#configuration-preprocessing) variable definitions.                                                                                               |
 | `-I`, `--search-dir`           | .                    | Directory to search for included configurations.                                                                                                                  |
 | `-n`, `--dry-run`              | false                | Stop after parsing the configuration and compiling the steps (do not actually execute the script).                                                                |
 | `-o`, `--output-dir`           | `.`                  | Directory where to generate artifacts, output data files and the plot script.                                                                                     |
 | `-k`, `--keep-artifacts`       | false                | If set, keep the `artifacts` sub-directory at the end of the play, before upload, if there was no foul. The artifacts are kept in any case if a foul is detected. |
 | `-p`, `--print-cfg`            | false                | Print configuration after parsing and compilation.                                                                                                                |
 | `-q`, `--quiet`                | false                | Run quietly.                                                                                                                                                      |
-| `-r`, `--extra-interpretation` | (none)               | Additional lines of [`interpretation` configuration](#Interpreation).                                                                                             |
-| `-s`, `--extra-script`         | (none)               | Additional lines of [`script` configuration](#Script-configuration).                                                                                              |
-| `-S`, `--stop-at-first-foul`   | false                | Stop the play as soon as [a foul was detected](#Interpretation-of-results).                                                                                       |
-| `--upload-url`                 | (none)               | [Upload](#Uploading-results) the [result files](#Result-files) to the provided URL. Implies `--clear`.                                                            |
-| `--clear`                      | false                | Remove the [result files](#Result-files) at the end of the play (after upload) if there was no foul.                                                              |
+| `-r`, `--extra-interpretation` | (none)               | Additional lines of [`interpretation` configuration](#interpreation).                                                                                             |
+| `-s`, `--extra-script`         | (none)               | Additional lines of [`script` configuration](#script-configuration).                                                                                              |
+| `-S`, `--stop-at-first-foul`   | false                | Stop the play as soon as [a foul was detected](#interpretation-of-results).                                                                                       |
+| `--upload-url`                 | (none)               | [Upload](#uploading-results) the [result files](#result-files) to the provided URL. Implies `--clear`.                                                            |
+| `--clear`                      | false                | Remove the [result files](#result-files) at the end of the play (after upload) if there was no foul.                                                              |
 | `--ascii-only`                 | false                | Avoid printing out special unicode characters.                                                                                                                    |
 | `--version`                    | false                | Show version number and exit.                                                                                                                                     |
 | `--log-dir`                    | `logs` in output dir | If non-empty, copy the logs to that directory.                                                                                                                    |
@@ -71,9 +71,9 @@ exit status in the following circumstances:
 - an action command failed to execute,
 - an action command executed but terminated with a non-zero status,
   and action failure was not tolerated (using the `?` syntax in the
-  [script configuration](#Script-configuration)),
-- an auditor [expression](#Expression) failed to evaluate with an error.
-- [a foul was detected](#Interpretation-of-results) during or at the end of the play.
+  [script configuration](#script-configuration)),
+- an auditor [expression](#expression) failed to evaluate with an error.
+- [a foul was detected](#interpretation-of-results) during or at the end of the play.
 - a directory or upload operation failed.
 
 Otherwise, status 0 is returned.
@@ -98,7 +98,7 @@ At the end of the play:
 4. unless a foul was detected or `-k` is specified, `artifacts` is erased.
 5. if `--upload-url` was specified, the contents of the working
    directory (including the results from steps 1-4 above) are uploaded
-   to the specified URL. [See below for details](#Uploading-results).
+   to the specified URL. [See below for details](#uploading-results).
 6. if `--clear` or `--upload-url` was specified and no foul was
    detected (and no upload error), the working directory is erased.
 
@@ -128,7 +128,7 @@ Example result tree after a test completion:
 
 ### Uploading results
 
-If `--upload-url` is specified, the contents of the [working directory](#Result-files)
+If `--upload-url` is specified, the contents of the [working directory](#result-files)
 are uploaded to the provided URL.
 
 The following URL schemes are supported:
@@ -155,7 +155,7 @@ the manual:
   redirections, etc.
 
 - `<expr>` denotes a [boolean or scalar
-  expression](#Expressions) (currently based off the
+  expression](#expressions) (currently based off the
   [`govaluate` expression
   language](https://github.com/Knetic/govaluate)).
 
@@ -301,7 +301,7 @@ Behavior:
   is copied as template for the new role.
 
 - The command associated with an action is executed when that action
-  is prompted in a [script](#Script-configuration).
+  is prompted in a [script](#script-configuration).
 
 - The cleanup command is executed once at the beginning before the play,
   and once when the play terminates.
@@ -605,7 +605,7 @@ Each specification inside the `audience` section refers to an *observer* name at
 
 - just the keywords `only helps`.
 
-As in [script configurations](#Script-configuration) above, an actor
+As in [script configurations](#script-configuration) above, an actor
 selector is either:
 
 - `<name>`: a reference to a single actor/character.
@@ -667,7 +667,7 @@ Behavior for auditors:
     nil results are ignored.
 
   - Array variable are suitable as input for array functions, see
-    [Expressions](#Expressions) below.
+    [Expressions](#expressions) below.
 
 - *Dataflow sensitivity*: the expression for `audits`, `computes`,
   `collects` or `expects` is only evaluated when all its
@@ -790,10 +790,10 @@ evaluations) on every mood change and signal received.
 
 The *interpretation* of a play indicates how to translate auditor
 expectations into a *foul*, which causes a non-zero [exit
-status](#Exit-status).
+status](#exit-status).
 
 By default, `shakespeare` reports a foul if any auditor found itself
-disappointed, as per its [`expect` clause](#Audience-configuration).
+disappointed, as per its [`expect` clause](#audience-configuration).
 
 This corresponds to the common case where the play specification
 describes expected "good" behavior, the system is expected to behave
@@ -806,7 +806,7 @@ to share a constant/shared play configuration for the purpose of
 investigating a foul.
 
 To achieve this, an optional `interpretation` section can be included,
-either in the input configuration files or [via `-r`](#Command-line-parameters).
+either in the input configuration files or [via `-r`](#command-line-parameters).
 
 ### Syntax
 

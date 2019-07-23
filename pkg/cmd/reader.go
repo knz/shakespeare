@@ -11,7 +11,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
-	"github.com/knz/shakespeare/pkg/crdb/log"
 )
 
 type reader struct {
@@ -92,7 +91,6 @@ func newSubReader(ctx context.Context, file string, includePath []string) (*subr
 		}
 		r.rd = bufio.NewReader(f)
 	}
-	log.Infof(ctx, "including specification from %s", r.file)
 	return r, nil
 }
 

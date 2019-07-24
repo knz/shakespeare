@@ -1,5 +1,5 @@
 #!/bin/sh
-set -euo pipefail
+set -eu
 (
 	echo "package cmd"
 	echo

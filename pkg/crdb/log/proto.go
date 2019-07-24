@@ -14,7 +14,7 @@
 
 package log
 
-import "github.com/woo/protobuf/proto"
+import "github.com/gogo/protobuf/proto"
 
 type Severity int32
 

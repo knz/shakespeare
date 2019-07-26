@@ -209,6 +209,9 @@ func (cfg *config) prepareDirs(ctx context.Context) error {
 		if err := os.MkdirAll(a.workDir, 0755); err != nil {
 			return errors.Wrap(err, "mkdir")
 		}
+		// Create the action scripts.
+		if err := a.prepareActionCommands(); err != nil {
+			return errors.Wrapf(err, "actor %s", a.name)
 		}
 	}
 	cfg.subDir = "."
@@ -571,6 +574,11 @@ type actor struct {
 	sinkNames []string
 	// hasData indicates there were action events executed for this actor.
 	hasData bool
+
+	// name for scripts containing commands to execute.
+	spotlightScript string
+	cleanupScript   string
+	actionScripts   map[string]string
 }
 
 type sink struct {

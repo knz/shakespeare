@@ -17,6 +17,11 @@ end
 😞 test's spotlight failed: exit status 123 (see log for details)
 👏 the play is terminating
 🧹 the stage has been cleared
+📁 result files in .../results
+  └─ artifacts
+     └─ test
+        └─ actions
+           └─ _spotlight.sh
 😱 an error has occurred!
 run error: spotlight-supervisor: spotlight terminated abnormally: exit status 123
 --

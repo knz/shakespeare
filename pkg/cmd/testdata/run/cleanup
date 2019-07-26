@@ -14,6 +14,12 @@ end
 🎶 the play is starting; expected duration: 1s
 👏 the play is terminating
 🧹 the stage has been cleared
+📁 result files in .../results
+  └─ artifacts
+     └─ test
+        ├─ _cleanup.log
+        └─ actions
+           └─ _cleanup.sh
 😱 an error has occurred!
 run error: cleanup: command failed: exit status 123
 --

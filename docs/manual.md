@@ -14,6 +14,7 @@
   - [Cast](#cast-configuration)
   - [Script](#script-configuration)
   - [Audience](#audience-configuration)
+- [Command execution](#command-execution)
 - [Predicate, ascalar and array expressions](#expressions) during auditions
 - [Interpretation of results](#interpretation-of-results)
 
@@ -302,17 +303,16 @@ Behavior:
 
 - The command associated with an action is executed when that action
   is prompted in a [script](#script-configuration).
+  See [Command execution](#command-execution) for details.
 
 - The cleanup command is executed once at the beginning before the play,
   and once when the play terminates.
+  See [Command execution](#command-execution) for details.
 
 - The spotlight command is executed asynchronously at the start
   of the play, and its output (on standard error + standard output combined)
   is used as input to the signals.
-
-- The working directory for the action, cleanup and spotlight commands
-  is that of the character/actor that plays the role. Different
-  actors playing the same role use separate working directories.
+  See [Command execution](#command-execution) for details.
 
 - The signal regular expressions are applied on each line of the
   spotlight's output. Each matching line becomes an event or a data
@@ -362,15 +362,11 @@ Behavior:
   and there is a delay between the moment the event occurs and the
   moment it is collected by `shakespeare`.
 
-
 - `shakespeare` terminates
   with an error if the cleanup command fails with a non-zero status.
 
 - Currently, errors encountered while executing the spotlight command
   are ignored.
-
-- Currently, errors encountered while executing the action commands
-  are reported in the final plot(s).
 
 ## Cast configuration
 
@@ -716,6 +712,35 @@ Behavior for data observation:
 - Audit events (from `expects` clauses) are plotted near the top.
 
 - The moods are used to define color bands in the background of all observer plots.
+
+## Command execution
+
+`shakespeare` runs external commands for:
+
+- initializing / cleaning up actors via their
+  [role](#role-configuration)'s `cleanup` definition;
+- starting actor spotlights via their role's `spotlight` definition;
+- effecting actions as determined by the [script](#script-configuration).
+
+The text of the command given in the configuration is not executed
+as-is; instead, before the play starts `shakespeare` prepares a
+"command file"—a *shell script*—in the actor's `actions` sub-directory.
+
+Exporting the command into a file achieves the following:
+
+- the shell script can be inspected to verify the result of
+  [preprocessing](#configuration-preprocessing) and how the per-actor
+  custom environment (the `with` clause) was expanded.
+
+- for non-spotlight commands, the shell script also automatically
+  redirects the command's output to a log file. This facilitates
+  inspection of command outputs after a play completes.
+
+- prior to executing the command, the generated shell script also
+  forces the current directory (to the actor's working directory) and
+  resets the TMPDIR/HOME environment variables. This makes it
+  possible to safely **execute one actor's command from the action of
+  another actor**.
 
 ## Expressions
 

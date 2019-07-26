@@ -4,9 +4,11 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -35,10 +37,14 @@ import (
 // - exitErr with the result on waiting on the process after it completed
 //   execution. an *exec.ExitError, if any, will be found there.
 func (a *actor) runActorCommand(
-	ctx context.Context, stopper *stop.Stopper, timeout time.Duration, interruptible bool, pCmd cmd,
+	ctx context.Context,
+	stopper *stop.Stopper,
+	timeout time.Duration,
+	interruptible bool,
+	pScript string,
 ) (outdata string, ps *os.ProcessState, err error, exitErr error) {
 	var outbuf bytes.Buffer
-	ps, err, exitErr = a.runActorCommandWithConsumer(ctx, stopper, timeout, interruptible, pCmd, nil, func(line string) error {
+	ps, err, exitErr = a.runActorCommandWithConsumer(ctx, stopper, timeout, interruptible, pScript, nil, func(line string) error {
 		outbuf.WriteString(line)
 		return nil
 	})
@@ -56,13 +62,13 @@ func (a *actor) runActorCommandWithConsumer(
 	stopper *stop.Stopper,
 	timeout time.Duration,
 	interruptible bool,
-	pCmd cmd,
+	pScript string,
 	termCh <-chan struct{},
 	consumer func(string) error,
 ) (ps *os.ProcessState, err error, exitErr error) {
 	execCtx, killCmd := context.WithCancel(context.Background())
 	defer killCmd()
-	cmd := a.makeShCmd(execCtx, true /*bindCtx*/, pCmd)
+	cmd := a.makeShCmd(execCtx, true /*bindCtx*/, pScript)
 
 	log.Infof(ctx, "running: %s (workdir %s)", strings.Join(cmd.Args, " "), cmd.Dir)
 
@@ -232,30 +238,80 @@ func (a *actor) runActorCommandWithConsumer(
 	return ps, &coll, exitErr
 }
 
-func (a *actor) makeShCmd(ctx context.Context, bindCtx bool, pcmd cmd) *exec.Cmd {
-	var script bytes.Buffer
+func (a *actor) prepareActionCommands() error {
+	actionDir := filepath.Join(a.workDir, "actions")
+	if err := os.Mkdir(actionDir, 0755); err != nil {
+		return errors.Wrap(err, "mkdir")
+	}
+	for actName, actCmd := range a.role.actionCmds {
+		actScript := filepath.Join(actionDir, actName+".sh")
+		a.actionScripts[actName] = actScript
+		if err := a.prepareScript(actScript, actName, actCmd, true /*redirect*/); err != nil {
+			return errors.Wrapf(err, "preparing script for action %s", actName)
+		}
+	}
+	if a.role.spotlightCmd != "" {
+		a.spotlightScript = filepath.Join(actionDir, "_spotlight.sh")
+		if err := a.prepareScript(a.spotlightScript, "_spotlight",
+			a.role.spotlightCmd, false /*redirect*/); err != nil {
+			return errors.Wrapf(err, "preparing script for spotlight")
+		}
+	}
+	if a.role.cleanupCmd != "" {
+		a.cleanupScript = filepath.Join(actionDir, "_cleanup.sh")
+		if err := a.prepareScript(a.cleanupScript,
+			"_cleanup", a.role.cleanupCmd, true /*redirect*/); err != nil {
+			return errors.Wrap(err, "preparing script for cleanup")
+		}
+	}
+	return nil
+}
+
+func (a *actor) prepareScript(scriptName, actName string, pCmd cmd, redirect bool) (err error) {
+	// Ensure the new file is executable.
+	f, err := os.OpenFile(scriptName, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0755)
+	if err != nil {
+		return err
+	}
+	defer func() { err = f.Close() }()
+	fmt.Fprintf(f, "#!%s\n", a.shellPath)
 	// set -euao pipefail:
 	//    -e fail commands on error
 	//    -u fail command if a variable is not set
 	//    -o pipefail   fail entire pipeline if one command fails
 	//    -a auto-exports all variables
-	script.WriteString(`set -euao pipefail; `)
+	f.WriteString("set -euao pipefail\n")
 	// Ensure files are created from the working directory.
-	script.WriteString(`TMPDIR=$PWD; HOME=$PWD/..; `)
+	fmt.Fprintf(f, "cd '%s'\n", a.workDir)
+	fmt.Fprintf(f, "TMPDIR=$PWD HOME=$PWD/..\n")
+	if redirect {
+		// Output a timestamp in the log to distinguish runs.
+		fmt.Fprintf(f, "TZ=UTC date +%%Y-%%m-%%dT%%H:%%M:%%SZ >>%s.log\n", actName)
+		// Inform the shakespeare log of where the output is going
+		fmt.Fprintf(f, "echo output redirected to %s/%s.log\n", a.workDir, actName)
+		// Retain the stdout/stderr output to a per-action log.
+		fmt.Fprintf(f, "exec >>%s.log 2>&1\n", actName)
+	}
 	// Trace the execution. We do this before setting the
 	// environment so as to see the expanded values.
-	script.WriteString(`set -x; `)
+	f.WriteString("set -x\n")
+	// If there is custom environment for this actor, include it.
 	if a.extraEnv != "" {
-		script.WriteString(a.extraEnv)
-		script.WriteString("; ")
+		f.WriteString(a.extraEnv)
+		f.WriteString("\n")
 	}
-	script.WriteString(string(pcmd))
+	// Finally, the main command.
+	f.WriteString(string(pCmd))
+	f.WriteString("\n")
+	return nil
+}
 
+func (a *actor) makeShCmd(ctx context.Context, bindCtx bool, script string) *exec.Cmd {
 	var cmd *exec.Cmd
 	if bindCtx {
-		cmd = exec.CommandContext(ctx, a.shellPath, "-c", script.String())
+		cmd = exec.CommandContext(ctx, script)
 	} else {
-		cmd = exec.Command(a.shellPath, "-c", script.String())
+		cmd = exec.Command(script)
 	}
 
 	// We want a separate process group.

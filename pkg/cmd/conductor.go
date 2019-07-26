@@ -325,11 +325,11 @@ func (spm *spotMgr) startSpotlights(ctx context.Context, wg *sync.WaitGroup) (ca
 }
 
 func (ap *app) runCleanup(ctx context.Context) error {
-	return ap.runForAllActors(ctx, "cleanup", func(a *actor) cmd { return a.role.cleanupCmd })
+	return ap.runForAllActors(ctx, "cleanup", func(a *actor) string { return a.cleanupScript })
 }
 
 func (ap *app) runForAllActors(
-	ctx context.Context, prefix string, getCommand func(a *actor) cmd,
+	ctx context.Context, prefix string, getScript func(a *actor) string,
 ) (err error) {
 	// errCh collects the errors from the concurrent actors.
 	errCh := make(chan error, len(ap.cfg.actors)+1)
@@ -348,8 +348,8 @@ func (ap *app) runForAllActors(
 
 	actNums := 0
 	for actName, thisActor := range ap.cfg.actors {
-		pCmd := getCommand(thisActor)
-		if pCmd == "" {
+		pScript := getScript(thisActor)
+		if pScript == "" {
 			// No command to run. Nothing to do.
 			continue
 		}
@@ -365,7 +365,7 @@ func (ap *app) runForAllActors(
 			}()
 			// Start one actor.
 			log.Info(ctx, "<start>")
-			_, ps, err, _ := a.runActorCommand(ctx, ap.stopper, 10*time.Second, false /*interruptible*/, pCmd)
+			_, ps, err, _ := a.runActorCommand(ctx, ap.stopper, 10*time.Second, false /*interruptible*/, pScript)
 			if err == nil && ps != nil && !ps.Success() {
 				err = errors.Newf("command failed: %s", ps.String())
 			}

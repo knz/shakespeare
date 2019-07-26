@@ -741,12 +741,13 @@ func (cfg *config) parseActors(line string) error {
 			}
 
 			act := actor{
-				shellPath: cfg.shellPath,
-				name:      actorName,
-				role:      r,
-				extraEnv:  extraEnv,
-				workDir:   cfg.actorArtifactDirName(actorName),
-				sinks:     make(map[string]*sink),
+				shellPath:     cfg.shellPath,
+				name:          actorName,
+				role:          r,
+				extraEnv:      extraEnv,
+				workDir:       cfg.actorArtifactDirName(actorName),
+				sinks:         make(map[string]*sink),
+				actionScripts: make(map[string]string),
 			}
 			cfg.actors[actorName] = &act
 			cfg.actorNames = append(cfg.actorNames, actorName)

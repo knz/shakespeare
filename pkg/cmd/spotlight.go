@@ -125,7 +125,7 @@ func (spm *spotMgr) pseudoSpotlight(ctx context.Context) error {
 // spotlight stats the monitoring (spotlight) thread for a given actor.
 // The collected events are sent to the given auChan.
 func (spm *spotMgr) spotlight(ctx context.Context, a *actor) error {
-	ps, err, exitErr := a.runActorCommandWithConsumer(ctx, spm.stopper, 0, true, a.role.spotlightCmd, spm.termCh, func(line string) error {
+	ps, err, exitErr := a.runActorCommandWithConsumer(ctx, spm.stopper, 0, true, a.spotlightScript, spm.termCh, func(line string) error {
 		spm.logger.Logf(ctx, "clamors: %q", line)
 		sigCtx := logtags.AddTag(ctx, "signals", nil)
 		line = strings.TrimSpace(line)

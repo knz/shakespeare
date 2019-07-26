@@ -335,14 +335,14 @@ func (pr *prompter) reportMoodEvent(ctx context.Context, chg *moodChange) error 
 }
 
 func (a *actor) runAction(ctx context.Context, pr *prompter, action string) (*actionReport, error) {
-	aCmd, ok := a.role.actionCmds[action]
+	aScript, ok := a.actionScripts[action]
 	if !ok {
 		return nil, errors.Errorf("unknown action: %q", action)
 	}
 	ctx = logtags.AddTag(ctx, "action", action)
 
 	actStart := timeutil.Now()
-	outdata, ps, err, exitErr := a.runActorCommand(ctx, pr.stopper, 0 /*timeout*/, true /*interruptible*/, aCmd)
+	outdata, ps, err, exitErr := a.runActorCommand(ctx, pr.stopper, 0 /*timeout*/, true /*interruptible*/, aScript)
 	actEnd := timeutil.Now()
 
 	dur := actEnd.Sub(actStart)

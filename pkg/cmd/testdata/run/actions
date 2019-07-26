@@ -53,11 +53,16 @@ end
 👏 the play is terminating
 🧹 the stage has been cleared
 📁 result files in .../results
+  ├─ artifacts
+  │  └─ test
+  │     ├─ a.log
+  │     └─ actions
+  │        └─ a.sh
   └─ csv
      └─ test.csv
 😱 an error has occurred!
 run error: prompt: action test:a failed: exit status 123
-+ exit 123
+output redirected to .../results/artifacts/test/a.log
 --
 (context: play,prompter,act=1,scene=1,actor=test,role=test,step=1)
 

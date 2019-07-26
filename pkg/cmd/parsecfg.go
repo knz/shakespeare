@@ -257,7 +257,9 @@ func (cfg *config) parseAudience(line string) error {
 			return err
 		}
 		if len(foundActors) == 0 {
-			fmt.Fprintf(os.Stderr, "warning: there is no actor playing role %q for audience %q to watch", r.name, aName)
+			fmt.Fprintf(os.Stderr,
+				"warning: there is no actor playing role %q for audience %q to watch\n",
+				r.name, aName)
 			return nil
 		}
 		a := cfg.addOrGetAudienceMember(aName)
@@ -918,7 +920,9 @@ func (cfg *config) parseScript(line string) error {
 			return err
 		}
 		if len(foundActors) == 0 {
-			fmt.Fprintf(os.Stderr, "warning: there is no actor playing role %q to play this script: %s", r.name, line)
+			fmt.Fprintf(os.Stderr,
+				"warning: there is no actor playing role %q to play this script: %s\n",
+				r.name, line)
 			return nil
 		}
 

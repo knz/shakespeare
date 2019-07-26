@@ -314,6 +314,11 @@ Behavior:
   is used as input to the signals.
   See [Command execution](#command-execution) for details.
 
+- Tip/Note: when using `tail -F` to observe a log file produced for
+  another action, ensure that the file exists prior to running `tail`
+  (e.g. using `touch`). Otherwise, `tail` may wait multiple seconds
+  before detecting the first write to the fail.
+
 - The signal regular expressions are applied on each line of the
   spotlight's output. Each matching line becomes an event or a data
   point with the provided signal name.

@@ -198,8 +198,17 @@ func (cfg *config) prepareDirs(ctx context.Context) error {
 	cfg.dataDir = thisDataDir
 	for _, a := range cfg.actors {
 		a.workDir = cfg.actorArtifactDirName(a.name)
+		// The action commands need an absolute directory path because
+		// they may be ran from other actors.
+		absDir, err := filepath.Abs(a.workDir)
+		if err != nil {
+			return errors.Wrap(err, "absdir")
+		}
+		a.workDir = absDir
+		// Prepare the directory.
 		if err := os.MkdirAll(a.workDir, 0755); err != nil {
-			return errors.Wrapf(err, "mkdir")
+			return errors.Wrap(err, "mkdir")
+		}
 		}
 	}
 	cfg.subDir = "."

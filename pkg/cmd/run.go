@@ -29,7 +29,7 @@ func Run() (err error) {
 	// Load the configuration.
 	cfg := newConfig()
 	if err = cfg.initArgs(ctx); err != nil {
-		log.Errorf(ctx, "arg error: %+v", err)
+		// log.Errorf(ctx, "arg error: %+v", err)
 		return errors.WithDetail(err, "(while parsing the command line)")
 	}
 
@@ -51,13 +51,13 @@ func Run() (err error) {
 			// We use a closure to close the reader directly after each file.
 			rd, err := newReader(ctx, file, cfg.includePath)
 			if err != nil {
-				log.Errorf(ctx, "open error: %+v", err)
-				return err
+				// log.Errorf(ctx, "open error: %+v", err)
+				return errors.Wrapf(err, "reading configuration from %s", file)
 			}
 			defer rd.close()
 
 			if err = cfg.parseCfg(ctx, rd); err != nil {
-				log.Errorf(ctx, "parse error: %+v", err)
+				// log.Errorf(ctx, "parse error: %+v", err)
 				return err
 			}
 			return nil

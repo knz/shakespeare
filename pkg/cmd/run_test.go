@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -60,7 +61,10 @@ func TestRun(t *testing.T) {
 			cfg.subDir = "results"
 
 			// Override the shell, to make error messages deterministic.
-			cfg.shellPath = "bash"
+			cfg.shellPath, err = exec.LookPath("bash")
+			if err != nil {
+				t.Fatal(err)
+			}
 
 			if err := cfg.parseCfg(context.TODO(), rd); err != nil {
 				t.Fatalf("parse error: %s\n", renderError(err))

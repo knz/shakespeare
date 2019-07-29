@@ -195,7 +195,7 @@ func (ap *app) collectArtifactsRec(dir string) Artifact {
 	a := Artifact{
 		FileName: filepath.Base(dir),
 		IsDir:    true,
-		Icon:     "fa fa-folder",
+		Icon:     "📁",
 	}
 	a.Path, _ = filepath.Rel(ap.cfg.dataDir, dir)
 	_ = filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
@@ -235,22 +235,24 @@ func detectType(path string) (string, string) {
 		ext := path[idx+1:]
 		switch ext {
 		case "svg":
-			return "image/xml+svg", "fa fa-chart-line"
+			return "image/xml+svg", "🖼️"
 		case "csv":
-			return "text/csv", "fa fa-file-csv"
+			return "text/csv", "📈"
 		case "md":
-			return "text/markdown", "fa fa-file-alt"
+			return "text/markdown", "📝"
 		case "html":
-			return "text/html", "fa fa-file-alt"
+			return "text/html", "📄"
 		case "pdf":
-			return "application/pdf", "fa fa-file-pdf"
+			return "application/pdf", "📄"
 		case "log", "txt":
-			return "text/plain", "fa fa-file-alt"
-		case "gp":
-			return "text/plain", "fa fa-scroll"
+			return "text/plain", "📄"
+		case "gp", "sh":
+			return "text/plain", "📜"
+		case "js":
+			return "application/javascript", "📜"
 		}
 	}
-	return "application/octet-stream", "fa fa-file"
+	return "application/octet-stream", "👾"
 }
 
 func (ap *app) writeResult(ctx context.Context, res *Result) error {
@@ -260,7 +262,7 @@ func (ap *app) writeResult(ctx context.Context, res *Result) error {
 		FileName:    jsonFile,
 		Path:        jsonFile,
 		ContentType: "application/javascript",
-		Icon:        "fa fa-scroll",
+		Icon:        "📜",
 	})
 	j, err := json.MarshalIndent(res, "", "  ")
 	if err != nil {

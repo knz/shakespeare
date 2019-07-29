@@ -3,6 +3,8 @@
 h1,h3,p,ul#refs{text-align: center;}
 p,ul#refs,.cursive{font-family:'Sofia',cursive;font-size: large;}
 #artifacts,pre,code{font-family: 'Nova Mono',monospace;font-size:small;}
+#artifacts ul{list-style-type:none;margin:0;}
+#artifacts a{text-decoration:none;}
 pre{overflow:auto;}
 .divider{font-family:serif; margin-top:3em; margin-bottom:3em;}
 .divider:before{content:"⊱ ────────────────── {.⋅ ♫ ⋅.} ───────────────── ⊰";}

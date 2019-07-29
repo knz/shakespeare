@@ -3,15 +3,13 @@
   <head>
 	<meta charset="utf-8"/>
 	<title>shakespeare report</title>
-	<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.1.1/jquery.min.js"></script>
-	<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jstree/3.3.8/themes/default/style.min.css" />
-	<script src="https://cdnjs.cloudflare.com/ajax/libs/jstree/3.3.8/jstree.min.js"></script>
-	<script src="https://kit.fontawesome.com/da97b0d013.js"></script>
 	<script src="result.js" type="text/javascript"></script>
 	<style type='text/css'>
 	  h1,h3,p,ul#refs{text-align: center;}
 	  p,ul#refs{font-family:cursive;font-size: large;}
 	  #artifacts,pre,code{font-family:monospace;font-size:small;}
+	  #artifacts ul{list-style-type:none;margin:0;}
+	  #artifacts a{text-decoration:none;}
 	  pre{overflow:auto;}
 	  .divider{font-family:serif; margin-top:3em; margin-bottom:3em;}
 	  .divider:before{content:"⊱ ────────────────── {.⋅ ♫ ⋅.} ───────────────── ⊰";}
@@ -80,30 +78,34 @@
 	</div>
 
 	<script type="text/javascript">
-	  $(function() {
+	  window.onload = function() {
+		  var eid = function(id) { return document.getElementById(id); };
 		  var icon = "🎉";
 		  var adj = "merry";
 		  if (result.Foul) {
 			  adj = "tragic";
 			  icon = "😭";
 		  }
-		  document.title = icon + " shakespeare report";
+		  document.title = icon + " a " + adj + " shakespeare tale";
 		  if (result.Title) {
-			  $("#title").text(result.Title);
-			  document.title = document.title + ": a " + adj + " tale of " + result.Title;
+			  eid("title").innerText = result.Title;
+			  document.title = icon + " " + result.Title + " — a " + adj + " shakespeare tale";
 		  } else {
-			  $("#ttitle").hide();
+			  eid("ttitle").style.display = 'none';
 		  }
 		  if (result.Authors) {
-			  $("#authors").text(result.Authors);
-			  $("<meta/>", {name:"author", content:result.Authors}).appendTo("head");
+			  eid("authors").innerText = result.Authors;
+			  var meta = document.createElement("meta");
+			  meta.name = "author";
+			  meta.content = result.Authors;
+			  document.getElementsByTagName('head')[0].appendChild(meta);
 		  } else {
-			  $("#tauthors").hide();
+			  eid("tauthors").style.display = 'none';
 		  }
 		  if (result.Foul) {
-			  $("#resultgood").hide()
+			  eid("resultgood").style.display = 'none';
 		  } else {
-			  $("#resultbad").hide()
+			  eid("resultbad").style.display = 'none';
 		  }
 		  var extraDur = "";
 		  if (result.Repeat != null && result.Repeat.NumRepeats > 0) {
@@ -112,67 +114,76 @@
 			  extraDur += " iterations of acts " + r.FirstRepeatedAct;
 			  extraDur += "-" + r.LastRepeatedAct;
 		  }
-		  $("<embed/>", { src: "plots/plot.svg" }).appendTo("#mainsvg");
+		  var svg = document.createElement("embed");
+		  svg.src = "plots/plot.svg";
+		  eid("mainsvg").appendChild(svg);
 		  if (result.Repeat != null) {
 			  var r = result.Repeat;
-			  $("#rduration").text(r.Duration.toFixed(2) + "s");
-			  $("<embed/>", { src: "plots/lastplot.svg" }).appendTo("#repeatsvg");
+			  eid("rduration").innerText = r.Duration.toFixed(2) + "s";
+			  svg = document.createElement("embed");
+			  svg.src = "plots/lastplot.svg";
+			  eid("repeatsvg").appendChild(svg);
 		  } else {
-			  $("#mayberepeat").hide();
+			  eid("mayberepeat").style.display = 'none';
 		  }
 		  if (result.Error) {
-			  $("#error").text(result.Error);
+			  eid("error").innerText = result.Error;
 		  } else {
-			  $("#maybeerror").hide();
+			  eid("maybeerror").style.display = 'none';
 		  }
 		  if (result.SeeAlso) {
 			  for (var i in result.SeeAlso) {
 				  var ref = result.SeeAlso[i];
-				  var i = $("<li/>");
+				  var li = document.createElement("li");
 				  if (ref.indexOf("://") >= 0) {
-					  var a = $("<a/>", {href:ref});
-					  $("<code>").text(ref).appendTo(a);
-					  a.appendTo(i);
+					  var a = document.createElement("a");
+					  a.href = ref;
+					  var c = document.createElement("code");
+					  c.innerText = ref;
+					  a.appendChild(c);
+					  li.appendChild(a);
 				  } else {
-					  i.text(ref);
+					  li.innerText = ref;
 				  }
-				  i.appendTo("#refs");
+				  eid("refs").appendChild(li);
 			  }
 		  } else {
-			  $("#mayberef").hide();
+			  eid("mayberef").style.display = 'none';
 		  }
-		  $("#duration").text(result.PlayDurationVerbose + extraDur);
-		  $("#date").html(result.TimestampHTML);
-		  $("#version").text(result.Version);
-		  $("#config").html(result.ConfigHTML + result.StepsHTML);
+		  eid("duration").innerText = result.PlayDurationVerbose + extraDur;
+		  eid("date").innerHTML = result.TimestampHTML;
+		  eid("version").innerText = result.Version;
+		  eid("config").innerHTML = result.ConfigHTML + result.StepsHTML;
 		  var items = result.Artifacts;
-		  function annotate(item) {
+		  function populateTree(parent, item) {
+			  var d;
 			  if (item.children) {
+				  d = document.createElement("details");
+				  var s = document.createElement("summary");
+				  s.innerText = item.icon + " " + item.text;
+				  d.appendChild(s);
+				  var ul = document.createElement("ul");
 				  for (var i in item.children) {
-					  annotate(item.children[i]);
+					  populateTree(ul, item.children[i]);
 				  }
+				  d.appendChild(ul);
 			  } else {
-				  item.a_attr = {href:item.Path};
+				  d = document.createElement("a");
+				  d.href = item.Path;
+				  d.innerText = item.icon + " " + item.text;
 			  }
+			  var li = document.createElement("li");
+			  li.appendChild(d);
+			  parent.appendChild(li);
 		  }
+		  var ultop = document.createElement("ul");
 		  for (var i in items) {
-			  annotate(items[i]);
+			  populateTree(ultop, items[i]);
 		  }
-		  $("#artifacts").jstree({
-			  core: {
-				  data: items,
-				  multiple: false,
-				  plugins: ["themes","sort","json_data"]
-			  }
-		  });
-		  $("#artifacts").on('select_node.jstree', function(e, data) {
-			  if (!data.node.original.IsDir) {
-				  window.open(data.node.a_attr.href, "_new");
-			  }
-		  });
-		  $("#intro").hide(100);
-		  $("#main").show();
-	  });
+		  eid("artifacts").appendChild(ultop);
+		  eid("intro").style.display = 'none';
+		  eid("main").style.display = 'block';
+	  };
 	  </script>
   </body>
 </html>

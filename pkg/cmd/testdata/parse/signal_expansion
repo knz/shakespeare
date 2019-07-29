@@ -24,7 +24,7 @@ end
 ----
 role test
   spotlight true
-  signal test event at (?P<ts_rfc3339>\d\d\d\d-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)Z)(?P<event>.*)
+  signal test event at (?P<ts_rfc3339>\d\d\d\d-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z)(?P<event>.*)
 end
 # no cast defined
 script

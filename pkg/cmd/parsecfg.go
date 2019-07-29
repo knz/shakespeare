@@ -601,7 +601,7 @@ func (cfg *config) parseRole(
 			reS := p.get("re")
 
 			// Expand commonly known time formats.
-			reS = strings.Replace(reS, `(?P<ts_rfc3339>)`, `(?P<ts_rfc3339>\d\d\d\d-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)Z)`, 1)
+			reS = strings.Replace(reS, `(?P<ts_rfc3339>)`, `(?P<ts_rfc3339>\d\d\d\d-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z)`, 1)
 			reS = strings.Replace(reS, `(?P<ts_log>)`, `(?P<ts_log>\d{6} \d\d:\d\d:\d\d\.\d{6})`, 1)
 			reS = strings.Replace(reS, `(?P<ts_deltasecs>)`, `(?P<ts_deltasecs>(?:\d+(?:\.\d+)?|\.\d+))`, 1)
 

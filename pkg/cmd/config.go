@@ -72,6 +72,8 @@ type config struct {
 	// Preprocessing variables.
 	pVars     map[string]string
 	pVarNames []string
+	// diffs of input files (pre-processing)
+	diffs map[string]string
 
 	// titleStrings is the list of title strings encountered
 	// in the configuration.

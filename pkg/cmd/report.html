@@ -11,6 +11,8 @@
 	  #artifacts ul{list-style-type:none;margin:0;}
 	  #artifacts a{text-decoration:none;}
 	  pre{overflow:auto;}
+	  #chash{color:red;font-weight:bold;}
+	  .diff{font-style:italic;}
 	  .divider{font-family:serif; margin-top:3em; margin-bottom:3em;}
 	  .divider:before{content:"⊱ ────────────────── {.⋅ ♫ ⋅.} ───────────────── ⊰";}
 	  .result{font-weight:bold;}
@@ -66,7 +68,7 @@
 
 	  <p class=divider></p>
 	  <p>For your curious eyes, the full book for this play:</p>
-	  <div class=centersvg><pre id=config></pre></div>
+	  <div class=centersvg><code id=chash></code><pre id=config></pre><pre id=script></pre></div>
 
 	  <p class=divider></p>
 	  <p>For your inquisitive eyes, the artifacts for this play:</p>
@@ -153,7 +155,13 @@
 		  eid("duration").innerText = result.PlayDurationVerbose + extraDur;
 		  eid("date").innerHTML = result.TimestampHTML;
 		  eid("version").innerText = result.Version;
-		  eid("config").innerHTML = result.ConfigHTML + result.StepsHTML;
+		  var configHtml = result.ConfigHTML;
+		  for (var i in result.Diffs) {
+			  configHtml += "\n<div class=diff>" + result.Diffs[i] + "</div>";
+		  }
+		  eid("config").innerHTML = configHtml;
+		  eid("script").innerHTML = result.StepsHTML;
+		  eid("chash").innerHTML = "code: " + result.ConfigHashHTML;
 		  var items = result.Artifacts;
 		  function populateTree(parent, item) {
 			  var d;

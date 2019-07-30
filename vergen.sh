@@ -7,7 +7,7 @@ ch=
 if [ "$descfull" != "$descdirty" ]; then
 	ch=", with changes"
 fi
-words=$(go run pkg/namegen/main.go pkg/namegen/words.go $shorthash "$ch")
+words=$(go run pkg/namegen/main.go $shorthash "$ch")
 cat >pkg/cmd/version.go <<EOF
 // Generated code (namegen)
 package cmd

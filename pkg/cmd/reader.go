@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -18,6 +19,8 @@ type reader struct {
 	readers []*subreader
 	// paths to search for includes
 	includePath []string
+	// diffs of input files (before preproc)
+	diffs map[string]string
 }
 
 type subreader struct {
@@ -37,11 +40,19 @@ type subreader struct {
 }
 
 func newReader(ctx context.Context, file string, includePath []string) (*reader, error) {
-	r, err := newSubReader(ctx, file, includePath)
+	r, diff, err := newSubReader(ctx, file, includePath)
 	if err != nil {
 		return nil, err
 	}
-	return &reader{readers: []*subreader{r}, includePath: includePath}, nil
+	pr := &reader{
+		readers:     []*subreader{r},
+		includePath: includePath,
+		diffs:       make(map[string]string),
+	}
+	if diff != "" {
+		pr.diffs[r.file] = diff
+	}
+	return pr, nil
 }
 
 func newReaderFromString(file string, data string) (*reader, error) {
@@ -62,8 +73,11 @@ func hasLocalDir(includePath []string) bool {
 	return false
 }
 
-func newSubReader(ctx context.Context, file string, includePath []string) (*subreader, error) {
+func newSubReader(
+	ctx context.Context, file string, includePath []string,
+) (*subreader, string, error) {
 	r := &subreader{lineno: 1, file: file}
+	var diff string
 	if file == "-" {
 		r.file = "<stdin>"
 		r.rd = bufio.NewReader(os.Stdin)
@@ -78,7 +92,7 @@ func newSubReader(ctx context.Context, file string, includePath []string) (*subr
 				continue
 			}
 			if err != nil {
-				return nil, err
+				return nil, "", err
 			}
 			f = candidateF
 			r.file = fName
@@ -87,11 +101,12 @@ func newSubReader(ctx context.Context, file string, includePath []string) (*subr
 		if f == nil {
 			err := errors.Wrap(os.ErrNotExist, file)
 			err = errors.WithDetailf(err, "include search path: %+v", includePath)
-			return nil, err
+			return nil, "", err
 		}
+		diff = maybeRunDiff(fName)
 		r.rd = bufio.NewReader(f)
 	}
-	return r, nil
+	return r, diff, nil
 }
 
 func (r *reader) close() {
@@ -226,12 +241,15 @@ func (r *subreader) readLine(
 		curPath := filepath.Dir(r.file)
 		includePath := append([]string{curPath}, pr.includePath...)
 
-		sr, err := newSubReader(ctx, fName, includePath)
+		sr, diff, err := newSubReader(ctx, fName, includePath)
 		if err != nil {
 			return "", pos{}, true, false, startPos.wrapErr(err)
 		}
 		sr.parent = pr.readers[len(pr.readers)-1]
 		pr.readers = append(pr.readers, sr)
+		if diff != "" {
+			pr.diffs[sr.file] = diff
+		}
 		return "", startPos, false, true, nil
 	}
 
@@ -241,4 +259,14 @@ func (r *subreader) readLine(
 // Empty lines and comment lines are ignored.
 func ignoreLine(line string) bool {
 	return line == "" || strings.HasPrefix(line, "#")
+}
+
+// Try to run a git diff, return empty string if that fails.
+func maybeRunDiff(fName string) string {
+	cmd := exec.Command("git", "diff", fName)
+	s, err := cmd.CombinedOutput()
+	if err != nil {
+		return ""
+	}
+	return string(s)
 }

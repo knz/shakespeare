@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"hash/fnv"
+	"html"
 	"math"
 	"os"
 	"path/filepath"
@@ -49,6 +51,12 @@ type Result struct {
 	// The full config string.
 	Config string
 
+	// The config hash (FNV 32-bit).
+	ConfigHash uint32
+
+	// The config hash in a human-friendly form (easy to read aloud).
+	ConfigHashHTML string
+
 	// The prettty-printed config string.
 	ConfigHTML string
 
@@ -63,6 +71,9 @@ type Result struct {
 
 	// Artifacts.
 	Artifacts []Artifact
+
+	// Diffs.
+	Diffs []string
 }
 
 type RepeatSection struct {
@@ -133,11 +144,17 @@ func (ap *app) assemble(ctx context.Context, foundErr error) *Result {
 		MaxTime:             ap.maxTime,
 		PlayDuration:        playDuration.Seconds(),
 		PlayDurationVerbose: playDuration.String(),
+		Diffs:               make([]string, 0, len(ap.cfg.diffs)),
 	}
 
 	var buf bytes.Buffer
 	ap.cfg.printCfg(&buf, true /*skipComs*/, true /*skipVer*/, false /*annot*/)
 	r.Config = buf.String()
+	h := fnv.New32()
+	h.Write(buf.Bytes())
+	r.ConfigHash = h.Sum32()
+	r.ConfigHashHTML = GenName(int64(r.ConfigHash))
+
 	buf.Reset()
 	ap.cfg.printCfg(&buf, true /*skipComs*/, true /*skipVer*/, true /*annot*/)
 	r.ConfigHTML = buf.String()
@@ -181,6 +198,10 @@ func (ap *app) assemble(ctx context.Context, foundErr error) *Result {
 		}
 
 		r.Repeat = rp
+	}
+
+	for _, d := range ap.cfg.diffs {
+		r.Diffs = append(r.Diffs, html.EscapeString(d))
 	}
 
 	return r

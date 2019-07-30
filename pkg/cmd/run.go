@@ -46,6 +46,17 @@ func Run() (err error) {
 		}
 	}
 
+	// diffs contain the "git diff" of input configuration files.
+	collectDiffs := func(newDiffs map[string]string) {
+		if cfg.diffs == nil {
+			cfg.diffs = newDiffs
+		} else {
+			for k, v := range newDiffs {
+				cfg.diffs[k] = v
+			}
+		}
+	}
+
 	for _, file := range files {
 		if err := func() error {
 			// We use a closure to close the reader directly after each file.
@@ -56,11 +67,9 @@ func Run() (err error) {
 			}
 			defer rd.close()
 
-			if err = cfg.parseCfg(ctx, rd); err != nil {
-				// log.Errorf(ctx, "parse error: %+v", err)
-				return err
-			}
-			return nil
+			err = cfg.parseCfg(ctx, rd)
+			collectDiffs(rd.diffs)
+			return err
 		}(); err != nil {
 			return err
 		}
@@ -74,9 +83,13 @@ func Run() (err error) {
 			fmt.Fprintln(&extraScript, s)
 		}
 		fmt.Fprintln(&extraScript, "end")
-		rd, _ := newReaderFromString("<command line>", extraScript.String())
-		if err = cfg.parseCfg(ctx, rd); err != nil {
-			log.Errorf(ctx, "parse error: %+v", err)
+		if err := func() error {
+			rd, _ := newReaderFromString("<command line>", extraScript.String())
+			defer rd.close()
+			err := cfg.parseCfg(ctx, rd)
+			collectDiffs(rd.diffs)
+			return err
+		}(); err != nil {
 			return err
 		}
 	}

@@ -6,6 +6,8 @@ p,ul#refs,.cursive{font-family:'Sofia',cursive;font-size: large;}
 #artifacts ul{list-style-type:none;margin:0;}
 #artifacts a{text-decoration:none;}
 pre{overflow:auto;}
+#chash{color:red;font-weight:bold;}
+.diff{font-style:italic;}
 .divider{font-family:serif; margin-top:3em; margin-bottom:3em;}
 .divider:before{content:"⊱ ────────────────── {.⋅ ♫ ⋅.} ───────────────── ⊰";}
 .result{font-weight:bold;}

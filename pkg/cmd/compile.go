@@ -75,7 +75,7 @@ func (cfg *config) compileV2() error {
 				}
 			}
 
-			if scriptIdx < len(script)-1 && script[scriptIdx+1] == '+' {
+			if scriptIdx+1 < len(script) && script[scriptIdx+1] == '+' {
 				// More concurrent actions.
 				scriptIdx++
 				continue
@@ -85,8 +85,11 @@ func (cfg *config) compileV2() error {
 			if moodStart != "" {
 				// Inject an empty scene with just a mood change in the act at this time.
 				s := scene{
-					waitUntil:       atTime,
-					concurrentLines: []scriptLine{scriptLine{steps: []step{step{typ: stepAmbiance, action: moodStart}}}},
+					waitUntil: atTime,
+					concurrentLines: []scriptLine{
+						scriptLine{
+							steps: []step{step{typ: stepAmbiance, action: moodStart}},
+						}},
 				}
 				thisAct = append(thisAct, s)
 				moodStart = ""
@@ -100,8 +103,11 @@ func (cfg *config) compileV2() error {
 			if moodEnd != "" {
 				// Inject an empty scene with just a mood change in the act at this time.
 				s := scene{
-					waitUntil:       0,
-					concurrentLines: []scriptLine{scriptLine{steps: []step{step{typ: stepAmbiance, action: moodEnd}}}},
+					waitUntil: thisScene.waitUntil,
+					concurrentLines: []scriptLine{
+						scriptLine{
+							steps: []step{step{typ: stepAmbiance, action: moodEnd}},
+						}},
 				}
 				thisAct = append(thisAct, s)
 				moodEnd = ""
@@ -133,7 +139,7 @@ func (cfg *config) printSteps(w io.Writer, annot bool) {
 		atTime := time.Duration(0)
 		for i, s := range act {
 			if s.waitUntil != 0 {
-				if i == len(act)-1 || (s.waitUntil != atTime && !s.isEmpty()) {
+				if i == len(act)-1 || (s.waitUntil != atTime /*&& !s.isEmpty()*/) {
 					fmt.Fprintf(w, "# %2d:  (wait until %s)\n", i+1, s.waitUntil)
 				}
 				atTime = s.waitUntil

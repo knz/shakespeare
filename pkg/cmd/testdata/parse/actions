@@ -32,3 +32,29 @@ end
 #  1:  test: a?
 #  2:  (wait until 1s)
 # end
+
+parse
+script
+  scene x mood ends blue
+  scene y mood ends clear
+  storyline x ...y
+end
+----
+# no roles defined
+# no cast defined
+script
+  tempo 1s
+  scene x mood ends blue
+  scene y mood ends clear
+  storyline x ...y
+end
+# no audience defined
+# play
+# -- ACT 1: x --
+#  1:  (mood: blue)
+#  2:  (wait until 1s)
+# -- ACT 2: ...y --
+#  1:  (wait until 3s)
+#  1:  (mood: clear)
+#  2:  (wait until 4s)
+# end

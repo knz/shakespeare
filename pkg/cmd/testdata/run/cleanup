@@ -9,6 +9,7 @@ script
   storyline ..
 end
 ----
+----
 👏 please welcome a cast of 1 actors, playing 1 roles
 🎭 dramatis personæ: test
 🎶 the play is starting; expected duration: 1s
@@ -24,3 +25,10 @@ end
 run error: cleanup: command failed: exit status 123
 --
 (context: play,cleanup,actor=test,role=test)
+--
+.../results/artifacts/test/actions/_cleanup.sh
+--
+output redirected to .../results/artifacts/test/_cleanup.log
+
+----
+----

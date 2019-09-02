@@ -365,9 +365,13 @@ func (ap *app) runForAllActors(
 			}()
 			// Start one actor.
 			log.Info(ctx, "<start>")
-			_, ps, err, _ := a.runActorCommand(ctx, ap.stopper, 10*time.Second, false /*interruptible*/, pScript)
+			outdata, ps, err, _ := a.runActorCommand(ctx, ap.stopper, 10*time.Second, false /*interruptible*/, pScript)
 			if err == nil && ps != nil && !ps.Success() {
-				err = errors.Newf("command failed: %s", ps.String())
+				err = errors.WithDetail(
+					errors.WithDetail(
+						errors.Newf("command failed: %s", errors.Safe(ps.String())),
+						string(pScript)),
+					outdata)
 			}
 			errCh <- errors.WithContextTags(err, ctx)
 		})

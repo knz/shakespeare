@@ -322,7 +322,7 @@ faces[4] = ""
 		}
 
 		// End the plot set.
-		for i := 1; i < numObj; i++ {
+		for i := 0; i < numObj; i++ {
 			fmt.Fprintf(f, "unset object %d\n", i+1)
 		}
 		fmt.Fprintln(f, "unset arrow")

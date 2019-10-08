@@ -158,6 +158,8 @@ func (spm *spotMgr) detectSignals(ctx context.Context, a *actor, line string) {
 
 	epoch := spm.r.epoch()
 
+	tsNow := timeutil.Now()
+
 	for _, rp := range a.role.sigParsers {
 		sink, ok := a.sinks[rp.name]
 		if !ok {
@@ -179,7 +181,7 @@ func (spm *spotMgr) detectSignals(ctx context.Context, a *actor, line string) {
 		case "":
 			// If the reGroup is empty, that means we're OK with
 			// the auto-generated "now" timestamp.
-			ts = timeutil.Now()
+			ts = tsNow
 		case "ts_deltasecs":
 			logTime := rp.re.ReplaceAllString(line, "${ts_deltasecs}")
 			delta, err := strconv.ParseFloat(logTime, 64)

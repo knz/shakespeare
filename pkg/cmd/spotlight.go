@@ -167,6 +167,9 @@ func (spm *spotMgr) detectSignals(ctx context.Context, a *actor, line string) {
 			continue
 		}
 		if !rp.re.MatchString(line) {
+			if log.V(2) {
+				log.Infof(ctx, "signal %s re %q did not match %q", rp.name, rp.re.String(), line)
+			}
 			continue
 		}
 		valHolder := auditableValue{

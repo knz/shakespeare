@@ -7,7 +7,7 @@ require (
 	github.com/StackExchange/wmi v0.0.0-20190523213315-cbe66965904d // indirect
 	github.com/VividCortex/ewma v1.1.1 // indirect
 	github.com/andy-kimball/arenaskl v0.0.0-20190803011417-1243160cabf6 // indirect
-	github.com/aws/aws-sdk-go v1.25.7 // indirect
+	github.com/aws/aws-sdk-go v1.34.0 // indirect
 	github.com/axiomhq/hyperloglog v0.0.0-20190607114936-323ed515b11c // indirect
 	github.com/biogo/store v0.0.0-20190426020002-884f370e325d // indirect
 	github.com/cenk/backoff v2.2.1+incompatible // indirect
@@ -29,7 +29,6 @@ require (
 	github.com/facebookgo/clock v0.0.0-20150410010913-600d898af40a // indirect
 	github.com/getsentry/raven-go v0.2.0 // indirect
 	github.com/go-ole/go-ole v1.2.4 // indirect
-	github.com/go-sql-driver/mysql v1.4.1 // indirect
 	github.com/gofrs/uuid v3.2.0+incompatible // indirect
 	github.com/gogo/protobuf v1.3.0
 	github.com/golang/leveldb v0.0.0-20170107010102-259d9253d719 // indirect
@@ -56,8 +55,7 @@ require (
 	github.com/openzipkin-contrib/zipkin-go-opentracing v0.4.3 // indirect
 	github.com/peterbourgon/g2s v0.0.0-20170223122336-d4e7ad98afea // indirect
 	github.com/petermattis/goid v0.0.0-20180202154549-b0b1615b78e5
-	github.com/pierrec/lz4 v2.0.5+incompatible // indirect
-	github.com/pkg/errors v0.8.1
+	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.1.0 // indirect
 	github.com/prometheus/client_model v0.0.0-20190812154241-14fe0d1b01d4 // indirect
 	github.com/prometheus/common v0.7.0 // indirect
